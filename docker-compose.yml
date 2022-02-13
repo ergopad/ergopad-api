@@ -3,7 +3,7 @@ version: '3.9'
 services:
   api:
     container_name: api
-    env_file: ${ENV}/.env
+    env_file: ${ENV_FILE}
     build:
       context: .
       dockerfile: Dockerfile
