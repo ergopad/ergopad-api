@@ -1,0 +1,26 @@
+# pip-compile --output-file=app/requirements.txt requirements.in
+fastapi
+uvicorn
+pydantic
+python-multipart
+requests
+pandas
+psycopg
+databases[postgresql]
+SQLAlchemy
+alembic
+sqlalchemy-utils
+aiofiles
+aiocsv
+boto3
+celery
+redis
+pyjwt
+passlib[bcrypt]
+pytest
+pytest-asyncio
+httpx
+asgi-lifespan
+ecdsa
+pyblake2
+base58
