@@ -28,8 +28,25 @@ def get_projects(
     return [social_compatible_project(project) for project in data]
 
 
-def get_project(db: Session, id: int, model="out"):
-    project = db.query(models.Project).filter(models.Project.id == id).first()
+def generate_project_slug(title: str) -> str:
+    # Project Title -> (projecttitle, project_title)
+    title = ''.join(
+        list(filter(lambda c: c.isalnum() or c == ' ', list(title.lower()))))
+    return (''.join(title.split()), '_'.join(title.split()))
+
+
+def get_project(db: Session, id: str, model="out"):
+    project = None
+    if (id.isdecimal()):
+        # get project by project id
+        project = db.query(models.Project).filter(
+            models.Project.id == int(id)).first()
+    else:
+        # get project by project slug
+        projects = list(filter(lambda project: id in generate_project_slug(project.name),
+                        db.query(models.Project).all()))
+        if len(projects):
+            project = projects[0]
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="project not found")
