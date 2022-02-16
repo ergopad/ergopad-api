@@ -43,20 +43,21 @@ async def projects_list(
 
 
 @r.get(
-    "/{project_id}",
+    "/{id}",
     response_model=ProjectWithTeam,
     response_model_exclude_none=True,
     name="projects:project-details"
 )
 async def project_details(
     request: Request,
-    project_id: int,
+    id: str,
     db=Depends(get_db),
 ):
     """
     Get any project details
     """
-    project = get_project(db, project_id)
+    project = get_project(db, id)
+    project_id = project.id
     project_team = get_project_team(db, project_id)
     return ProjectWithTeam(
         id=project.id,
