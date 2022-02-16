@@ -22,5 +22,14 @@ services:
             max-size: 10m
     volumes: 
      - ./app:/app
+    networks:
+      - ergopad-data_net
+      - ergopad-node_net
     command: uvicorn main:app --reload --workers 4 --reload-dir /app --host 0.0.0.0 --port ${API_PORT}
     # command: uvicorn main:app --workers 4 --host 0.0.0.0 --port ${API_PORT}
+
+networks:
+  ergopad-data_net:
+    external: true
+  ergopad-node_net:
+    external: true
