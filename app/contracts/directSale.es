@@ -6,7 +6,8 @@
     val saleTokenAmount     = {saleTokenAmount}L
     val purchaseTokenAmount = {purchaseTokenAmount}L
     val timestamp           = {timestamp}
-    val total               = INPUTS.fold(0L, {{(x:Long, b:Box) => x + b.value}}) - 2000000
+    val totalErg            = INPUTS.fold(0L, {{(x: Long, b: Box) => x + b.value}})
+    val totalTokens         = INPUTS.fold(0L, {{(x: Long, b: Box) => x + b.tokens(0)._2}})
 
     val sellerOutput = OUTPUTS(0).propositionBytes == sellerPK.propBytes &&
         ((purchaseTokenId.size == 0 && OUTPUTS(0).value == purchaseTokenAmount) ||
@@ -16,7 +17,7 @@
         OUTPUTS(1).tokens(0)._2 == saleTokenAmount && 
         OUTPUTS(1).tokens(0)._1 == saleTokenId
 
-    val returnFunds = OUTPUTS(0).value >= total && 
+    val returnFunds = OUTPUTS(0).value >= totalErg - 2000000 && 
         OUTPUTS(0).propositionBytes == buyerPK.propBytes && 
         OUTPUTS.size == 2
 
