@@ -102,7 +102,7 @@ Config = {
     'node'              : os.getenv('ERGONODE_HOST'),
     'explorer'          : 'https://api.ergoplatform.com/api/v1',
     'ergoPlatform'      : 'https://api.ergoplatform.com/api/v1',
-    'assembler'         : 'http://assembler:8080',
+    'assembler'         : 'http://172.31.8.85:8080', # patch for alpha
     'ergopadNode'       : 'http://ergonode:9053',
     'buyerNode'         : 'http://ergonode2:9053',
     'ergoWatch'         : 'https://ergo.watch/api/sigmausd/state',
