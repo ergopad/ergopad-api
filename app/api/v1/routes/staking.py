@@ -187,7 +187,7 @@ async def unstake(req: UnstakeRequest):
                     unsignedTX["outputs"][-1]["ergoTree"] = unsignedTX["outputs"][1]["ergoTree"]
 
             result = {
-                'penalty': penalty,
+                'penalty': (penalty/100),
                 'unsignedTX': {
                     'inputs': unsignedTX["inputs"],
                     'dataInputs': unsignedTX["dataInputs"],
