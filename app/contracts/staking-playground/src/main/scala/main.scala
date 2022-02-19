@@ -226,11 +226,15 @@ object Main extends App {
                                   else {
                                     val stakedTokens = box.tokens.filter({(token: (Coll[Byte],Long)) =>
                                       token._1 == stakedTokenID})
-                                    if (stakedTokens.size > 0)
+                                    if (stakedTokens.size == 1)
                                       z + stakedTokens(0)._2
-                                    else
-                                      z + 0L
-                                  }
+                                    else {
+                                      if (stakedTokens.size == 0)
+                                        z + 0L
+                                      else
+                                        -999999999999L
+                                    }
+                                   }
                                 })
 
       val selfReplication = allOf(Coll(
@@ -297,6 +301,8 @@ object Main extends App {
            val tokensInInputs = stakedTokenCount(INPUTS)
            val tokensInOutputs = stakedTokenCount(OUTPUTS)
            sigmaProp(allOf(Coll(
+               tokensInInputs > 0,
+               tokensInOutputs > 0,
                tokensInInputs - tokensInOutputs == penalty,
                selfReplication,
                stakeKey,
