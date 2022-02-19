@@ -74,19 +74,19 @@ object Main extends App {
               OUTPUTS(2).tokens(1)._2 == OUTPUTS(2).R4[Coll[Long]].get(3)
           )))
       } else {
-      if (stakeStateInput && INPUTS(1).id == SELF.id) { // Compound transaction
-          // Stake State, Emission (SELF), Stake*N => Stake State, Emission, Stake*N
+      if (INPUTS(0).id == SELF.id) { // Compound transaction
+          // Emission (SELF), Stake*N => Emission, Stake*N
           val stakeBoxes = INPUTS.filter({(box: Box) => if (box.tokens.size > 0) box.tokens(0)._1 == stakeTokenID && box.R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(1) else false})
           val rewardsSum = stakeBoxes.fold(0L, {(z: Long, box: Box) => z+(box.tokens(1)._2*SELF.R4[Coll[Long]].get(3)/SELF.R4[Coll[Long]].get(0))})
-          val remainingTokens = if (SELF.tokens(1)._2 <= rewardsSum) OUTPUTS(1).tokens.size == 1 else (OUTPUTS(1).tokens(1)._1 == stakedTokenID && OUTPUTS(1).tokens(1)._2 >= (SELF.tokens(1)._2 - rewardsSum))
+          val remainingTokens = if (SELF.tokens(1)._2 <= rewardsSum) OUTPUTS(0).tokens.size == 1 else (OUTPUTS(0).tokens(1)._1 == stakedTokenID && OUTPUTS(0).tokens(1)._2 >= (SELF.tokens(1)._2 - rewardsSum))
           sigmaProp(allOf(Coll(
-               OUTPUTS(1).propositionBytes == SELF.propositionBytes,
-               OUTPUTS(1).tokens(0)._1 == SELF.tokens(0)._1,
+               OUTPUTS(0).propositionBytes == SELF.propositionBytes,
+               OUTPUTS(0).tokens(0)._1 == SELF.tokens(0)._1,
                remainingTokens,
-               OUTPUTS(1).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0),
-               OUTPUTS(1).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
-               OUTPUTS(1).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2) - stakeBoxes.size,
-               OUTPUTS(1).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3)
+               OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0),
+               OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
+               OUTPUTS(0).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2) - stakeBoxes.size,
+               OUTPUTS(0).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3)
            )))
       } else {
           sigmaProp(false)
@@ -116,7 +116,8 @@ object Main extends App {
       val stakeStateNFT = _stakeStateNFT
       val stakeStateInput = INPUTS(0).tokens(0)._1 == stakeStateNFT
       if (stakeStateInput && INPUTS(1).id == SELF.id) { // Emit transaction
-          val remainingAndDust = SELF.tokens(1)._2 + (if (INPUTS(2).tokens.size >= 2) INPUTS(2).tokens(1)._2 else 0L)
+          val dust = (if (INPUTS(2).tokens.size >= 2) INPUTS(2).tokens(1)._2 else 0L)
+          val remainingAndDust = SELF.tokens(1)._2 + dust
           val tokensRemaining = if (remainingAndDust > SELF.R4[Coll[Long]].get(0))
                                   OUTPUTS(1).tokens(1)._1 == SELF.tokens(1)._1 &&
                                   OUTPUTS(1).tokens(1)._2 == remainingAndDust - SELF.R4[Coll[Long]].get(0)
@@ -127,7 +128,8 @@ object Main extends App {
               OUTPUTS(1).propositionBytes == SELF.propositionBytes,
               OUTPUTS(1).tokens(0)._1 == SELF.tokens(0)._1,
               tokensRemaining,
-              OUTPUTS(1).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0)
+              OUTPUTS(1).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0),
+              OUTPUTS(0).R4[Coll[Long]].get(0) == INPUTS(0).R4[Coll[Long]].get(0) + SELF.R4[Coll[Long]].get(0) - dust
           )))
       } else {
           sigmaProp(false)
@@ -157,12 +159,11 @@ object Main extends App {
       val emissionNFT = _emissionNFT
       val stakeStateInput = INPUTS(0).tokens(0)._1 == stakeStateNFT
 
-      if (INPUTS(1).tokens(0)._1 == emissionNFT) { // Compound transaction
-          // Stake State, Emission, Stake*N (SELF) => Stake State, Emission, Stake * N
-          val boxIndex = INPUTS.indexOf(SELF,0)
+      if (INPUTS(0).tokens(0)._1 == emissionNFT) { // Compound transaction
+          // Emission, Stake*N (SELF) => Emission, Stake * N
+          val boxIndex = INPUTS.indexOf(SELF,1)
           val selfReplication = OUTPUTS(boxIndex)
            sigmaProp(allOf(Coll(
-               stakeStateInput,
                selfReplication.value == SELF.value,
                selfReplication.propositionBytes == SELF.propositionBytes,
                selfReplication.R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0) + 1,
@@ -171,7 +172,7 @@ object Main extends App {
                selfReplication.tokens(0)._1 == SELF.tokens(0)._1,
                selfReplication.tokens(0)._2 == SELF.tokens(0)._2,
                selfReplication.tokens(1)._1 == SELF.tokens(1)._1,
-               selfReplication.tokens(1)._2 == SELF.tokens(1)._2 + (INPUTS(1).R4[Coll[Long]].get(3) * SELF.tokens(1)._2 / INPUTS(1).R4[Coll[Long]].get(0))
+               selfReplication.tokens(1)._2 == SELF.tokens(1)._2 + (INPUTS(0).R4[Coll[Long]].get(3) * SELF.tokens(1)._2 / INPUTS(0).R4[Coll[Long]].get(0))
            )))
       } else {
       if (INPUTS(1).id == SELF.id) { // Unstake
@@ -219,8 +220,18 @@ object Main extends App {
       val stakeContract = fromBase64(_stakeContract)
       val minimumStake = 1000L
 
-      def isStakeBox(box: Box) = if (box.tokens.size >= 1) box.tokens(0)._1 == SELF.tokens(1)._1 else false
-      def isCompoundBox(box: Box) = if (box.tokens.size >= 1) isStakeBox(box) || box.tokens(0)._1 == emissionNFT || box.tokens(0)._1 == SELF.tokens(0)._1 else false
+      def stakedTokenCount(boxes: Coll[Box]) = boxes.fold(0L, {(z: Long, box: Box) =>
+                                  if (box.tokens.size == 0)
+                                    z + 0L
+                                  else {
+                                    val stakedTokens = box.tokens.filter({(token: (Coll[Byte],Long)) =>
+                                      token._1 == stakedTokenID})
+                                    if (stakedTokens.size > 0)
+                                      z + stakedTokens(0)._2
+                                    else
+                                      z + 0L
+                                  }
+                                })
 
       val selfReplication = allOf(Coll(
           OUTPUTS(0).propositionBytes == SELF.propositionBytes,
@@ -265,7 +276,6 @@ object Main extends App {
                INPUTS(2).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1) - 1L,
                INPUTS(2).R4[Coll[Long]].get(2) == 0L,
                //Stake State
-               OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0),
                OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1) + 1L,
                OUTPUTS(0).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2),
                OUTPUTS(0).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3) + SELF.R4[Coll[Long]].get(4),
@@ -273,20 +283,6 @@ object Main extends App {
                OUTPUTS(0).tokens(1)._2 == SELF.tokens(1)._2
            )))
       } else {
-      if (INPUTS(1).tokens(0)._1 == emissionNFT) { // Compound transaction
-            //Stake State (SELF), Emission, Stake*N => Stake State, Emission, Stake*N
-            val leftover = if (OUTPUTS(1).tokens.size == 1) 0L else OUTPUTS(1).tokens(1)._2
-            sigmaProp(allOf(Coll(
-                 selfReplication,
-                 //Stake State
-                 OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0) + INPUTS(1).tokens(1)._2 - leftover,
-                 OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
-                 OUTPUTS(0).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2),
-                 OUTPUTS(0).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3),
-                 OUTPUTS(0).R4[Coll[Long]].get(4) == SELF.R4[Coll[Long]].get(4),
-                 OUTPUTS(0).tokens(1)._2 == SELF.tokens(1)._2
-             )))
-       } else {
        if (SELF.R4[Coll[Long]].get(0) > OUTPUTS(0).R4[Coll[Long]].get(0) && INPUTS.size >= 3) { // Unstake
            // Stake State (SELF), Stake, Stake Key Box => Stake State, User Wallet, Stake (optional for partial unstake)
            val unstaked = SELF.R4[Coll[Long]].get(0) - OUTPUTS(0).R4[Coll[Long]].get(0)
@@ -298,14 +294,13 @@ object Main extends App {
                            if (timeInWeeks >= 4) unstaked*125/1000 else
                            if (timeInWeeks >= 2) unstaked*20/100 else
                            unstaked*25/100
-           val penaltyBurned = if (remaining == 0L)
-                                OUTPUTS.size <= 4 && OUTPUTS(2).tokens.size==0
-                                else
-                                OUTPUTS.size <= 5 && OUTPUTS(3).tokens.size==0
+           val tokensInInputs = stakedTokenCount(INPUTS)
+           val tokensInOutputs = stakedTokenCount(OUTPUTS)
            sigmaProp(allOf(Coll(
+               tokensInInputs - tokensInOutputs == penalty,
                selfReplication,
                stakeKey,
-               penaltyBurned,
+               INPUTS(1).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(1),
                //Stake State
                OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0)-unstaked,
                OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
@@ -331,7 +326,6 @@ object Main extends App {
            )))
        } else {
            sigmaProp(false)
-       }
        }
        }
       }
@@ -507,7 +501,10 @@ object Main extends App {
 
   def emit(executor: Party, currentStakeState: ErgoBox, currentStakePool: ErgoBox, currentEmission: ErgoBox): IndexedSeq[ErgoBox] = {
     println("Emit")
-
+    val dust = if (currentEmission.additionalTokens.size > 1)
+      currentEmission.additionalTokens(1)._2
+    else
+      0L
     val newStakeState = Box(
       value = currentStakeState.value,
       tokens = List(
@@ -517,7 +514,9 @@ object Main extends App {
       registers = Map(
         R4 -> Array[Long](LongArrayConstant
           .unapply(currentStakeState.additionalRegisters(R4))
-          .get(0),
+          .get(0) +
+          LongArrayConstant.unapply(currentStakePool.additionalRegisters(R4)).get(0) -
+          dust,
           (LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(1) + 1L),
           LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(2),
           (LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(3)+LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(4)),
@@ -525,10 +524,7 @@ object Main extends App {
       ),
       script = stakeStateContract
     )
-    val newStakePoolAmount = if (currentEmission.additionalTokens.size > 1)
-      (currentStakePool.additionalTokens(1)._2 - LongArrayConstant.unapply(currentStakePool.additionalRegisters(R4)).get(0) + currentEmission.additionalTokens(1)._2).max(0L)
-    else
-      (currentStakePool.additionalTokens(1)._2 - LongArrayConstant.unapply(currentStakePool.additionalRegisters(R4)).get(0)).max(0L)
+    val newStakePoolAmount = (currentStakePool.additionalTokens(1)._2 - LongArrayConstant.unapply(currentStakePool.additionalRegisters(R4)).get(0) + dust).max(0L)
     val emissionAmount = if (currentEmission.additionalTokens.size > 1)
       currentStakePool.additionalTokens(1)._2 - newStakePoolAmount + currentEmission.additionalTokens(1)._2
     else
@@ -581,7 +577,7 @@ object Main extends App {
   stakePool = emitOutput(1)
   emission = emitOutput(2)
 
-  def compound(executor: Party, currentStakeState: ErgoBox, currentEmission: ErgoBox, currentStakeBoxes: Array[ErgoBox]): IndexedSeq[ErgoBox] = {
+  def compound(executor: Party, currentEmission: ErgoBox, currentStakeBoxes: Array[ErgoBox]): IndexedSeq[ErgoBox] = {
     println("Compound")
     var totalAdded = 0L
 
@@ -603,24 +599,6 @@ object Main extends App {
       )
     })
 
-    val newStakeState = Box(
-      value = currentStakeState.value,
-      tokens = List(
-        stakeStateNFT -> 1L,
-        stakeTokenId -> currentStakeState.additionalTokens(1)._2
-      ),
-      registers = Map(
-        R4 -> Array[Long]((LongArrayConstant
-          .unapply(currentStakeState.additionalRegisters(R4))
-          .get(0) + totalAdded),
-          LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(1),
-          LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(2),
-          LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(3),
-          LongArrayConstant.unapply(currentStakeState.additionalRegisters(R4)).get(4))
-      ),
-      script = stakeStateContract
-    )
-
     val newEmission = Box(
       value = currentEmission.value,
       tokens = if (currentEmission.additionalTokens(1)._2 - totalAdded > 0) List(emissionNFT -> 1L, stakedTokenId -> (currentEmission.additionalTokens(1)._2 - totalAdded))
@@ -635,10 +613,10 @@ object Main extends App {
     )
 
     val compoundTransaction = Transaction(
-      inputs = List(currentStakeState, currentEmission) ++ currentStakeBoxes ++ executor.selectUnspentBoxes(
+      inputs = List(currentEmission) ++ currentStakeBoxes ++ executor.selectUnspentBoxes(
         toSpend = 2 * MinTxFee
       ),
-      outputs = List(newStakeState, newEmission) ++ stakeBoxOutputs,
+      outputs = List(newEmission) ++ stakeBoxOutputs,
       fee = 2 * MinTxFee,
       sendChangeTo = executor.wallet.getAddress
     )
@@ -650,26 +628,23 @@ object Main extends App {
     compoundTransactionSigned.outputs
   }
 
-  var compoundOutput = compound(ergopadio,stakeState,emission,Array[ErgoBox](stakerABox,stakerBBox))
-  stakeState = compoundOutput(0)
-  emission = compoundOutput(1)
-  stakerABox = compoundOutput(2)
-  stakerBBox = compoundOutput(3)
+  var compoundOutput = compound(ergopadio,emission,Array[ErgoBox](stakerABox,stakerBBox))
+  emission = compoundOutput(0)
+  stakerABox = compoundOutput(1)
+  stakerBBox = compoundOutput(2)
 
   emitOutput = emit(ergopadio,stakeState,stakePool,emission)
   stakeState = emitOutput(0)
   stakePool = emitOutput(1)
   emission = emitOutput(2)
 
-  compoundOutput = compound(ergopadio,stakeState,emission,Array[ErgoBox](stakerBBox))
-  stakeState = compoundOutput(0)
-  emission = compoundOutput(1)
-  stakerBBox = compoundOutput(2)
+  compoundOutput = compound(ergopadio,emission,Array[ErgoBox](stakerBBox))
+  emission = compoundOutput(0)
+  stakerBBox = compoundOutput(1)
 
-  compoundOutput = compound(ergopadio,stakeState,emission,Array[ErgoBox](stakerABox))
-  stakeState = compoundOutput(0)
-  emission = compoundOutput(1)
-  stakerABox = compoundOutput(2)
+  compoundOutput = compound(ergopadio,emission,Array[ErgoBox](stakerABox))
+  emission = compoundOutput(0)
+  stakerABox = compoundOutput(1)
 
   def unstake(unstaker: Party, _unstakeAmount: Long, currentStakeState: ErgoBox, stakeBox: ErgoBox): IndexedSeq[ErgoBox] = {
     val partialUnstake = (stakeBox.additionalTokens(1)._2 > _unstakeAmount)
@@ -747,10 +722,9 @@ object Main extends App {
   stakePool = emitOutput(1)
   emission = emitOutput(2)
 
-  compoundOutput = compound(ergopadio,stakeState,emission,Array[ErgoBox](stakerBBox))
-  stakeState = compoundOutput(0)
-  emission = compoundOutput(1)
-  stakerBBox = compoundOutput(2)
+  compoundOutput = compound(ergopadio,emission,Array[ErgoBox](stakerBBox))
+  emission = compoundOutput(0)
+  stakerBBox = compoundOutput(1)
 
   unstakeOutputs = unstake(stakerB,100000L,stakeState,stakerBBox)
   stakeState = unstakeOutputs(0)
@@ -761,8 +735,7 @@ object Main extends App {
   stakePool = emitOutput(1)
   emission = emitOutput(2)
 
-  compoundOutput = compound(ergopadio,stakeState,emission,Array[ErgoBox](stakerBBox))
-  stakeState = compoundOutput(0)
-  emission = compoundOutput(1)
-  stakerBBox = compoundOutput(2)
+  compoundOutput = compound(ergopadio,emission,Array[ErgoBox](stakerBBox))
+  emission = compoundOutput(0)
+  stakerBBox = compoundOutput(1)
 }

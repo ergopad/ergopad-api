@@ -141,6 +141,24 @@ def getTokenInfo(tokenId):
         logging.error(f'ERR:{myself()}: invalid token request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid token request')
 
+@r.get("/boxInfo/{boxId}", name="blockchain:boxInfo")
+def getBoxInfo(boxId):
+    try:
+        box = requests.get(f'{CFG.explorer}/boxes/{boxId}')
+        return box.json()
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid box request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid token request')
+
+@r.get("/transactionInfo/{transactionId}", name="blockchain:transactionInfo")
+def getTransactionInfo(transactionId):
+    try:
+        tx = requests.get(f'{CFG.explorer}/transactions/{transactionId}')
+        return tx.json()
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid box request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid token request')
+
 # special request for CMC
 @r.get("/emissionAmount/{tokenId}", name="blockchain:emissionAmount")
 def getEmmissionAmount(tokenId):
