@@ -37,6 +37,7 @@ def generate_project_slug(title: str) -> str:
 
 def get_project(db: Session, id: str, model="out"):
     project = None
+    id = str(id)
     if (id.isdecimal()):
         # get project by project id
         project = db.query(models.Project).filter(
