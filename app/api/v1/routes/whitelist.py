@@ -1,7 +1,7 @@
 import requests, json, os
 import pandas as pd
 
-# from starlette.responses import JSONResponse 
+from starlette.responses import JSONResponse 
 from sqlalchemy import create_engine
 from wallet import Wallet, NetworkEnvironment # ergopad.io library
 from fastapi import APIRouter, Response, status #, Request
@@ -113,18 +113,21 @@ async def email(whitelist: Whitelist, response: Response):
 
         # event not found
         if res == None or len(res) == 0:
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return {'status': 'error', 'message': f'whitelist event, {eventName} not found.'}
+            # response.status_code = status.HTTP_400_BAD_REQUEST
+            # return {'status': 'error', 'message': f'whitelist event, {eventName} not found.'}
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'whitelist event, {eventName} not found.')
 
         # is valid signup window?
         if (NOW < int(res['start_dtz'].timestamp())) or (NOW > int(res['end_dtz'].timestamp())):
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return {'status': 'error', 'message': f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}."}
+            # response.status_code = status.HTTP_400_BAD_REQUEST
+            # return {'status': 'error', 'message': f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}."}
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}.")
 
         # is funding complete?
         if res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']):
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return {'status': 'error', 'message': f'whitelist funds complete.'}
+            # response.status_code = status.HTTP_400_BAD_REQUEST
+            # return {'status': 'error', 'message': f'whitelist funds complete.'}
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'whitelist funds complete.')
 
         logging.debug(f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
         eventId = res['id']
@@ -174,13 +177,11 @@ async def email(whitelist: Whitelist, response: Response):
 
         # already whitelisted
         else:
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return {'status': 'error', 'message': f'wallet already signed up for this event'}
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'wallet already signed up for this event')
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: {e}')
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        return {'status': 'error', 'message': f'unable to save whitelist request'}
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to save whitelist request')
 
 @r.get("/info/{eventName}")
 async def whitelist(eventName):
@@ -230,8 +231,7 @@ async def whitelist(eventName):
         }
 
     except Exception as e:
-        response.status_code = status.HTTP_400_BAD_REQUEST
-        return {'status': 'error', 'message': f'invalid whitelist request'}
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid whitelist request')
 #endregion ROUTES
 
 ### MAIN
