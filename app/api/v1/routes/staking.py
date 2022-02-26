@@ -19,11 +19,11 @@ CFG = Config[Network]
 DEBUG = True # CFG.DEBUG
 DATABASE = CFG.connectionString
 
-CFG["stakeStateNFT"] = "00703e4137e5dbd7a200b7b943c1bf0ba2a577c9a3a2ff6880ef05bf44401fe9"
-CFG["stakePoolNFT"] = "0e0ce70547f8743ae61053f993eed720c698dc21a9ac3fa1358b8e64edee342b"
-CFG["emissionNFT"] = "0dee1cb3dc5750ba57cc7cdcd8cc8a581487a024f9a3c6ff5758bf8615976af5"
-CFG["stakeTokenID"] =  "0e2e934ddddf92840661afc6d27d570f359dcb70dddac3d082d57ba74db67b02"
-CFG["stakedTokenID"] = "000e21f8e51ad4a3d3bdde9ac34d19eb2c24c92d2022260af6f99148cbc021d1"
+CFG["stakeStateNFT"] = "15e22abf710ae825719bb86ce7ae51217900a340c6980f6931a4b97012ab3cde"
+CFG["stakePoolNFT"] = "15feb2e523f41e70f560a513add7deddeaa8371710ee3b83dcbd062479f1e0d2"
+CFG["emissionNFT"] = "15e5e5fb613dc2c0194c8afaf8007bb2ef4f78b6ff04a1ed63a603f1bfdf238e"
+CFG["stakeTokenID"] =  "1611264009b8db2c64b4a7f33beb215d5046e4b799bd651d4881e2412994ea69"
+CFG["stakedTokenID"] = "00f3773820c500b7deab583602c528555e3c22431a95c001f7ec454201268435"
 
 nergsPerErg        = 1000000000
 headers            = {'Content-Type': 'application/json'}
@@ -222,7 +222,7 @@ def snapshot():
                         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake key box')
                     if keyHolder["address"] not in addresses.keys():
                         addresses[keyHolder["address"]] = 0
-                    addresses[keyHolder["address"]] += box["assets"][1]["amount"]
+                    addresses[keyHolder["address"]] += (box["assets"][1]["amount"]/10**2)
             if len(checkBoxes)<limit:
                 done=True
             offset += limit
@@ -274,13 +274,13 @@ async def staked(req: AddressList):
                         cleanedBox = {
                             'boxId': box["boxId"],
                             'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
-                            'stakeAmount': box["assets"][1]["amount"],
+                            'stakeAmount': box["assets"][1]["amount"]/10**2,
                             'penaltyPct': validPenalty(stakeBoxR4[1]),
                             'penaltyEndTime': int(stakeBoxR4[1]+8*week)
                         }
                         stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
-                        totalStaked += box["assets"][1]["amount"]
-                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]
+                        totalStaked += box["assets"][1]["amount"]/10**2
+                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
             if len(checkBoxes)<limit:
                 done=True
             offset += limit
@@ -294,7 +294,7 @@ async def staked(req: AddressList):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during staked')
 
 @r.get("/status/", name="staking:status")
-def status():
+def statusEndpoint():
     stakeStateBox = getNFTBox(CFG.stakeStateNFT)
     stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
 
@@ -313,10 +313,8 @@ class APIKeyRequest(BaseModel):
 @r.post("/compound/", name="staking:compound")
 async def compound(req: APIKeyRequest):
     try:
-        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
         emissionBox = getNFTBox(CFG.emissionNFT)
 
-        stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
         emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
         if emissionR4[2] <= 0:
             return {'remainingStakers': 0}
@@ -358,21 +356,6 @@ async def compound(req: APIKeyRequest):
                         })
             if len(checkBoxes)<limit:
                 break
-        
-        stakeStateOutput = {
-            'value': stakeStateBox["value"],
-            'address': stakeStateBox["address"],
-            'assets': stakeStateBox["assets"],
-            'registers': {
-                'R4': encodeLongArray([
-                    stakeStateR4[0]+totalReward,
-                    stakeStateR4[1],
-                    stakeStateR4[2],
-                    stakeStateR4[3],
-                    stakeStateR4[4]
-                ])
-            }
-        }
 
         emissionAssets = [{
                     'tokenId': CFG.emissionNFT,
@@ -401,7 +384,7 @@ async def compound(req: APIKeyRequest):
         txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
 
         inBoxesRaw = []
-        for box in [stakeStateBox["boxId"],emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
+        for box in [emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
             res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
             logging.info(box)
             if res.ok:
@@ -410,7 +393,7 @@ async def compound(req: APIKeyRequest):
                 return res
 
         request =  {
-                'requests': [stakeStateOutput,emissionOutput]+stakeBoxesOutput,
+                'requests': [emissionOutput]+stakeBoxesOutput,
                 'fee': int(txFee),
                 'inputsRaw': inBoxesRaw
             }
@@ -445,7 +428,14 @@ async def emit(req: APIKeyRequest):
         currentTime = requests.get(f'{CFG.node}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
 
         if currentTime < stakeStateR4[3]+stakeStateR4[4]:
+            logging.info("Too early for emission")
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Too early for a new emission')
+
+        newStakePoolAmount = stakePoolBox["assets"][1]["amount"] - stakePoolR4[0]
+        dust = 0
+        if len(emissionBox["assets"]) > 1:
+            dust = emissionBox["assets"][1]["amount"]
+            newStakePoolAmount += dust
 
         stakeStateOutput = {
             'value': stakeStateBox["value"],
@@ -462,7 +452,7 @@ async def emit(req: APIKeyRequest):
                 ],
             'registers': {
                 'R4': encodeLongArray([
-                    stakeStateR4[0],
+                    stakeStateR4[0]+stakePoolR4[0]-dust,
                     stakeStateR4[1]+1,
                     stakeStateR4[2],
                     stakeStateR4[3]+stakeStateR4[4],
@@ -470,12 +460,6 @@ async def emit(req: APIKeyRequest):
                 ])
             }
         }
-
-        newStakePoolAmount = stakePoolBox["assets"][1]["amount"] - stakePoolR4[0]
-        dust = 0
-        if len(emissionBox["assets"]) > 1:
-            dust = emissionBox["assets"][1]["amount"]
-            newStakePoolAmount += dust
         
         stakePoolOutput = {
             'value': stakePoolBox["value"],
@@ -795,31 +779,10 @@ async def bootstrapStaking(req: BootstrapRequest):
         ]
     }
 
-    inputs = set()
-
-    # for boxId in getBoxesWithUnspentTokens(tokenId=req.emissionNFT,tokenAmount=1).keys():
-    #     inputs.add(boxId)
-    # for boxId in getBoxesWithUnspentTokens(tokenId=req.stakeStateNFT,tokenAmount=1).keys():
-    #     inputs.add(boxId)
-    # for boxId in getBoxesWithUnspentTokens(tokenId=req.stakePoolNFT,tokenAmount=1).keys():
-    #     inputs.add(boxId)
-    # for boxId in getBoxesWithUnspentTokens(nErgAmount=0.002*nergsPerErg,tokenId=req.stakedTokenID,tokenAmount=req.stakeAmount*stakedTokenDecimalMultiplier).keys():
-    #     inputs.add(boxId)
-    # for boxId in getBoxesWithUnspentTokens(nErgAmount=0.002*nergsPerErg,tokenId=req.stakeTokenID,tokenAmount=1000000000).keys():
-    #     inputs.add(boxId)
-
-    inBoxesRaw = []
-    for box in list(inputs):
-        res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
-        if res.ok:
-            inBoxesRaw.append(res.json()['bytes'])
-        else:
-            return res
 
     request = {
-                'requests': [stakeStateBox,emissionBox],
-                'fee': int(0.001*nergsPerErg),          
-                'inputsRaw': inBoxesRaw
+                'requests': [stakeStateBox,emissionBox,stakePoolBox],
+                'fee': int(0.001*nergsPerErg)
             }
     
 

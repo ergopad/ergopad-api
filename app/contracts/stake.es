@@ -12,12 +12,11 @@
       val emissionNFT = fromBase64("{emissionNFT}")
       val stakeStateInput = INPUTS(0).tokens(0)._1 == stakeStateNFT
 
-      if (INPUTS(1).tokens(0)._1 == emissionNFT) {{ // Compound transaction
-          // Stake State, Emission, Stake*N (SELF) => Stake State, Emission, Stake * N
-          val boxIndex = INPUTS.indexOf(SELF,0)
+      if (INPUTS(0).tokens(0)._1 == emissionNFT) {{ // Compound transaction
+          // Emission, Stake*N (SELF) => Emission, Stake * N
+          val boxIndex = INPUTS.indexOf(SELF,1)
           val selfReplication = OUTPUTS(boxIndex)
            sigmaProp(allOf(Coll(
-               stakeStateInput,
                selfReplication.value == SELF.value,
                selfReplication.propositionBytes == SELF.propositionBytes,
                selfReplication.R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0) + 1,
@@ -26,7 +25,7 @@
                selfReplication.tokens(0)._1 == SELF.tokens(0)._1,
                selfReplication.tokens(0)._2 == SELF.tokens(0)._2,
                selfReplication.tokens(1)._1 == SELF.tokens(1)._1,
-               selfReplication.tokens(1)._2 == SELF.tokens(1)._2 + (INPUTS(1).R4[Coll[Long]].get(3) * SELF.tokens(1)._2 / INPUTS(1).R4[Coll[Long]].get(0))
+               selfReplication.tokens(1)._2 == SELF.tokens(1)._2 + (INPUTS(0).R4[Coll[Long]].get(3) * SELF.tokens(1)._2 / INPUTS(0).R4[Coll[Long]].get(0))
            )))
       }} else {{
       if (INPUTS(1).id == SELF.id) {{ // Unstake

@@ -18,8 +18,22 @@
       val stakeContract = fromBase64("{stakeContractHash}")
       val minimumStake = 1000L
 
-      def isStakeBox(box: Box) = if (box.tokens.size >= 1) box.tokens(0)._1 == SELF.tokens(1)._1 else false
-      def isCompoundBox(box: Box) = if (box.tokens.size >= 1) isStakeBox(box) || box.tokens(0)._1 == emissionNFT || box.tokens(0)._1 == SELF.tokens(0)._1 else false
+      def stakedTokenCount(boxes: Coll[Box]) = boxes.fold(0L, {{(z: Long, box: Box) =>
+                                  if (box.tokens.size == 0)
+                                    z + 0L
+                                  else {{
+                                    val stakedTokens = box.tokens.filter({{(token: (Coll[Byte],Long)) =>
+                                      token._1 == stakedTokenID}})
+                                    if (stakedTokens.size == 1)
+                                      z + stakedTokens(0)._2
+                                    else {{
+                                      if (stakedTokens.size == 0)
+                                        z + 0L
+                                      else
+                                        -999999999999L
+                                    }}
+                                  }}
+                                }})
 
       val selfReplication = allOf(Coll(
           OUTPUTS(0).propositionBytes == SELF.propositionBytes,
@@ -64,7 +78,6 @@
                INPUTS(2).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1) - 1L,
                INPUTS(2).R4[Coll[Long]].get(2) == 0L,
                //Stake State
-               OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0),
                OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1) + 1L,
                OUTPUTS(0).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2),
                OUTPUTS(0).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3) + SELF.R4[Coll[Long]].get(4),
@@ -72,20 +85,6 @@
                OUTPUTS(0).tokens(1)._2 == SELF.tokens(1)._2
            )))
       }} else {{
-      if (INPUTS(1).tokens(0)._1 == emissionNFT) {{ // Compound transaction
-            //Stake State (SELF), Emission, Stake*N => Stake State, Emission, Stake*N
-            val leftover = if (OUTPUTS(1).tokens.size == 1) 0L else OUTPUTS(1).tokens(1)._2
-            sigmaProp(allOf(Coll(
-                 selfReplication,
-                 //Stake State
-                 OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0) + INPUTS(1).tokens(1)._2 - leftover,
-                 OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
-                 OUTPUTS(0).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2),
-                 OUTPUTS(0).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3),
-                 OUTPUTS(0).R4[Coll[Long]].get(4) == SELF.R4[Coll[Long]].get(4),
-                 OUTPUTS(0).tokens(1)._2 == SELF.tokens(1)._2
-             )))
-       }} else {{
        if (SELF.R4[Coll[Long]].get(0) > OUTPUTS(0).R4[Coll[Long]].get(0) && INPUTS.size >= 3) {{ // Unstake
            // Stake State (SELF), Stake, Stake Key Box => Stake State, User Wallet, Stake (optional for partial unstake)
            val unstaked = SELF.R4[Coll[Long]].get(0) - OUTPUTS(0).R4[Coll[Long]].get(0)
@@ -97,14 +96,15 @@
                            if (timeInWeeks >= 4) unstaked*125/1000 else
                            if (timeInWeeks >= 2) unstaked*20/100 else
                            unstaked*25/100
-           val penaltyBurned = if (remaining == 0L)
-                                OUTPUTS.size <= 4 && OUTPUTS(2).tokens.size==0
-                                else
-                                OUTPUTS.size <= 5 && OUTPUTS(3).tokens.size==0
+           val tokensInInputs = stakedTokenCount(INPUTS)
+           val tokensInOutputs = stakedTokenCount(OUTPUTS)
            sigmaProp(allOf(Coll(
+               tokensInInputs > 0,
+               tokensInOutputs > 0,
+               tokensInInputs - tokensInOutputs == penalty,
                selfReplication,
                stakeKey,
-               penaltyBurned,
+               INPUTS(1).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(1),
                //Stake State
                OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0)-unstaked,
                OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
@@ -133,5 +133,4 @@
        }}
        }}
        }}
-      }}
   }}

@@ -7,7 +7,7 @@ from config import Config, Network # api specific config
 from fastapi import APIRouter, status
 from typing import Optional
 from pydantic import BaseModel
-from time import time
+from time import sleep, time
 from datetime import date, datetime, timezone
 from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
@@ -360,16 +360,41 @@ async def vestToken(vestment: Vestment):
         logging.error(f'ERR:{myself()}: building request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'building request')
 
+def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
+    # redeem
+    result = ""
+    if len(outBoxes) > 0:
+        inBoxesRaw = []
+        txFee = max(txFee_nerg,(len(outBoxes)+len(inBoxes))*200000)
+        ergopadTokenBoxes = getBoxesWithUnspentTokens(tokenId="", nErgAmount=txBoxTotal_nerg+txFee+txFee_nerg, tokenAmount=0,emptyRegisters=True)
+        for box in inBoxes+list(ergopadTokenBoxes.keys()):
+            res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
+            if res.ok:
+                inBoxesRaw.append(res.json()['bytes'])
+        request = {
+                'requests': outBoxes,
+                'fee': txFee,          
+                'inputsRaw': inBoxesRaw
+            }
+
+        # make async request to assembler
+        # logging.info(request); exit(); # !! testing
+        logging.debug(request)
+        res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request)   
+        logging.debug(res)
+        result = res.content
+        return result
+
 # redeem/disburse tokens after lock
 @r.get("/redeem/{address}", name="vesting:redeem")
 def redeemToken(address:str, numBoxes:Optional[int]=200):
 
     txFee_nerg = CFG.txFee
     txBoxTotal_nerg = 0
-    scPurchase = getErgoscript('alwaysTrue', {})
+    #scPurchase = getErgoscript('alwaysTrue', {})
     outBoxes = []
     inBoxes = []
-    currentTime = requests.get(f'{CFG.ergopadNode}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
+    currentTime = requests.get(f'{CFG.node}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
     offset = 0
     res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2) #This needs to be put in a loop in case of more than 500 boxes
     while res.ok:
@@ -377,7 +402,11 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
         logging.info(rJson['total'])
         for box in rJson['items']:
             if len(inBoxes) >= numBoxes:
-                break
+                redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
+                inBoxes = []
+                outBoxes = []
+                txBoxTotal_nerg = 0
+                sleep(10)
             redeemPeriod = int(box['additionalRegisters']['R5']['renderedValue'])
             redeemAmount = int(box['additionalRegisters']['R6']['renderedValue'])
             vestingStart = int(box['additionalRegisters']['R7']['renderedValue'])
@@ -388,7 +417,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
             totalRedeemable = periods * redeemAmount
             redeemableTokens = totalVested - redeemed if (totalVested-totalRedeemable) < redeemAmount else totalRedeemable - redeemed
             if redeemableTokens > 0:
-                nodeRes = requests.get(f"{CFG.ergopadNode}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
+                nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
                 buyerAddress = nodeRes['address']
                 if (totalVested-(redeemableTokens+redeemed))>0:
                     outBox = {
@@ -433,25 +462,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
     # redeem
     result = ""
     if len(outBoxes) > 0:
-        inBoxesRaw = []
-        txFee = max(txFee_nerg,(len(outBoxes)+len(inBoxes))*100000)
-        ergopadTokenBoxes = getBoxesWithUnspentTokens(tokenId="", nErgAmount=txBoxTotal_nerg+txFee, tokenAmount=0)
-        for box in inBoxes+list(ergopadTokenBoxes.keys()):
-            res = requests.get(f'{CFG.ergopadNode}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
-            if res.ok:
-                inBoxesRaw.append(res.json()['bytes'])
-        request = {
-                'requests': outBoxes,
-                'fee': txFee,          
-                'inputsRaw': inBoxesRaw
-            }
-
-        # make async request to assembler
-        # logging.info(request); exit(); # !! testing
-        logging.debug(request)
-        res = requests.post(f'{CFG.ergopadNode}/wallet/transaction/send', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request)   
-        logging.debug(res)
-        result = res.content
+        result = redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
     try:
         return({
             'status': 'success',

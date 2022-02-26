@@ -120,7 +120,7 @@ Config = {
     'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
     'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
     'minTx'             : 10000000, # required
-    'txFee'             : 2000000, # tips welcome
+    'txFee'             : 1000000, # tips welcome
     'nanoergsInErg'     : 1000000000, # 1e9
     'tokenPriceNergs'   : 1500000000, # 1.5 ergs
     'vestingPeriods_1'  : 9,

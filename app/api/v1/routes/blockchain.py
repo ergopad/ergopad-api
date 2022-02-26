@@ -269,6 +269,7 @@ def getBoxesWithUnspentTokens(nErgAmount=-1, tokenId=CFG.ergopadTokenId, tokenAm
             for ast in assets:
                 if 'box' in ast:
                     if not emptyRegisters or len(ast['box']['additionalRegisters']) == 0:
+
                         # find enough boxes to handle nergs requested
                         if foundNErgAmount < nErgAmount:
                             foundNErgAmount += ast['box']['value']
