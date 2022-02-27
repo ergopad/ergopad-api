@@ -28,19 +28,19 @@
               OUTPUTS(2).tokens(1)._2 == OUTPUTS(2).R4[Coll[Long]].get(3)
           )))
       }} else {{
-      if (stakeStateInput && INPUTS(1).id == SELF.id) {{ // Compound transaction
-          // Stake State, Emission (SELF), Stake*N => Stake State, Emission, Stake*N
+      if (INPUTS(0).id == SELF.id) {{ // Compound transaction
+          // Emission (SELF), Stake*N => Emission, Stake*N
           val stakeBoxes = INPUTS.filter({{(box: Box) => if (box.tokens.size > 0) box.tokens(0)._1 == stakeTokenID && box.R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(1) else false}})
           val rewardsSum = stakeBoxes.fold(0L, {{(z: Long, box: Box) => z+(box.tokens(1)._2*SELF.R4[Coll[Long]].get(3)/SELF.R4[Coll[Long]].get(0))}})
-          val remainingTokens = if (SELF.tokens(1)._2 <= rewardsSum) OUTPUTS(1).tokens.size == 1 else (OUTPUTS(1).tokens(1)._1 == stakedTokenID && OUTPUTS(1).tokens(1)._2 >= (SELF.tokens(1)._2 - rewardsSum))
+          val remainingTokens = if (SELF.tokens(1)._2 <= rewardsSum) OUTPUTS(0).tokens.size == 1 else (OUTPUTS(0).tokens(1)._1 == stakedTokenID && OUTPUTS(0).tokens(1)._2 >= (SELF.tokens(1)._2 - rewardsSum))
           sigmaProp(allOf(Coll(
-               OUTPUTS(1).propositionBytes == SELF.propositionBytes,
-               OUTPUTS(1).tokens(0)._1 == SELF.tokens(0)._1,
+               OUTPUTS(0).propositionBytes == SELF.propositionBytes,
+               OUTPUTS(0).tokens(0)._1 == SELF.tokens(0)._1,
                remainingTokens,
-               OUTPUTS(1).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0),
-               OUTPUTS(1).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
-               OUTPUTS(1).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2) - stakeBoxes.size,
-               OUTPUTS(1).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3)
+               OUTPUTS(0).R4[Coll[Long]].get(0) == SELF.R4[Coll[Long]].get(0),
+               OUTPUTS(0).R4[Coll[Long]].get(1) == SELF.R4[Coll[Long]].get(1),
+               OUTPUTS(0).R4[Coll[Long]].get(2) == SELF.R4[Coll[Long]].get(2) - stakeBoxes.size,
+               OUTPUTS(0).R4[Coll[Long]].get(3) == SELF.R4[Coll[Long]].get(3)
            )))
       }} else {{
           sigmaProp(false)

@@ -100,8 +100,8 @@ Config = {
   }),
   'mainnet': dotdict({
     'node'              : os.getenv('ERGONODE_HOST'),
-    'explorer'          : 'https://api.ergoplatform.com/api/v1',
-    'ergoPlatform'      : 'https://api.ergoplatform.com/api/v1',
+    'explorer'          : 'http://52.12.102.149:9090/api/v1',
+    'ergoPlatform'      : 'http://52.12.102.149:9090/api/v1',
     'assembler'         : 'http://172.31.8.85:8080', # patch for alpha
     'ergopadNode'       : 'http://ergonode:9053',
     'buyerNode'         : 'http://ergonode2:9053',
@@ -120,7 +120,7 @@ Config = {
     'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
     'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
     'minTx'             : 10000000, # required
-    'txFee'             : 2000000, # tips welcome
+    'txFee'             : 1000000, # tips welcome
     'nanoergsInErg'     : 1000000000, # 1e9
     'tokenPriceNergs'   : 1500000000, # 1.5 ergs
     'vestingPeriods_1'  : 9,
