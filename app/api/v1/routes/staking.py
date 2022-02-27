@@ -318,7 +318,7 @@ def stakingStatus():
     }
 
     # cache and return
-    cache.set(f"get_api_staking_status", ret)
+    cache.set(f"get_api_staking_status", ret, timeout=300)
     return ret
 
 def compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox, emissionR4):
@@ -635,7 +635,7 @@ async def stake(req: StakeRequest):
             'ergValue': int(0.01*nergsPerErg),
             'amount': 1,
             'name': f'{stakedTokenInfo["name"]} Stake Key',
-            'description': f"{{'originalAmountStaked': {req.amount}, 'stakeTime': '{datetime.now()}'}}",
+            'description': f'{{"originalAmountStaked": {req.amount}, "stakeTime": "{datetime.now()}"}}',
             'decimals': "0"
         }
 
