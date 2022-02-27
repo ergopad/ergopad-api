@@ -635,7 +635,7 @@ async def stake(req: StakeRequest):
             'ergValue': int(0.01*nergsPerErg),
             'amount': 1,
             'name': f'{stakedTokenInfo["name"]} Stake Key',
-            'description': f"{{'amountStaked': {req.amount}, 'stakeTime': '{datetime.now()}'}}'",
+            'description': f"{{'originalAmountStaked': {req.amount}, 'stakeTime': '{datetime.now()}'}}",
             'decimals': "0"
         }
 
