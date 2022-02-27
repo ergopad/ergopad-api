@@ -12,6 +12,7 @@ from ergo.util import encodeLongArray, encodeString, hexstringToB64
 from hashlib import blake2b
 from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens
 from hashlib import blake2b
+from cache.cache import cache
 
 staking_router = r = APIRouter()
 
@@ -294,18 +295,28 @@ async def staked(req: AddressList):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during staked')
 
 @r.get("/status/", name="staking:status")
-def statusEndpoint():
+def stakingStatus():
+    # check cache
+    cached = cache.get(f"get_api_staking_status")
+    if cached:
+        return cached
+
     stakeStateBox = getNFTBox(CFG.stakeStateNFT)
     stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
 
     apy = 29300000.0/stakeStateR4[0]*36500
 
-    return {
+    ret = {
         'Total amount staked': stakeStateR4[0]/10**2,
         'Staking boxes': stakeStateR4[2],
         'Cycle start': stakeStateR4[3],
         'APY': apy
     }
+
+    # cache and return
+    cache.set(f"get_api_staking_status", ret)
+    return ret
+
 
 class APIKeyRequest(BaseModel):
     apiKey: str
