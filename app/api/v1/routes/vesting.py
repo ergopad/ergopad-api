@@ -198,11 +198,11 @@ async def vestToken(vestment: Vestment):
     vestedTokenDecimals = 10**vestedTokenDecimals
     currencyDecimals = 10**currencyDecimals
 
-    nodeWalletAddress = CFG.nodeWallet
+    vestmentWalletAddress = CFG.vestmentWalletAddress
     try:
-        logging.info(CFG.nodeWallet)
+        logging.info(vestmentWalletAddress)
         buyerWallet        = Wallet(vestment.wallet)
-        nodeWallet         = Wallet(nodeWalletAddress)
+        nodeWallet         = Wallet(vestmentWalletAddress)
         amountInUSD        = vestment.vestingAmount*vs.vestedTokenPrice
         
         vestingDuration_ms = duration_ms[vs.periodType]*vs.periodDuration
