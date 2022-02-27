@@ -15,6 +15,7 @@ from api.v1.routes.events import events_router
 from api.v1.routes.assembler import assembler_router
 from api.v1.routes.purchase import purchase_router
 from api.v1.routes.jobs import jobs_router
+from api.v1.routes.staking import staking_router
 # from api.v1.routes.wallets import wallets_router
 # from api.v1.routes.tokens import tokens_router
 
@@ -43,6 +44,7 @@ app.include_router(events_router,     prefix="/api/events",     tags=["events"])
 app.include_router(purchase_router,   prefix="/api/purchase",   tags=["purchase"])
 app.include_router(assembler_router,  prefix="/api/assembler",  tags=["assembler"])
 app.include_router(jobs_router,       prefix="/api/jobs",       tags=["jobs"])
+app.include_router(staking_router,    prefix="/api/staking",    tags=["staking"])
 #endregion Routers
 
 # init database?

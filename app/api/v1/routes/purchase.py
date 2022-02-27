@@ -45,7 +45,6 @@ class TokenPurchase(BaseModel):
     currency: Optional[str] = 'sigusd'
 
 nodeWallet  = Wallet(CFG.ergopadWallet) # contains ergopad tokens (xerg10M)
-buyerWallet = Wallet(CFG.buyerWallet) # simulate buyer / seed tokens
 #endregion INIT
 
 #region LOGGING

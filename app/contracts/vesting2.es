@@ -18,7 +18,7 @@
     val tokenZeroSum = totalBuyerOutput == redeemableTokens
 
     val selfOutput = SELF.tokens(0)._2 == redeemableTokens || //Either all remaining tokens are taken out OR
-                        OUTPUTS.exists {{(box: Box) => box.value == SELF.value && //There is an output box with the exact same characteristics as the current box
+                        OUTPUTS.exists({{(box: Box) => box.value == SELF.value && //There is an output box with the exact same characteristics as the current box
                                                     box.propositionBytes == SELF.propositionBytes &&
                                                     box.tokens(0)._1 == SELF.tokens(0)._1 &&
                                                     box.tokens(0)._2 == SELF.tokens(0)._2 - redeemableTokens &&
@@ -27,7 +27,7 @@
                                                     box.R6[Long].get == SELF.R6[Long].get &&
                                                     box.R7[Long].get == SELF.R7[Long].get &&
                                                     box.R8[Long].get == SELF.R8[Long].get &&
-                                                    box.R9[Coll[Byte]].get == SELF.R9[Coll[Byte]].get}}
+                                                    box.R9[Coll[Byte]].get == SELF.R9[Coll[Byte]].get}})
 
     // check for proper tokenId?
     sigmaProp(tokenZeroSum && selfOutput)
