@@ -20,11 +20,11 @@ CFG = Config[Network]
 DEBUG = True # CFG.DEBUG
 DATABASE = CFG.connectionString
 
-CFG["stakeStateNFT"] = "1670681d78c56d80e0bd67c5f5d792e618c570c4161cad15f6dbddc3f2eadea3"
-CFG["stakePoolNFT"] = "272dcd8a164071a9686610f24541b5b28259a962dc19501d4822a50a527e899d"
-CFG["emissionNFT"] = "152651117df36c59a07ec477c2b0bfd9aed515142a810e50d74f60522c2cc87c"
-CFG["stakeTokenID"] =  "3c1d053c4246a14cf93f6791120717076f14fd17fc4e823e4a13bad2527cc15f"
-CFG["stakedTokenID"] = "1181c6045cf17dde75f5fd1b21fedea70613dccb99cbbdb85037acd77ddeabb6"
+CFG["stakeStateNFT"] = "05cde13424a7972fbcd0b43fccbb5e501b1f75302175178fc86d8f243f3f3125"
+CFG["stakePoolNFT"] = "0d01f2f0b3254b4a1731e1b61ad77641fe54de2bd68d1c6fc1ae4e7e9ddfb212"
+CFG["emissionNFT"] = "0549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab9195eed59"
+CFG["stakeTokenID"] =  "1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee"
+CFG["stakedTokenID"] = "d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413"
 
 nergsPerErg        = 1000000000
 headers            = {'Content-Type': 'application/json'}
@@ -308,7 +308,7 @@ def stakingStatus():
 
     totalStaked = stakeStateR4[0]
 
-    apy = (1.0 + 29300000.0/totalStaked)**365-1.0
+    apy = 29300000.0*36500/totalStaked
 
     ret = {
         'Total amount staked': totalStaked/10**2,
