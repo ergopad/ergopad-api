@@ -5,7 +5,7 @@ from config import Config, Network # api specific config
 from fastapi import APIRouter, status
 from typing import List
 from pydantic import BaseModel
-from time import time
+from time import sleep, time
 from datetime import datetime
 from base64 import b64encode
 from ergo.util import encodeLongArray, encodeString, hexstringToB64
@@ -20,11 +20,11 @@ CFG = Config[Network]
 DEBUG = True # CFG.DEBUG
 DATABASE = CFG.connectionString
 
-CFG["stakeStateNFT"] = "15e22abf710ae825719bb86ce7ae51217900a340c6980f6931a4b97012ab3cde"
-CFG["stakePoolNFT"] = "15feb2e523f41e70f560a513add7deddeaa8371710ee3b83dcbd062479f1e0d2"
-CFG["emissionNFT"] = "15e5e5fb613dc2c0194c8afaf8007bb2ef4f78b6ff04a1ed63a603f1bfdf238e"
-CFG["stakeTokenID"] =  "1611264009b8db2c64b4a7f33beb215d5046e4b799bd651d4881e2412994ea69"
-CFG["stakedTokenID"] = "00f3773820c500b7deab583602c528555e3c22431a95c001f7ec454201268435"
+CFG["stakeStateNFT"] = "1670681d78c56d80e0bd67c5f5d792e618c570c4161cad15f6dbddc3f2eadea3"
+CFG["stakePoolNFT"] = "272dcd8a164071a9686610f24541b5b28259a962dc19501d4822a50a527e899d"
+CFG["emissionNFT"] = "152651117df36c59a07ec477c2b0bfd9aed515142a810e50d74f60522c2cc87c"
+CFG["stakeTokenID"] =  "3c1d053c4246a14cf93f6791120717076f14fd17fc4e823e4a13bad2527cc15f"
+CFG["stakedTokenID"] = "1181c6045cf17dde75f5fd1b21fedea70613dccb99cbbdb85037acd77ddeabb6"
 
 nergsPerErg        = 1000000000
 headers            = {'Content-Type': 'application/json'}
@@ -77,6 +77,8 @@ async def unstake(req: UnstakeRequest):
             logging.info(penalty)
             partial = amountToUnstake < stakeBox["assets"][1]["amount"]
             stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
+            if stakeStateR4[1] != stakeBoxR4[0]:
+                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'This stake box has a pending compound transaction. Compounding needs to happen before unstaking.')
             outputs = []
             outputs.append({
                 'address': stakeStateBox["address"],
@@ -102,7 +104,7 @@ async def unstake(req: UnstakeRequest):
                 }
             })
             outputs.append({
-                'value': int(0.001*nergsPerErg),
+                'value': int(0.01*nergsPerErg),
                 'address': userBox["address"],
                 'assets': [
                     {
@@ -261,7 +263,6 @@ async def staked(req: AddressList):
         offset = 0
         limit = 100
         done = False
-        stakeBoxes = []
         totalStaked = 0
         stakePerAddress = {}
         while not done:
@@ -301,13 +302,16 @@ def stakingStatus():
     if cached:
         return cached
 
+
     stakeStateBox = getNFTBox(CFG.stakeStateNFT)
     stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
 
-    apy = 29300000.0/stakeStateR4[0]*36500
+    totalStaked = stakeStateR4[0]
+
+    apy = (1.0 + 29300000.0/totalStaked)**365-1.0
 
     ret = {
-        'Total amount staked': stakeStateR4[0]/10**2,
+        'Total amount staked': totalStaked/10**2,
         'Staking boxes': stakeStateR4[2],
         'Cycle start': stakeStateR4[3],
         'APY': apy
@@ -317,15 +321,58 @@ def stakingStatus():
     cache.set(f"get_api_staking_status", ret)
     return ret
 
+def compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox, emissionR4):
+    emissionAssets = [{
+                    'tokenId': CFG.emissionNFT,
+                    'amount': 1
+                }]
+    if totalReward < emissionBox["assets"][1]["amount"]:
+        emissionAssets.append({
+            'tokenId': CFG.stakedTokenID,
+            'amount': emissionBox["assets"][1]["amount"]-totalReward
+        })
+
+    emissionOutput = {
+        'value': emissionBox["value"],
+        'address': emissionBox["address"],
+        'assets': emissionAssets,
+        'registers': {
+            'R4': encodeLongArray([
+                emissionR4[0],
+                emissionR4[1],
+                emissionR4[2]-len(stakeBoxes),
+                emissionR4[3]
+            ])
+        }
+    }
+
+    txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
+
+    inBoxesRaw = []
+    for box in [emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
+        res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
+        logging.info(box)
+        if res.ok:
+            inBoxesRaw.append(res.json()['bytes'])
+        else:
+            return res
+
+    request =  {
+            'requests': [emissionOutput]+stakeBoxesOutput,
+            'fee': int(txFee),
+            'inputsRaw': inBoxesRaw
+        }
+
+    return request
 
 class APIKeyRequest(BaseModel):
     apiKey: str
+    numBoxes: int = 25
 
 @r.post("/compound/", name="staking:compound")
 async def compound(req: APIKeyRequest):
     try:
         emissionBox = getNFTBox(CFG.emissionNFT)
-
         emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
         if emissionR4[2] <= 0:
             return {'remainingStakers': 0}
@@ -335,8 +382,8 @@ async def compound(req: APIKeyRequest):
         limit = 100
         totalReward = 0
 
-        while len(stakeBoxes) < 100:
-            checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
+        checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
+        while len(checkBoxes) > 0:
             for box in checkBoxes:
                 if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
                     boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
@@ -365,55 +412,24 @@ async def compound(req: APIKeyRequest):
                                 'R5': box["additionalRegisters"]["R5"]["serializedValue"]
                             }
                         })
-            if len(checkBoxes)<limit:
-                break
+                if len(stakeBoxes)>=req.numBoxes:
+                    request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)
+                    res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)
+                    stakeBoxes = []
+                    stakeBoxesOutput = []
+                    totalReward = 0
+                    sleep(10)
+                    emissionBox = getNFTBox(CFG.emissionNFT)
+                    emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
+            offset += limit
+            checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
 
-        emissionAssets = [{
-                    'tokenId': CFG.emissionNFT,
-                    'amount': 1
-                }]
-        if totalReward < emissionBox["assets"][1]["amount"]:
-            emissionAssets.append({
-                'tokenId': CFG.stakedTokenID,
-                'amount': emissionBox["assets"][1]["amount"]-totalReward
-            })
-
-        emissionOutput = {
-            'value': emissionBox["value"],
-            'address': emissionBox["address"],
-            'assets': emissionAssets,
-            'registers': {
-                'R4': encodeLongArray([
-                    emissionR4[0],
-                    emissionR4[1],
-                    emissionR4[2]-len(stakeBoxes),
-                    emissionR4[3]
-                ])
-            }
-        }
-
-        txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
-
-        inBoxesRaw = []
-        for box in [emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
-            res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
-            logging.info(box)
-            if res.ok:
-                inBoxesRaw.append(res.json()['bytes'])
-            else:
-                return res
-
-        request =  {
-                'requests': [emissionOutput]+stakeBoxesOutput,
-                'fee': int(txFee),
-                'inputsRaw': inBoxesRaw
-            }
-
-        logging.info(request)
-
-        res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)   
-        
-        return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': res.json()}
+        if len(stakeBoxes) > 0:
+            request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)
+            res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)    
+            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': res.json()}
+        else:
+            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes)} 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during compounding')
@@ -616,10 +632,10 @@ async def stake(req: StakeRequest):
 
         userOutput = {
             'address': address,
-            'ergValue': int(0.001*nergsPerErg),
+            'ergValue': int(0.01*nergsPerErg),
             'amount': 1,
-            'name': f'{stakedTokenInfo["name"]} Stake Key {datetime.now()}',
-            'description': f'Stake key to be used for unstaking {stakedTokenInfo["name"]}',
+            'name': f'{stakedTokenInfo["name"]} Stake Key',
+            'description': f"{{'amountStaked': {req.amount}, 'stakeTime': '{datetime.now()}'}}'",
             'decimals': "0"
         }
 

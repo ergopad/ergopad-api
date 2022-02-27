@@ -229,7 +229,6 @@ def getNFTBox(tokenId: str):
                 except:
                     pass
             for memBox in memResJson:
-                logging.info(memBox)
                 if "assets" in memBox:
                     for token in memBox["assets"]:
                         if token["tokenId"]==tokenId:
