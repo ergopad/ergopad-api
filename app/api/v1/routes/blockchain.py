@@ -214,7 +214,7 @@ def getInputBoxes(boxes, txFormat: TXFormat):
 
 def getNFTBox(tokenId: str):
     try:
-        memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+        memRes = requests.get(f'https://api.ergoplatform.com/api/v1/mempool/boxes/unspent')
         if memRes.ok:
             memResJson = []
             memResContent = memRes.content.decode('utf-8')
