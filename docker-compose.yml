@@ -33,3 +33,5 @@ networks:
     external: true
   ergopad-node_net:
     external: true
+  net:
+    driver: bridge

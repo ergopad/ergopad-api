@@ -4,13 +4,15 @@ import pandas as pd
 
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
-from fastapi import APIRouter, Response, status #, Request
+from fastapi import APIRouter, Request, Depends, Response, encoders, status
 from fastapi.encoders import jsonable_encoder
 from typing import Optional
 from pydantic import BaseModel
 from time import time
 from smtplib import SMTP
 from config import Config, Network # api specific config
+from core.auth import get_current_active_superuser
+
 CFG = Config[Network]
 
 util_router = r = APIRouter()
@@ -30,7 +32,9 @@ Notes:
 #region INIT
 DEBUG   = CFG.debug
 headers = {'Content-Type': 'application/json'}
+#endregion INIT
 
+#region CLASSES
 class Email(BaseModel):
     to: str
     # sender: str
@@ -53,7 +57,7 @@ class Ergoscript(BaseModel):
                 'script': '{ 1 == 1 }',
             }
         }
-#endregion INIT
+#endregion CLASSES
 
 #region LOGGING
 import logging
@@ -65,7 +69,20 @@ myself = lambda: inspect.stack()[1][3]
 #endregion LOGGING
 
 @r.post("/email")
-async def email(email: Email):
+async def email(email: Email, request: Request):
+    
+    # validate referer
+    logging.debug(request.headers)
+    validEmailApply = CFG.validEmailApply
+    referer = request.headers.get('referer') or ''
+    validateMe = request.headers.get('validate_me') or ''
+    isValidReferer = False
+    if referer in validEmailApply: isValidReferer = True
+    if '54.214.59.165' in referer: isValidReferer = True
+    if validateMe == CFG.validateMe: isValidReferer = True
+    if not isValidReferer:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
+
     usr = CFG.emailUsername
     pwd = CFG.emailPassword
     svr = CFG.emailSMTP
@@ -107,7 +124,13 @@ def compileErgoscript(ergoscript: Ergoscript):
 
 # TEST - send payment from test wallet
 @r.get("/sendPayment/{address}/{nergs}/{tokens}", name="blockchain:sendPayment")
-def sendPayment(address, nergs, tokens):
+def sendPayment(
+    address, 
+    nergs, 
+    tokens,
+    request: Request,
+    current_user=Depends(get_current_active_superuser)
+):
     # TODO: require login/password or something; disable in PROD
     try:
         if not DEBUG:
