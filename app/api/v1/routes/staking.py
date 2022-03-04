@@ -1,5 +1,5 @@
 import requests
-from starlette.responses import JSONResponse 
+from starlette.responses import JSONResponse
 from wallet import Wallet
 from config import Config, Network # api specific config
 from fastapi import APIRouter, Request, Depends, Response, encoders, status
@@ -14,6 +14,7 @@ from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getToke
 from hashlib import blake2b
 from cache.cache import cache
 from core.auth import get_current_active_superuser
+from cache.staking import AsyncSnapshotEngine 
 
 staking_router = r = APIRouter()
 
@@ -243,27 +244,36 @@ def snapshot(
         offset = 0
         limit = 100
         done = False
-        addresses = {}
+
+        # Faster API Calls
+        engine = AsyncSnapshotEngine()
+
         while not done:
-            checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
+            checkBoxes = getTokenBoxes(
+                tokenId=CFG.stakeTokenID, offset=offset, limit=limit)
             for box in checkBoxes:
-                if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                    keyHolder = getNFTBox(box["additionalRegisters"]["R5"]["renderedValue"])
-                    if keyHolder is None:
-                        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake key box')
-                    if keyHolder["address"] not in addresses.keys():
-                        addresses[keyHolder["address"]] = 0
-                    addresses[keyHolder["address"]] += (box["assets"][1]["amount"]/10**2)
-            if len(checkBoxes)<limit:
-                done=True
+                if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
+                    tokenId = box["additionalRegisters"]["R5"]["renderedValue"]
+                    amount = int(box["assets"][1]["amount"]) / 10**2
+                    engine.add_job(tokenId, amount)
+            
+            engine.compute()
+            if len(checkBoxes) < limit:
+                done = True
             offset += limit
-        
-        return {
-            'stakers': addresses
-        }
+
+        data = engine.get()
+        if data != None:
+            return {
+                'stakers': data
+            }
+        else:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake key box')
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during snapshot')
+
 
 def validPenalty(startTime: int):
     currentTime = int(time()*1000)
