@@ -6,6 +6,7 @@ from starlette.responses import JSONResponse
 from fastapi import APIRouter, status
 from time import time
 from api.v1.routes.asset import get_asset_current_price
+from cache.cache import cache
 from config import Config, Network # api specific config
 
 CFG = Config[Network]
@@ -212,12 +213,37 @@ def getInputBoxes(boxes, txFormat: TXFormat):
         return unsignedInputs
     return None
 
-def getNFTBox(tokenId: str):
+def getNFTBox(tokenId: str, allowCached=False):
     try:
-        memRes = requests.get(f'https://api.ergoplatform.com/api/v1/mempool/boxes/unspent')
-        if memRes.ok:
+        ok = False
+        memResContent = None
+        if allowCached:
+            # allowCached is true for snapshots
+            cached = cache.get("get_explorer_mempool_boxes_unspent")
+            if cached:
+                ok = cached["ok"]
+                memResContent = cached["memResContent"] 
+            else:
+                # same api hit independent of token id
+                # cache for 5 mins for snapshots only
+                memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+                ok = memRes.ok
+                if ok:
+                    memResContent = memRes.content.decode('utf-8')
+                content = {
+                    "ok": ok,
+                    "memResContent": memResContent
+                }
+                cache.set("get_explorer_mempool_boxes_unspent", content, 300)
+        else:
+            # if cached is not allowed force api call
+            memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+            ok = memRes.ok
+            if ok:
+                memResContent = memRes.content.decode('utf-8')
+            
+        if ok:
             memResJson = []
-            memResContent = memRes.content.decode('utf-8')
             index = 0
             offset = 0
             while index < len(memResContent):
@@ -234,6 +260,7 @@ def getNFTBox(tokenId: str):
                         if token["tokenId"]==tokenId:
                             return memBox
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}')
+        logging.debug('Explorer api call: return from boxes/unspent/byTokenId')
         if res.ok:
             items = res.json()["items"]
             if len(items) == 1:
