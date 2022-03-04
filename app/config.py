@@ -74,6 +74,7 @@ Config = {
     'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
     'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
     'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
     'minTx'             : 100000, # smallest required for tx
     'txFee'             : 1000000, # min required
     'nanoergsInErg'     : 1000000000, # 1e9
@@ -119,6 +120,7 @@ Config = {
     'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
     'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
     'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
     'minTx'             : 10000000, # required
     'txFee'             : 1000000, # tips welcome
     'nanoergsInErg'     : 1000000000, # 1e9
