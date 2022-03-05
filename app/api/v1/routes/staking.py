@@ -288,9 +288,12 @@ async def staked(req: AddressList):
         for address in req.addresses:
             res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
             if res.ok:
-                for token in res.json()["tokens"]:
-                    if "Stake Key" in token["name"]:
-                        stakeKeys[token["tokenId"]] = address
+                if 'tokens' in res.json():
+                    for token in res.json()["tokens"]:
+                        if 'name' in token and 'tokenId' in token:
+                            if token["name"] is not None:
+                                if "Stake Key" in token["name"]:
+                                    stakeKeys[token["tokenId"]] = address
             else:
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failure to fetch balance for {address}')
         
