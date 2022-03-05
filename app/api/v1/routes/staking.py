@@ -13,7 +13,7 @@ from hashlib import blake2b
 from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens
 from hashlib import blake2b
 from cache.cache import cache
-from core.auth import get_current_active_superuser
+from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 
 staking_router = r = APIRouter()
@@ -238,7 +238,7 @@ async def unstake(req: UnstakeRequest):
 @r.get("/snapshot/", name="staking:snapshot")
 def snapshot(
     request: Request,
-    current_user=Depends(get_current_active_superuser)
+    current_user=Depends(get_current_active_user)
 ):
     try:
         offset = 0
