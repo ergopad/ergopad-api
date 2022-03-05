@@ -15,7 +15,7 @@ from ergo.updateAllowance import handleAllowance
 from ergo.util import encodeLong, encodeString
 import uuid
 from hashlib import blake2b
-from api.v1.routes.blockchain import getTokenInfo, getErgoscript, getBoxesWithUnspentTokens
+from api.v1.routes.blockchain import getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta
 
 vesting_router = r = APIRouter()
 
@@ -221,7 +221,7 @@ async def vestToken(vestment: Vestment):
         # pay ergopad for tokens with coins or tokens
         startWhen = {'erg': sendAmount_nerg}
         outBox = [{
-            'address': nodeWallet.address, 
+            'address': CFG.vestmentWalletAddress, 
             'value': sendAmount_nerg 
         }]
         if isToken:
@@ -258,8 +258,9 @@ async def vestToken(vestment: Vestment):
             }]
         })
         currencyID = CFG.validCurrencies[vs.currency] if isToken else ""
+        logging.debug(f'VestingWalletErgoTree::{Wallet(scVesting).ergoTree()}')
         params = {
-            'nodeWallet': nodeWallet.address,
+            'nodeWallet': vestmentWalletAddress,
             'buyerWallet': buyerWallet.address,
             'vestingErgoTree': b64encode(bytes.fromhex(Wallet(scVesting).ergoTree()[2:])).decode('utf-8'),
             'saleToken': b64encode(bytes.fromhex(CFG.validCurrencies[vs.vestedToken])).decode('utf-8'),
@@ -276,7 +277,7 @@ async def vestToken(vestment: Vestment):
         # create transaction with smartcontract, into outbox(es), using tokens from ergopad token box
         if presale == {}:
             ergopadTokenBoxes = getUnspentExchange()
-        ergopadTokenBoxes = getBoxesWithUnspentTokens(tokenId=CFG.validCurrencies[vs.vestedToken], nErgAmount=txFee_nerg*3, tokenAmount=tokenAmount)
+        ergopadTokenBoxes = getBoxesWithUnspentTokens_beta(tokenId=CFG.validCurrencies[vs.vestedToken], nErgAmount=txFee_nerg*3, tokenAmount=tokenAmount)
         logging.info(f'build request')
         request = {
             'address': scPurchase,

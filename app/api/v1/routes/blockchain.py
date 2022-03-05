@@ -6,6 +6,7 @@ from starlette.responses import JSONResponse
 from fastapi import APIRouter, status
 from time import time
 from api.v1.routes.asset import get_asset_current_price
+from cache.cache import cache
 from config import Config, Network # api specific config
 
 CFG = Config[Network]
@@ -212,12 +213,37 @@ def getInputBoxes(boxes, txFormat: TXFormat):
         return unsignedInputs
     return None
 
-def getNFTBox(tokenId: str):
+def getNFTBox(tokenId: str, allowCached=False):
     try:
-        memRes = requests.get(f'https://api.ergoplatform.com/api/v1/mempool/boxes/unspent')
-        if memRes.ok:
+        ok = False
+        memResContent = None
+        if allowCached:
+            # allowCached is true for snapshots
+            cached = cache.get("get_explorer_mempool_boxes_unspent")
+            if cached:
+                ok = cached["ok"]
+                memResContent = cached["memResContent"] 
+            else:
+                # same api hit independent of token id
+                # cache for 5 mins for snapshots only
+                memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+                ok = memRes.ok
+                if ok:
+                    memResContent = memRes.content.decode('utf-8')
+                content = {
+                    "ok": ok,
+                    "memResContent": memResContent
+                }
+                cache.set("get_explorer_mempool_boxes_unspent", content, 300)
+        else:
+            # if cached is not allowed force api call
+            memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+            ok = memRes.ok
+            if ok:
+                memResContent = memRes.content.decode('utf-8')
+            
+        if ok:
             memResJson = []
-            memResContent = memRes.content.decode('utf-8')
             index = 0
             offset = 0
             while index < len(memResContent):
@@ -234,6 +260,7 @@ def getNFTBox(tokenId: str):
                         if token["tokenId"]==tokenId:
                             return memBox
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}')
+        logging.debug('Explorer api call: return from boxes/unspent/byTokenId')
         if res.ok:
             items = res.json()["items"]
             if len(items) == 1:
@@ -301,6 +328,54 @@ def getBoxesWithUnspentTokens(nErgAmount=-1, tokenId=CFG.ergopadTokenId, tokenAm
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find unspent tokens ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to find unspent tokens')
+
+# find unspent boxes with tokens
+def getBoxesWithUnspentTokens_beta(nErgAmount=-1, tokenId=CFG.ergopadTokenId, tokenAmount=-1, allowMempool=True, emptyRegisters=False):
+    try:
+        foundTokenAmount = 0
+        foundNErgAmount = 0
+        ergopadTokenBoxes = {}
+
+        res = requests.get(f'http://52.12.102.149:9053/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': '49eCcDzqLzL5Gams'}))
+        if res.ok:
+            assets = res.json()
+            for ast in assets:
+                if 'box' in ast:
+                    if not emptyRegisters or len(ast['box']['additionalRegisters']) == 0:
+
+                        # find enough boxes to handle nergs requested
+                        if foundNErgAmount < nErgAmount:
+                            foundNErgAmount += ast['box']['value']
+                            ergopadTokenBoxes[ast['box']['boxId']] = []
+
+                        # find enough boxes with tokens to handle request
+                        if ast['box']['assets'] != [] and (foundTokenAmount < tokenAmount or tokenAmount == -1):
+                            for tkn in ast['box']['assets']:
+                                if 'tokenId' in tkn and 'amount' in tkn:
+                                    #logging.info(tokenId)
+                                    if tkn['tokenId'] == tokenId:
+                                        foundTokenAmount += tkn['amount']
+                                        if ast['box']['boxId'] in ergopadTokenBoxes:
+                                            ergopadTokenBoxes[ast['box']['boxId']].append(tkn)
+                                        else:
+                                            ergopadTokenBoxes[ast['box']['boxId']] = [tkn]
+                                            foundNErgAmount += ast['box']['value']
+                                        # logging.debug(tkn)
+
+            logging.info(f'found {foundTokenAmount} ergopad tokens and {foundNErgAmount} nErg in wallet')
+
+        # invalid wallet, no unspent boxes, etc..
+        else:
+            logging.error('unable to find unspent boxes')
+
+        # return CFG.node
+        # return f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}, apikey={CFG.ergopadApiKey}'
+        return ergopadTokenBoxes
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: unable to find unspent tokens ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to find unspent tokens')
+
 
 # ergoscripts
 @r.get("/script/{name}", name="blockchain:getErgoscript")

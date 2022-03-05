@@ -1,8 +1,8 @@
 import requests
-from starlette.responses import JSONResponse 
+from starlette.responses import JSONResponse
 from wallet import Wallet
 from config import Config, Network # api specific config
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, Depends, Response, encoders, status
 from typing import List
 from pydantic import BaseModel
 from time import sleep, time
@@ -13,9 +13,12 @@ from hashlib import blake2b
 from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens
 from hashlib import blake2b
 from cache.cache import cache
+from core.auth import get_current_active_superuser
+from cache.staking import AsyncSnapshotEngine 
 
 staking_router = r = APIRouter()
 
+#region INIT
 CFG = Config[Network]
 DEBUG = True # CFG.DEBUG
 DATABASE = CFG.connectionString
@@ -26,15 +29,17 @@ CFG["emissionNFT"] = "0549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab919
 CFG["stakeTokenID"] =  "1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee"
 CFG["stakedTokenID"] = "d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413"
 
-nergsPerErg        = 1000000000
-headers            = {'Content-Type': 'application/json'}
+nergsPerErg = 10**9
+headers = {'Content-Type': 'application/json'}
 
+week = 1000*60*60*24*7
 duration_ms = {
     'month': 365*24*60*60*1000/12,
-    'week': 7*24*60*60*1000,
+    'week': week,
     'day': 24*60*60*1000,
     'minute': 60*1000
 }
+#endregion INIT
 
 #region LOGGING
 import logging
@@ -45,13 +50,36 @@ import inspect
 myself = lambda: inspect.stack()[1][3]
 #endregion LOGGING
 
-week = 1000*60*60*24*7
-
+#region CLASSES
 class UnstakeRequest(BaseModel):
     stakeBox: str
     amount: float
     utxos: List[str]
     txFormat: TXFormat
+
+class AddressList(BaseModel):
+    addresses: List[str]
+
+class APIKeyRequest(BaseModel):
+    apiKey: str
+    numBoxes: int = 25
+
+class StakeRequest(BaseModel):
+    wallet: str
+    amount: float
+    utxos: List[str]
+    txFormat: TXFormat
+
+class BootstrapRequest(BaseModel):
+    stakeStateNFT: str
+    stakePoolNFT: str
+    emissionNFT: str
+    stakeTokenID: str
+    stakedTokenID: str
+    stakeAmount: int
+    emissionAmount: int
+    cycleDuration_ms: int
+#endregion CLASSES
 
 @r.post("/unstake/", name="staking:unstake")
 async def unstake(req: UnstakeRequest):
@@ -207,35 +235,45 @@ async def unstake(req: UnstakeRequest):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during unstaking')
 
-
-
 @r.get("/snapshot/", name="staking:snapshot")
-def snapshot():
+def snapshot(
+    request: Request,
+    current_user=Depends(get_current_active_superuser)
+):
     try:
         offset = 0
         limit = 100
         done = False
-        addresses = {}
+
+        # Faster API Calls
+        engine = AsyncSnapshotEngine()
+
         while not done:
-            checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
+            checkBoxes = getTokenBoxes(
+                tokenId=CFG.stakeTokenID, offset=offset, limit=limit)
             for box in checkBoxes:
-                if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                    keyHolder = getNFTBox(box["additionalRegisters"]["R5"]["renderedValue"])
-                    if keyHolder is None:
-                        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake key box')
-                    if keyHolder["address"] not in addresses.keys():
-                        addresses[keyHolder["address"]] = 0
-                    addresses[keyHolder["address"]] += (box["assets"][1]["amount"]/10**2)
-            if len(checkBoxes)<limit:
-                done=True
+                if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
+                    tokenId = box["additionalRegisters"]["R5"]["renderedValue"]
+                    amount = int(box["assets"][1]["amount"]) / 10**2
+                    engine.add_job(tokenId, amount)
+            
+            engine.compute()
+            if len(checkBoxes) < limit:
+                done = True
             offset += limit
-        
-        return {
-            'stakers': addresses
-        }
+
+        data = engine.get()
+        if data != None:
+            return {
+                'stakers': data
+            }
+        else:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake key box')
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during snapshot')
+
 
 def validPenalty(startTime: int):
     currentTime = int(time()*1000)
@@ -243,10 +281,6 @@ def validPenalty(startTime: int):
     weeksStaked = int(timeStaked/week)
     return 0 if (weeksStaked > 8) else 5  if (weeksStaked > 6) else 12.5 if (weeksStaked > 4) else 20 if (weeksStaked > 2) else 25
             
-
-class AddressList(BaseModel):
-    addresses: List[str]
-
 @r.post("/staked/", name="staking:staked")
 async def staked(req: AddressList):
     try:
@@ -254,9 +288,12 @@ async def staked(req: AddressList):
         for address in req.addresses:
             res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
             if res.ok:
-                for token in res.json()["tokens"]:
-                    if "Stake Key" in token["name"]:
-                        stakeKeys[token["tokenId"]] = address
+                if 'tokens' in res.json():
+                    for token in res.json()["tokens"]:
+                        if 'name' in token and 'tokenId' in token:
+                            if token["name"] is not None:
+                                if "Stake Key" in token["name"]:
+                                    stakeKeys[token["tokenId"]] = address
             else:
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failure to fetch balance for {address}')
         
@@ -365,12 +402,12 @@ def compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox, emissionR4):
 
     return request
 
-class APIKeyRequest(BaseModel):
-    apiKey: str
-    numBoxes: int = 25
-
 @r.post("/compound/", name="staking:compound")
-async def compound(req: APIKeyRequest):
+async def compound(
+    req: APIKeyRequest,
+    request: Request,
+    # current_user=Depends(get_current_active_superuser)
+):
     try:
         emissionBox = getNFTBox(CFG.emissionNFT)
         emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
@@ -434,9 +471,12 @@ async def compound(req: APIKeyRequest):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during compounding')
 
-
 @r.post("/emit/", name="staking:emit")
-async def emit(req: APIKeyRequest):
+async def emit(
+    req: APIKeyRequest,
+    request: Request,
+    # current_user=Depends(get_current_active_superuser)
+):
     try:
         stakeStateBox = getNFTBox(CFG.stakeStateNFT)
         stakePoolBox = getNFTBox(CFG.stakePoolNFT)
@@ -542,9 +582,7 @@ async def emit(req: APIKeyRequest):
             }
 
         logging.info(request)
-
         res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)  
-
         logging.info(res.content) 
 
         return {
@@ -554,17 +592,10 @@ async def emit(req: APIKeyRequest):
             'dustPreviousEmission': dust,
             'emissionTx': res.json()
         }
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during emission')
-
-
-
-class StakeRequest(BaseModel):
-    wallet: str
-    amount: float
-    utxos: List[str]
-    txFormat: TXFormat
 
 @r.post("/stake/", name="staking:stake")
 async def stake(req: StakeRequest):
@@ -684,19 +715,6 @@ async def stake(req: StakeRequest):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during staking')
-
-    
-
-
-class BootstrapRequest(BaseModel):
-    stakeStateNFT: str
-    stakePoolNFT: str
-    emissionNFT: str
-    stakeTokenID: str
-    stakedTokenID: str
-    stakeAmount: int
-    emissionAmount: int
-    cycleDuration_ms: int
 
 # bootstrap staking setup
 @r.post("/bootstrap/", name="staking:bootstrap")

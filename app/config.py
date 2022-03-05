@@ -58,6 +58,7 @@ Config = {
     'buyerNode'         : 'http://ergonode2:9052',
     'buyerNode'         : 'http://ergonode2:9053',
     'ergoPlatform'      : 'https://api-testnet.ergoplatform.com/api/v1',
+    'vestmentWalletAddress': '9gibNzudNny7MtB725qGM3Pqftho1SMpQJ2GYLYRDDAftMaC285',
     'ergoWatch'         : 'https://ergo.watch/api/sigmausd/state',
     'coinGecko'         : 'https://api.coingecko.com/api/v3',
     'oraclePool'        : 'https://erg-oracle-ergusd.spirepools.com/frontendData',
@@ -74,6 +75,8 @@ Config = {
     'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
     'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
     'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
+    'validateMe'        : os.getenv('VALIDATE_ME'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
     'minTx'             : 100000, # smallest required for tx
     'txFee'             : 1000000, # min required
     'nanoergsInErg'     : 1000000000, # 1e9
@@ -102,6 +105,7 @@ Config = {
     'node'              : os.getenv('ERGONODE_HOST'),
     'explorer'          : 'http://52.12.102.149:9090/api/v1',
     'ergoPlatform'      : 'http://52.12.102.149:9090/api/v1',
+    'vestmentWalletAddress': '9gibNzudNny7MtB725qGM3Pqftho1SMpQJ2GYLYRDDAftMaC285',
     'assembler'         : 'http://172.31.8.85:8080', # patch for alpha
     'ergopadNode'       : 'http://ergonode:9053',
     'buyerNode'         : 'http://ergonode2:9053',
@@ -119,6 +123,8 @@ Config = {
     'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
     'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
     'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
+    'validateMe'        : os.getenv('VALIDATE_ME'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
     'minTx'             : 10000000, # required
     'txFee'             : 1000000, # tips welcome
     'nanoergsInErg'     : 1000000000, # 1e9
