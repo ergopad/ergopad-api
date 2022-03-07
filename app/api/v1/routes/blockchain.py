@@ -2,6 +2,7 @@ from enum import Enum
 import requests, json
 from wallet import Wallet
 
+from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, status
 from time import time
@@ -58,6 +59,8 @@ Complete
 
 #region INIT
 DEBUG = CFG.debug
+DATABASE = CFG.connectionString
+EXPLORER = CFG.csExplorer
 
 try:
     headers            = {'Content-Type': 'application/json'}
@@ -160,7 +163,7 @@ def getTransactionInfo(transactionId):
         logging.error(f'ERR:{myself()}: invalid box request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid token request')
 
-# special request for CMC
+# request by CMC
 @r.get("/emissionAmount/{tokenId}", name="blockchain:emissionAmount")
 def getEmmissionAmount(tokenId):
     try:
@@ -168,9 +171,87 @@ def getEmmissionAmount(tokenId):
         decimals = tkn.json()['decimals']
         emissionAmount = tkn.json()['emissionAmount'] / 10**decimals
         return emissionAmount
+        
     except Exception as e:
-        logging.error(f'ERR:{myself()}: invalid token request ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid token request')
+        logging.error(f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid getEmmissionAmount request')
+
+# request by CMC/coingecko (3/7/2022)
+@r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
+def ergopadInCirculation():
+    try:
+        con = create_engine(EXPLORER)
+        supply = totalSupply('d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413')
+
+        # find vested
+        sqlVested = f"""
+			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "vested"
+            from node_outputs o
+                left join node_inputs i on o.box_id = i.box_id
+                	and i.main_chain = true
+                join node_assets a on a.box_id = o.box_id
+				join tokens t on t.token_id = a.token_id
+            where o.main_chain = true
+                and i.box_id is null -- output with no input == unspent
+                and o.address = 'Y2JDKcXN5zrz3NxpJqhGcJzgPRqQcmMhLqsX3TkkqMxQKK86Sh3hAZUuUweRZ97SLuCYLiB2duoEpYY2Zim3j5aJrDQcsvwyLG2ixLLzgMaWfBhTqxSbv1VgQQkVMKrA4Cx6AiyWJdeXSJA6UMmkGcxNCANbCw7dmrDS6KbnraTAJh6Qj6s9r56pWMeTXKWFxDQSnmB4oZ1o1y6eqyPgamRsoNuEjFBJtkTWKqYoF8FsvquvbzssZMpF6FhA1fkiH3n8oKpxARWRLjx2QwsL6W5hyydZ8VFK3SqYswFvRnCme5Ywi4GvhHeeukW4w1mhVx6sbAaJihWLHvsybRXLWToUXcqXfqYAGyVRJzD1rCeNa8kUb7KHRbzgynHCZR68Khi3G7urSunB9RPTp1EduL264YV5pmRLtoNnH9mf2hAkkmqwydi9LoULxrwsRvp'
+                and coalesce(o.value, 0) > 0
+        """
+        res = con.execute(sqlVested).fetchone()
+        vested = res['vested']
+
+        # find vested
+        sqlStaked = f"""
+			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "staked"
+            from node_outputs o
+                left join node_inputs i on o.box_id = i.box_id
+                	and i.main_chain = true
+                join node_assets a on a.box_id = o.box_id
+				join tokens t on t.token_id = a.token_id
+            where o.main_chain = true
+                and i.box_id is null -- output with no input == unspent
+                and o.address = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
+                and coalesce(o.value, 0) > 0
+        """
+        res = con.execute(sqlStaked).fetchone()
+        staked = res['staked']
+
+        reserved = 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
+        ergopadInCirculation = supply - staked - vested - reserved
+
+        return ergopadInCirculation
+        
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid ergopadInCirculation request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid ergopadInCirculation request')
+
+# request by CMC/coingecko (3/7/2022)
+@r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
+def totalSupply(tokenId):
+    try:
+        # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)
+        # ergopad: d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413
+        con = create_engine(EXPLORER)
+        sqlTotalSupply = f"""
+            select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "totalSupply"
+            from node_outputs o
+                left join node_inputs i on o.box_id = i.box_id
+                	and i.main_chain = true
+                join node_assets a on a.box_id = o.box_id
+				join tokens t on t.token_id = a.token_id
+                -- join node_transactions tx on tx.id = o.tx_id                    
+            where o.main_chain = true
+                and i.box_id is null -- output with no input == unspent
+                and a.token_id = '{tokenId}'
+                and coalesce(a.value, 0) > 0
+        """
+        res = con.execute(sqlTotalSupply).fetchone()
+        totalSupply = res['totalSupply']
+
+        return totalSupply
+        
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid totalSupply request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid totalSupply request')
 
 # assember follow info
 @r.get("/followInfo/{followId}", name="blockchain:followInfo")
