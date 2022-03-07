@@ -183,7 +183,41 @@ def ergopadInCirculation():
         con = create_engine(EXPLORER)
         supply = totalSupply('d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413')
 
-        # find vested
+        # don't currently use this, but may be useful to have
+        burned = 400*(10**6) - supply
+
+        # stake pool
+        sqlPooled = f"""
+			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "stakePool"
+            from node_outputs o
+                left join node_inputs i on o.box_id = i.box_id
+                	and i.main_chain = true
+                join node_assets a on a.box_id = o.box_id
+				join tokens t on t.token_id = a.token_id
+            where o.main_chain = true
+                and i.box_id is null -- output with no input == unspent
+                and o.address = '9hXmgvzndtakdSAgJ92fQ8ZjuKirWAw8tyDuyJrXP6sKHVpCz8XbMANK3BVJ1k3WD6ovQKTCasjKL5WMncRB6V9HvmMnJ2WbxYYjtLFS9sifDNXJWugrNEgoVK887bR5oaLZA95yGkMeXVfanxpNDZYaXH9KpHCpC5ohDtaW1PF17b27559toGVCeCUNti7LXyXV8fWS1mVRuz2PhLq5mB7hg2bqn7CZtVM8ntbUJpjkHUc9cP1R8Gvbo1GqcNWgM7gZkr2Dp514BrFz1cXMkv7TYEqH3cdxX9c82hH6fdaf3n6avdtZ5bgqerUZVDDW6ZsqxrqTyTMQUUirRAi3odmMGmuMqDJbU3Z1VnCF9NBow7jrKUDSgckDZakFZNChsr5Kq1kQyNitYJUh9fra1jLHCQ9yekz3te9E'
+                and coalesce(o.value, 0) > 0
+        """
+        res = con.execute(sqlPooled).fetchone()
+        stakePool = res['stakePool']
+
+        # emission box
+        sqlEmitted = f"""
+			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "emitted"
+            from node_outputs o
+                left join node_inputs i on o.box_id = i.box_id
+                	and i.main_chain = true
+                join node_assets a on a.box_id = o.box_id
+				join tokens t on t.token_id = a.token_id
+            where o.main_chain = true
+                and i.box_id is null -- output with no input == unspent
+                and o.address = 'xhRNa2Wo7xXeoEKbLcsW4gV1ggBwrCeXVkkjwMwYk4CVjHo95CLDHmomXirb8SVVtovXNPuqcs6hNMXdPPtT6nigbAqei9djAnpDKsAvhk5M4wwiKPf8d5sZFCMMGtthBzUruKumUW8WTLXtPupD5jBPELekR6yY4zHV4y21xtn7jjeqcb9M39RLRuFWFq2fGWbu5PQhFhUPCB5cbxBKWWxtNv8BQTeYj8bLw5vAH1WmRJ7Ln7SfD9RVePyvKdWGSkTFfVtg8dWuVzEjiXhUHVoeDcdPhGftMxWVPRZKRuMEmYbeaxLyccujuSZPPWSbnA2Uz6EketQgHxfnYhcLNnwNPaMETLKtvwZygfk1PuU9LZPbxNXNFgHuujfXGfQbgNwgd1hcC8utB6uZZRbxXAHmgMaWuoeSsni99idRHQFHTkmTKXx4TAx1kGKft1BjV6vcz1jGBJQyFBbQCTYBNcm9Yq2NbXmk5Vr7gHYbKbig7eMRT4oYxZdb9rwupphRGK4b2tYis9dXMT8m5EfFzxvAY9Thjbg8tZtWX7F5eaNzMKmZACZZqW3U7qS6aF8Jgiu2gdK12QKKBTdBfxaC6hBVtsxtQXYYjKzCmq1JuGP1brycwCfUmTUFkrfNDWBnrrmF2vrzZqL6WtUaSHzXzC4P4h346xnSvrtTTx7JGbrRCxhsaqTgxeCBMXgKgPGud2kNvgyKbjKnPvfhSCYnwhSdZYj8R1rr4TH5XjB3Wv8Z4jQjCkhAFGWJqVASZ3QXrFGFJzQrGLL1XX6cZsAP8cRHxqa7tJfKJzwcub7RjELPa2nnhhz5zj5F9MU1stJY4SBiX3oZJ6HdP9kNFGMR86Q6Z5qyfSRjwDNjVyvkKNoJ6Yk9nm367gznSVWkS9SG3kCUonbLgRt1Moq7o9CN5KrnyRgLrEAQU83SGY7Bc6FcLCZqQn8VqxP4e8R3vhf24nrzXVopydiYai'
+                and coalesce(o.value, 0) > 0
+        """
+        res = con.execute(sqlEmitted).fetchone()
+        emitted = res['sqlEmitted']
+
         sqlVested = f"""
 			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "vested"
             from node_outputs o
@@ -216,7 +250,7 @@ def ergopadInCirculation():
         staked = res['staked']
 
         reserved = 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
-        ergopadInCirculation = supply - staked - vested - reserved
+        ergopadInCirculation = supply - stakePool - vested - reserved - emitted + staked 
 
         return ergopadInCirculation
         
