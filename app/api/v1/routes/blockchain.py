@@ -216,7 +216,7 @@ def ergopadInCirculation():
                 and coalesce(o.value, 0) > 0
         """
         res = con.execute(sqlEmitted).fetchone()
-        emitted = res['sqlEmitted']
+        emitted = res['emitted']
 
         sqlVested = f"""
 			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "vested"
