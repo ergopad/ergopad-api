@@ -457,7 +457,7 @@ async def compound(
                     stakeBoxes = []
                     stakeBoxesOutput = []
                     totalReward = 0
-                    await async.sleep(10)
+                    await asyncio.sleep(10)
                     emissionBox = getNFTBox(CFG.emissionNFT)
                     emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
             offset += limit

@@ -36,7 +36,7 @@ headers = {'Content-Type': 'application/json'}
 
 #region CLASSES
 class Email(BaseModel):
-    to: str = 'leif@ergopad.io'
+    to: str
     # sender: str
     subject: Optional[str] = 'ErgoPad'
     body: Optional[str] = ''
