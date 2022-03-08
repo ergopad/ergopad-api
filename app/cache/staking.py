@@ -42,7 +42,7 @@ addresses[keyHolder["address"]] += (box["assets"][1]["amount"]/10**2)
 
 
 class AsyncSnapshotEngine:
-    THREAD_COUNT = 16
+    THREAD_COUNT = 4
 
     def __init__(self):
         self.output = SyncMap()
