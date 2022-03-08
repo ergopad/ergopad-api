@@ -1,4 +1,6 @@
 import requests
+import asyncio
+
 from starlette.responses import JSONResponse
 from wallet import Wallet
 from config import Config, Network # api specific config
@@ -455,7 +457,7 @@ async def compound(
                     stakeBoxes = []
                     stakeBoxesOutput = []
                     totalReward = 0
-                    sleep(10)
+                    await async.sleep(10)
                     emissionBox = getNFTBox(CFG.emissionNFT)
                     emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
             offset += limit

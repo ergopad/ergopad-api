@@ -250,7 +250,7 @@ def ergopadInCirculation():
         staked = res['staked']
 
         reserved = 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
-        ergopadInCirculation = supply - stakePool - vested - reserved - emitted + staked 
+        ergopadInCirculation = supply - stakePool - vested - reserved - emitted
 
         return ergopadInCirculation
         
