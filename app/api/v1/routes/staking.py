@@ -461,12 +461,13 @@ async def compound(
             offset += limit
             checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
 
-        if len(stakeBoxes) > 0:
+        if len(stakeBoxes) > 0: 
             request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)
             res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)    
             return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': res.json()}
         else:
             return {'remainingBoxes': emissionR4[2]-len(stakeBoxes)} 
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during compounding')
