@@ -285,13 +285,26 @@ def validPenalty(startTime: int):
             
 @r.post("/staked/", name="staking:staked")
 async def staked(req: AddressList):
+    CACHE_TTL = 600 # 10 mins
     try:
         stakeKeys = {}
         for address in req.addresses:
-            res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
-            if res.ok:
-                if 'tokens' in res.json():
-                    for token in res.json()["tokens"]:
+            # cache balance confirmed
+            ok = False
+            data = None
+            cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
+            if cached:
+                ok = True
+                data = cached
+            else:
+                res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                ok = res.ok
+                if ok:
+                    data = res.json()
+                    cache.set(f"get_staking_staked_addresses_{address}_balance_confirmed", data, CACHE_TTL)
+            if ok:
+                if 'tokens' in data:
+                    for token in data["tokens"]:
                         if 'name' in token and 'tokenId' in token:
                             if token["name"] is not None:
                                 if "Stake Key" in token["name"]:
@@ -305,7 +318,14 @@ async def staked(req: AddressList):
         totalStaked = 0
         stakePerAddress = {}
         while not done:
-            checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
+            # getTokenBoxes from cache
+            checkBoxes = []
+            cached = cache.get(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}_{offset}_{limit}")
+            if cached:
+                checkBoxes = cached
+            else:
+                checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
+                cache.set(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}_{offset}_{limit}", checkBoxes, CACHE_TTL)
             for box in checkBoxes:
                 if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
                     if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
@@ -457,7 +477,7 @@ async def compound(
                     stakeBoxes = []
                     stakeBoxesOutput = []
                     totalReward = 0
-                    await async.sleep(10)
+                    await asyncio.sleep(10)
                     emissionBox = getNFTBox(CFG.emissionNFT)
                     emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
             offset += limit
