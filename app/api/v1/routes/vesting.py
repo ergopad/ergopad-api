@@ -16,6 +16,7 @@ from ergo.util import encodeLong, encodeString
 import uuid
 from hashlib import blake2b
 from api.v1.routes.blockchain import getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta
+from ergo.appkit import ErgoAppKit
 
 vesting_router = r = APIRouter()
 
@@ -570,3 +571,17 @@ def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to find tokens for exchange')
 
     return ergopadTokenBoxes
+
+@r.get('/testNFTLockedVesting/', name='vesting:testNFTLockedVesting')
+async def testNFTLockedVesting():
+    appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
+    with open(f'contracts/NFTLockedVesting.es') as f:
+        unformattedScript = f.read()
+        script = unformattedScript.format(**{})
+    contract = appKit.compileErgoScript(script)
+    address = str(appKit.tree2Address(contract.getErgoTree()))
+
+    
+    return {
+        'address': address
+    }
