@@ -1,7 +1,8 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv("../../.env")
+load_dotenv(".env")
+load_dotenv(os.getenv("ENV_FILE"))
 
 from app.config import Config, Network
 from app.ergo.appkit import ErgoAppKit, ErgoValueT
@@ -14,7 +15,7 @@ class TestNFTLockedVesting:
 
     appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
 
-    with open(f'../contracts/NFTLockedVesting.es') as f:
+    with open(f'app/contracts/NFTLockedVesting.es') as f:
         unformattedScript = f.read()
         script = unformattedScript.format(**{})
     contract = appKit.compileErgoScript(script)
