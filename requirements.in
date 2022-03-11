@@ -25,3 +25,4 @@ ecdsa
 pyblake2
 base58
 jpype1
+python-dotenv
