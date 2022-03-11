@@ -1,4 +1,4 @@
-from app.config import Config, Network
+from config import Config, Network
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -6,8 +6,13 @@ from jpype import JImplements, JOverride
 from enum import Enum
 from typing import Dict, List, TypeVar
 
-jpype.addClassPath('D:/ergo/ergopad-api/app/jars/*')
-jpype.startJVM(None, convertStrings=True)
+try:
+    jpype.addClassPath('../jars/*')
+    jpype.addClassPath('./jars/*')
+    jpype.startJVM(None, convertStrings=True)
+except OSError:
+    print("JVM already running")
+
 
 from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
 from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoToken, ErgoValue, InputBox, NetworkType, OutBox, PreHeader, SignedTransaction, UnsignedTransaction
