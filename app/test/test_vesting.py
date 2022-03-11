@@ -84,3 +84,35 @@ class TestNFTLockedVesting:
             signed = False
     
         assert signed
+
+    def test_final_redeem(self):
+        userInputBox = self.appKit.buildInputBox(int(2e6), 
+            {
+                self.vestingKey: 1
+            }, 
+            registers=None, contract=self.appKit.dummyContract())
+
+        #Set the preheader to 2.5 days after vesting start, so 2*redeem amount should be free to claim
+        preHeader = self.appKit.preHeader(timestamp=int(1648771200000+self.duration*366))
+
+        newUserBox = self.appKit.buildOutBox(int(1e6), {
+            self.vestingKey: 1,
+            self.vestedTokenId: int(999999)
+            }, registers=None, contract=self.appKit.dummyContract())
+
+        unsignedTx = self.appKit.buildUnsignedTransaction(
+            inputs = [self.vestingInputBox, userInputBox],
+            outputs = [newUserBox],
+            fee = int(1e6),
+            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            preHeader = preHeader
+        )
+        signed = False
+        try:
+            signedTx = self.appKit.signTransaction(unsignedTx)
+            signed = True
+        except Exception as e:
+            print(f"Error: {e}")
+            signed = False
+    
+        assert signed
