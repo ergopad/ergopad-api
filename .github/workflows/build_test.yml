@@ -1,0 +1,28 @@
+name: Build & Test
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - dev
+      - main
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Install Dependencies
+        working-directory: .
+        run: pip3 install -r requirements.in
+
+      - name: Run Unit Tests
+        working-directory: app
+        run: python3 -m pytest
