@@ -15,7 +15,7 @@ except OSError:
 
 
 from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoToken, ErgoValue, InputBox, NetworkType, OutBox, PreHeader, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoToken, ErgoValue, InputBox, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
 from org.ergoplatform.restapi.client import ApiClient
 from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, ErgoTreeContract
