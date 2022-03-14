@@ -15,7 +15,7 @@ except OSError:
 
 
 from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoToken, ErgoValue, InputBox, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoToken, ErgoType, ErgoValue, InputBox, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
 from org.ergoplatform.restapi.client import ApiClient
 from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, ErgoTreeContract
@@ -95,6 +95,12 @@ class ErgoAppKit:
             return res
         if t == ErgoValueT.ByteArrayFromHex:
             return ErgoValue.of(bytes.fromhex(value))
+        if t == ErgoValueT.LongArray:
+            collVal = []
+            for l in value:
+                collVal.append(JLong(l))
+            res = ErgoValue.of(collVal,ErgoType.longType())
+            return res
 
     def dummyContract(self):
         return ErgoTreeContract(Address.create("4MQyML64GnzMxZgm").getErgoAddress().script(),self._networkType)
