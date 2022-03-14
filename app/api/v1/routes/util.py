@@ -1,17 +1,15 @@
-import requests, json, os
+import requests
 import ssl
-import pandas as pd
 
 from starlette.responses import JSONResponse
-from sqlalchemy import create_engine
-from fastapi import APIRouter, Request, Depends, Response, encoders, status
-from fastapi.encoders import jsonable_encoder
+from fastapi import APIRouter, Request, Depends, status
 from typing import Optional
 from pydantic import BaseModel
-from time import time
 from smtplib import SMTP
 from config import Config, Network # api specific config
 from core.auth import get_current_active_superuser
+
+from cache.cache import cache
 
 CFG = Config[Network]
 
@@ -70,7 +68,6 @@ myself = lambda: inspect.stack()[1][3]
 
 @r.post("/email")
 async def email(email: Email, request: Request):
-    
     # validate referer
     logging.debug(request.headers)
     validEmailApply = CFG.validEmailApply
@@ -177,3 +174,10 @@ def sendPayment(
         logging.error(f'ERR:{myself()}: unable to send payment ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send payment')
 
+# Utilities
+class InvalidateCacheRequest(BaseModel):
+    key: str
+
+@r.post("/forceInvalidateCache", name="cache:invalidate")
+def forceInvalidateCache(req: InvalidateCacheRequest, current_user=Depends(get_current_active_superuser)):
+    return {'status': 'success', 'detail': cache.invalidate(req.key) }
