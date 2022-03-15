@@ -103,8 +103,7 @@ async def unstake(req: UnstakeRequest):
             userBox = getNFTBox(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
             timeStaked = currentTime - stakeTime
             weeksStaked = int(timeStaked/week)
-            penalty = int(0 if (weeksStaked > 8) else amountToUnstake*5/100  if (weeksStaked > 6) else amountToUnstake*125/1000 if (weeksStaked > 4) else amountToUnstake*20/100 if (weeksStaked > 2) else amountToUnstake*25/100)
-            logging.info(penalty)
+            penalty = int(0 if (weeksStaked >= 8) else amountToUnstake*5/100  if (weeksStaked >= 6) else amountToUnstake*125/1000 if (weeksStaked >= 4) else amountToUnstake*20/100 if (weeksStaked >= 2) else amountToUnstake*25/100)
             partial = amountToUnstake < stakeBox["assets"][1]["amount"]
             stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
             if stakeStateR4[1] != stakeBoxR4[0]:
@@ -281,7 +280,7 @@ def validPenalty(startTime: int):
     currentTime = int(time()*1000)
     timeStaked = currentTime - startTime
     weeksStaked = int(timeStaked/week)
-    return 0 if (weeksStaked > 8) else 5  if (weeksStaked > 6) else 12.5 if (weeksStaked > 4) else 20 if (weeksStaked > 2) else 25
+    return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
 @r.post("/staked/", name="staking:staked")
 async def staked(req: AddressList):
