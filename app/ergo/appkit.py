@@ -1,3 +1,4 @@
+import typing
 from config import Config, Network
 import jpype
 import jpype.imports
@@ -15,11 +16,12 @@ except OSError:
 
 
 from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoToken, ErgoType, ErgoValue, InputBox, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
 from org.ergoplatform.restapi.client import ApiClient
 from org.ergoplatform.explorer.client import ExplorerApiClient
 from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, ErgoTreeContract
 from special.collection import Coll
+from sigmastate.Values import ErgoTree
 from scala import Byte as SByte, Long as SLong
 import java
 from java.math import BigInteger
@@ -56,9 +58,8 @@ class ErgoAppKit:
             self._explorer = None
         self._addrEnc = ErgoAddressEncoder(self._networkType.networkPrefix)
 
-    def compileErgoScript(self, ergoScript: str):
-        ctx = self.getBlockChainContext()
-        return ctx.compileContract(ConstantsBuilder.create().build(),ergoScript)
+    def compileErgoScript(self, ergoScript: str, constants: dict[str,typing.Any] = {}) -> ErgoTree:
+        return JavaHelpers.compile(constants,ergoScript,self._networkType.networkPrefix)
 
     def getBlockChainContext(self) -> BlockchainContext:
         return BlockchainContextBuilderImpl(self._client, self._explorer, self._networkType).build()
@@ -85,6 +86,12 @@ class ErgoAppKit:
             tb = tb.registers(registers)
 
         return tb.build()
+    
+    def mintToken(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, contract: ErgoContract) -> OutBox:
+        ctx = self.getBlockChainContext()
+        tb = ctx.newTxBuilder()
+        
+        return tb.outBoxBuilder().contract(contract).value(value).mintToken(ErgoToken(tokenId,mintAmount),tokenName,tokenDesc,mintAmount).build()
 
     def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract) -> InputBox:
         return self.buildOutBox(value, tokens, registers, contract).convertToInputWith("ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d", 0)
@@ -101,9 +108,15 @@ class ErgoAppKit:
                 collVal.append(JLong(l))
             res = ErgoValue.of(collVal,ErgoType.longType())
             return res
+        if t == ErgoValueT.ByteArray:
+            res = ErgoValue.of(value)
+            return res
 
-    def dummyContract(self):
+    def dummyContract(self) -> ErgoContract:
         return ErgoTreeContract(Address.create("4MQyML64GnzMxZgm").getErgoAddress().script(),self._networkType)
+
+    def contractFromTree(self,tree: ErgoTree) -> ErgoContract:
+        return ErgoTreeContract(tree,self._networkType)
 
     def preHeader(self, timestamp: int = None) -> PreHeader:
         ctx = self.getBlockChainContext()
@@ -126,5 +139,7 @@ class ErgoAppKit:
         ctx = self.getBlockChainContext()
         prover = ctx.newProverBuilder().build()
         return prover.sign(unsignedTx)
+
+    
 
 
