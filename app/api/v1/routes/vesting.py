@@ -1,5 +1,4 @@
 import requests, json, os
-import math
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse 
 from wallet import Wallet, NetworkEnvironment # ergopad.io library
@@ -11,12 +10,9 @@ from time import sleep, time
 from datetime import date, datetime, timezone
 from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
-from ergo.updateAllowance import handleAllowance
 from ergo.util import encodeLong, encodeString
 import uuid
-from hashlib import blake2b
 from api.v1.routes.blockchain import getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta
-from ergo.appkit import ErgoAppKit, ErgoValueT
 
 vesting_router = r = APIRouter()
 
@@ -164,13 +160,11 @@ async def vestToken(vestment: Vestment):
 
         # missing legit response from whitelist
         if res == None or len(res) == 0:
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return {'status': 'error', 'message': f'presale info not found.'}
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'presale info not found.')
 
         # allowance is fully spent
         if res['spent_sigusd'] >= res['allowance_sigusd']:
-            response.status_code = status.HTTP_400_BAD_REQUEST
-            return {'status': 'error', 'message': f'purchase limit reached.'}
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'purchase limit reached.')
 
     # handle token params
     currencyDecimals = None

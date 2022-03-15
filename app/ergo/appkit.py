@@ -1,4 +1,4 @@
-from app.config import Config, Network
+from config import Config, Network
 import jpype
 import jpype.imports
 from jpype.types import *
@@ -115,5 +115,3 @@ class ErgoAppKit:
         ctx = self.getBlockChainContext()
         prover = ctx.newProverBuilder().build()
         return prover.sign(unsignedTx)
-
-
