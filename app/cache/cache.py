@@ -20,6 +20,9 @@ class RedisCache:
         value = json.dumps(value)
         self.client.setex(key, timeout, value)
 
+    def invalidate(self, key):
+        return self.client.delete(key)
+
 
 cache = RedisCache()
 # cached = cache.get(key)
