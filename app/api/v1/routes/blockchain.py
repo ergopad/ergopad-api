@@ -397,7 +397,9 @@ def getNFTBox(tokenId: str, allowCached=False):
         return None
 
 # GET unspent boxes by token id direct from explorer db
-def getUnspentStakeKeyTokenBoxes():
+def getUnspentStakeBoxes():
+    STAKE_ADDRESS = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
+    STAKE_KEY_ID = '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee'
     try:
         con = create_engine(EXPLORER)
         sql = f"""
@@ -432,8 +434,9 @@ def getUnspentStakeKeyTokenBoxes():
                         and a.header_id = o.header_id
                     where
                         o.main_chain = true
+                        and o.address = '{STAKE_ADDRESS}' -- all stake boxes are for this address
                         and i.box_id is null -- output with no input = unspent
-                        and a.token_id = '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee' -- stake key token id
+                        and a.token_id = '{STAKE_KEY_ID}' -- stake key token id
                         and coalesce(a.value, 0) > 0
                 );
         """

@@ -12,7 +12,7 @@ from datetime import datetime
 from base64 import b64encode
 from ergo.util import encodeLongArray, encodeString, hexstringToB64
 from hashlib import blake2b
-from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeKeyTokenBoxes
+from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
 from hashlib import blake2b
 from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
@@ -246,7 +246,7 @@ def snapshot(
         # Faster API Calls
         engine = AsyncSnapshotEngine()
 
-        checkBoxes = getUnspentStakeKeyTokenBoxes()
+        checkBoxes = getUnspentStakeBoxes()
         for box in checkBoxes:
             if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
                 tokenId = box["additionalRegisters"]["R5"]["renderedValue"]
@@ -313,7 +313,7 @@ async def staked(req: AddressList):
         if cached:
             checkBoxes = cached
         else:
-            checkBoxes = getUnspentStakeKeyTokenBoxes()
+            checkBoxes = getUnspentStakeBoxes()
             cache.set(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}", checkBoxes, CACHE_TTL)
         for box in checkBoxes:
             if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
@@ -423,8 +423,7 @@ async def compound(
         stakeBoxes = []
         stakeBoxesOutput = []
         totalReward = 0
-
-        checkBoxes = getUnspentStakeKeyTokenBoxes()
+        checkBoxes = getUnspentStakeBoxes()
         for box in checkBoxes:
             if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
                 boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
