@@ -12,7 +12,7 @@ from datetime import datetime
 from base64 import b64encode
 from ergo.util import encodeLongArray, encodeString, hexstringToB64
 from hashlib import blake2b
-from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens
+from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
 from hashlib import blake2b
 from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
@@ -103,8 +103,7 @@ async def unstake(req: UnstakeRequest):
             userBox = getNFTBox(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
             timeStaked = currentTime - stakeTime
             weeksStaked = int(timeStaked/week)
-            penalty = int(0 if (weeksStaked > 8) else amountToUnstake*5/100  if (weeksStaked > 6) else amountToUnstake*125/1000 if (weeksStaked > 4) else amountToUnstake*20/100 if (weeksStaked > 2) else amountToUnstake*25/100)
-            logging.info(penalty)
+            penalty = int(0 if (weeksStaked >= 8) else amountToUnstake*5/100  if (weeksStaked >= 6) else amountToUnstake*125/1000 if (weeksStaked >= 4) else amountToUnstake*20/100 if (weeksStaked >= 2) else amountToUnstake*25/100)
             partial = amountToUnstake < stakeBox["assets"][1]["amount"]
             stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
             if stakeStateR4[1] != stakeBoxR4[0]:
@@ -237,40 +236,33 @@ async def unstake(req: UnstakeRequest):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during unstaking')
 
+
 @r.get("/snapshot/", name="staking:snapshot")
 def snapshot(
     request: Request,
     current_user=Depends(get_current_active_user)
 ):
     try:
-        offset = 0
-        limit = 100
-        done = False
-
         # Faster API Calls
         engine = AsyncSnapshotEngine()
 
-        while not done:
-            checkBoxes = getTokenBoxes(
-                tokenId=CFG.stakeTokenID, offset=offset, limit=limit)
-            for box in checkBoxes:
-                if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
-                    tokenId = box["additionalRegisters"]["R5"]["renderedValue"]
-                    amount = int(box["assets"][1]["amount"]) / 10**2
-                    engine.add_job(tokenId, amount)
-            
-            engine.compute()
-            if len(checkBoxes) < limit:
-                done = True
-            offset += limit
+        checkBoxes = getUnspentStakeBoxes()
+        for box in checkBoxes:
+            if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
+                tokenId = box["additionalRegisters"]["R5"]["renderedValue"]
+                amount = int(box["assets"][1]["amount"]) / 10**2
+                engine.add_job(tokenId, amount)
+
+        engine.compute()
 
         data = engine.get()
         if data != None:
             return {
-                'stakers': data
+                'token_errors': data['errors'],
+                'stakers': data["output"],
             }
         else:
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake key box')
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch snapshot')
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
@@ -281,7 +273,7 @@ def validPenalty(startTime: int):
     currentTime = int(time()*1000)
     timeStaked = currentTime - startTime
     weeksStaked = int(timeStaked/week)
-    return 0 if (weeksStaked > 8) else 5  if (weeksStaked > 6) else 12.5 if (weeksStaked > 4) else 20 if (weeksStaked > 2) else 25
+    return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
 @r.post("/staked/", name="staking:staked")
 async def staked(req: AddressList):
@@ -312,40 +304,34 @@ async def staked(req: AddressList):
             else:
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failure to fetch balance for {address}')
         
-        offset = 0
-        limit = 100
-        done = False
         totalStaked = 0
         stakePerAddress = {}
-        while not done:
-            # getTokenBoxes from cache
-            checkBoxes = []
-            cached = cache.get(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}_{offset}_{limit}")
-            if cached:
-                checkBoxes = cached
-            else:
-                checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
-                cache.set(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}_{offset}_{limit}", checkBoxes, CACHE_TTL)
-            for box in checkBoxes:
-                if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                    if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
-                        if stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]] not in stakePerAddress:
-                            stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
-                        stakeBoxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
-                        cleanedBox = {
-                            'boxId': box["boxId"],
-                            'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
-                            'stakeAmount': box["assets"][1]["amount"]/10**2,
-                            'penaltyPct': validPenalty(stakeBoxR4[1]),
-                            'penaltyEndTime': int(stakeBoxR4[1]+8*week)
-                        }
-                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
-                        totalStaked += box["assets"][1]["amount"]/10**2
-                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
-            if len(checkBoxes)<limit:
-                done=True
-            offset += limit
         
+        # getTokenBoxes from cache
+        checkBoxes = []
+        cached = cache.get(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}")
+        if cached:
+            checkBoxes = cached
+        else:
+            checkBoxes = getUnspentStakeBoxes()
+            cache.set(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}", checkBoxes, CACHE_TTL)
+        for box in checkBoxes:
+            if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
+                if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
+                    if stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]] not in stakePerAddress:
+                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
+                    stakeBoxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
+                    cleanedBox = {
+                        'boxId': box["boxId"],
+                        'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
+                        'stakeAmount': box["assets"][1]["amount"]/10**2,
+                        'penaltyPct': validPenalty(stakeBoxR4[1]),
+                        'penaltyEndTime': int(stakeBoxR4[1]+8*week)
+                    }
+                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
+                    totalStaked += box["assets"][1]["amount"]/10**2
+                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
+
         return {
             'totalStaked': totalStaked,
             'addresses': stakePerAddress
@@ -360,7 +346,6 @@ def stakingStatus():
     cached = cache.get(f"get_api_staking_status")
     if cached:
         return cached
-
 
     stakeStateBox = getNFTBox(CFG.stakeStateNFT)
     stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
@@ -437,51 +422,45 @@ async def compound(
             return {'remainingStakers': 0}
         stakeBoxes = []
         stakeBoxesOutput = []
-        offset = 0
-        limit = 100
         totalReward = 0
-
-        checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
-        while len(checkBoxes) > 0:
-            for box in checkBoxes:
-                if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                    boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
-                    if boxR4[0] == emissionR4[1]:
-                        stakeBoxes.append(box["boxId"])
-                        stakeReward = int(box["assets"][1]["amount"] * emissionR4[3] / emissionR4[0])
-                        totalReward += stakeReward
-                        stakeBoxesOutput.append({
-                            'value': box["value"],
-                            'address': box["address"],
-                            'assets': [
-                                {                                                                   
-                                    'tokenId': CFG.stakeTokenID,
-                                    'amount': 1
-                                },
-                                {
-                                    'tokenId': CFG.stakedTokenID,
-                                    'amount': box["assets"][1]["amount"] + stakeReward
-                                }
-                            ],
-                            'registers': {
-                                'R4': encodeLongArray([
-                                    boxR4[0]+1,
-                                    boxR4[1]
-                                ]),
-                                'R5': box["additionalRegisters"]["R5"]["serializedValue"]
+        checkBoxes = getUnspentStakeBoxes()
+        for box in checkBoxes:
+            if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
+                boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
+                if boxR4[0] == emissionR4[1]:
+                    stakeBoxes.append(box["boxId"])
+                    stakeReward = int(box["assets"][1]["amount"] * emissionR4[3] / emissionR4[0])
+                    totalReward += stakeReward
+                    stakeBoxesOutput.append({
+                        'value': box["value"],
+                        'address': box["address"],
+                        'assets': [
+                            {                                                                   
+                                'tokenId': CFG.stakeTokenID,
+                                'amount': 1
+                            },
+                            {
+                                'tokenId': CFG.stakedTokenID,
+                                'amount': box["assets"][1]["amount"] + stakeReward
                             }
-                        })
-                if len(stakeBoxes)>=req.numBoxes:
-                    request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)
-                    res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)
-                    stakeBoxes = []
-                    stakeBoxesOutput = []
-                    totalReward = 0
-                    await asyncio.sleep(10)
-                    emissionBox = getNFTBox(CFG.emissionNFT)
-                    emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
-            offset += limit
-            checkBoxes = getTokenBoxes(tokenId=CFG.stakeTokenID,offset=offset,limit=limit)
+                        ],
+                        'registers': {
+                            'R4': encodeLongArray([
+                                boxR4[0]+1,
+                                boxR4[1]
+                            ]),
+                            'R5': box["additionalRegisters"]["R5"]["serializedValue"]
+                        }
+                    })
+            if len(stakeBoxes)>=req.numBoxes:
+                request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)
+                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)
+                stakeBoxes = []
+                stakeBoxesOutput = []
+                totalReward = 0
+                await asyncio.sleep(10)
+                emissionBox = getNFTBox(CFG.emissionNFT)
+                emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
 
         if len(stakeBoxes) > 0: 
             request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)

@@ -128,8 +128,8 @@ def parsePool(box) -> AmmPool:
     return None
 
 
-def parseValidPools(boxes) -> list[AmmPool]:
-    pools: list[AmmPool] = []
+def parseValidPools(boxes):
+    pools = []
     for box in boxes:
         pool = parsePool(box)
         if pool:
