@@ -16,15 +16,17 @@ except OSError:
 
 
 from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, BlockchainContext, ConstantsBuilder, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, SignedTransaction, UnsignedTransaction
-from org.ergoplatform.restapi.client import ApiClient
+from org.ergoplatform.appkit import Address, BlockchainContext, BoxOperations, ConstantsBuilder, ErgoClient, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.restapi.client import ApiClient, Asset, ErgoTransactionDataInput, ErgoTransactionOutput, ErgoTransactionUnsignedInput, Registers, TransactionSigningRequest, UnsignedErgoTransaction, WalletApi
 from org.ergoplatform.explorer.client import ExplorerApiClient
-from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, ErgoTreeContract
+from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoNodeFacade, ErgoTreeContract, ExplorerFacade, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
 from special.collection import Coll
 from sigmastate.Values import ErgoTree
 from scala import Byte as SByte, Long as SLong
 import java
+import scala
 from java.math import BigInteger
+from java.lang import NullPointerException
 
 DEBUG = True # CFG.DEBUG
 
@@ -51,8 +53,8 @@ class ErgoAppKit:
         self._nodeUrl = nodeUrl
         self._networkType = ErgoAppKit.NetworkType(networkType)
         self._client = ApiClient(self._nodeUrl, "ApiKeyAuth", CFG.ergopadApiKey)
-        self._explorerUrl = explorerUrl
-        if self._explorerUrl=="":
+        self._explorerUrl = explorerUrl.replace("/api/v1","")
+        if self._explorerUrl!="":
             self._explorer = ExplorerApiClient(self._explorerUrl)
         else:
             self._explorer = None
@@ -61,7 +63,7 @@ class ErgoAppKit:
     def compileErgoScript(self, ergoScript: str, constants: dict[str,typing.Any] = {}) -> ErgoTree:
         return JavaHelpers.compile(constants,ergoScript,self._networkType.networkPrefix)
 
-    def getBlockChainContext(self) -> BlockchainContext:
+    def getBlockChainContext(self) -> BlockchainContextImpl:
         return BlockchainContextBuilderImpl(self._client, self._explorer, self._networkType).build()
 
     def tree2Address(self, ergoTree):
@@ -87,14 +89,32 @@ class ErgoAppKit:
 
         return tb.build()
     
-    def mintToken(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, contract: ErgoContract) -> OutBox:
+    def mintToken(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, decimals: int, contract: ErgoContract) -> OutBox:
         ctx = self.getBlockChainContext()
         tb = ctx.newTxBuilder()
         
-        return tb.outBoxBuilder().contract(contract).value(value).mintToken(ErgoToken(tokenId,mintAmount),tokenName,tokenDesc,mintAmount).build()
+        return tb.outBoxBuilder().contract(contract).value(value).mintToken(ErgoToken(tokenId,mintAmount),tokenName,tokenDesc,decimals).build()
 
     def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract) -> InputBox:
         return self.buildOutBox(value, tokens, registers, contract).convertToInputWith("ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d", 0)
+
+    def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: dict[str,int] = {}) -> list[InputBox]:
+        ctx = self.getBlockChainContext()
+        tts = []
+        for token in tokensToSpend:
+            tts.append(ErgoToken(token,tokensToSpend[token]))
+        try:
+            coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergToSpend,java.util.ArrayList(tts))
+        except NullPointerException as e:
+            err = ""
+            for stackTraceElement in e.getStackTrace():
+                err = '\n'.join([err,stackTraceElement.toString()])
+            err = '\n'.join([err,str(e.getMessage())])
+            logging.info(err)
+        if coveringBoxes.isCovered:
+            return coveringBoxes.getBoxes()
+        else:
+            return None
 
     def ergoValue(self, value, t: ErgoValueT):
         if t == ErgoValueT.Long:
@@ -118,6 +138,9 @@ class ErgoAppKit:
     def contractFromTree(self,tree: ErgoTree) -> ErgoContract:
         return ErgoTreeContract(tree,self._networkType)
 
+    def contractFromAddress(self,addr: str) -> ErgoContract:
+        return ErgoTreeContract(Address.create(addr).getErgoAddress().script(),self._networkType)
+
     def preHeader(self, timestamp: int = None) -> PreHeader:
         ctx = self.getBlockChainContext()
         phb = ctx.createPreHeader()
@@ -139,6 +162,33 @@ class ErgoAppKit:
         ctx = self.getBlockChainContext()
         prover = ctx.newProverBuilder().build()
         return prover.sign(unsignedTx)
+
+    def sendTransaction(self, signedTx: SignedTransaction) -> str:
+        ctx = self.getBlockChainContext()
+        return ctx.sendTransaction(signedTx)
+
+    def signTransactionWithNode(self, unsignedTx: UnsignedTransactionImpl) -> SignedTransaction:
+        signRequest = TransactionSigningRequest()
+        unsignedErgoTx = UnsignedErgoTransaction()
+        unsignedErgoLikeTx = unsignedTx.getTx()
+        for i in range(int(unsignedErgoLikeTx.inputs().length())):
+            input = unsignedErgoLikeTx.inputs().apply(JInt(i))
+            unsignedInput = ErgoTransactionUnsignedInput()
+            unsignedInput.setBoxId(unsignedTx.getInputs()[i].getId().toString())
+            unsignedInput.setExtension(scala.collection.JavaConversions.mapAsJavaMap(input.extension().values()))
+            unsignedErgoTx = unsignedErgoTx.addInputsItem(unsignedInput)
+        unsignedErgoTx.setDataInputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionDataInput())).to(unsignedErgoLikeTx.dataInputs()))
+        unsignedErgoTx.setOutputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionOutput())).to(unsignedErgoLikeTx.outputs()))
+        signRequest.setTx(unsignedErgoTx)
+        logging.info(signRequest)
+        api = self._client.createService(WalletApi)
+        ergoTx = api.walletTransactionSign(signRequest).execute().body()
+        tx = ScalaBridge.isoErgoTransaction().to(ergoTx)
+        signedTx = SignedTransactionImpl(self.getBlockChainContext(),tx,0)
+        logging.info(signedTx)
+        return signedTx
+
+        
 
     
 

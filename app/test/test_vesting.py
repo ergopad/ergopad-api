@@ -1,5 +1,4 @@
 from hashlib import blake2b
-from org.ergoplatform import appkit
 import pytest
 from config import Config, Network
 from ergo.appkit import ErgoAppKit, ErgoValueT
@@ -108,6 +107,7 @@ class TestProxyNFTLockedVesting:
             tokenName="Vesting Key",
             tokenDesc="Vested",
             mintAmount=1,
+            decimals=0,
             contract=self.appKit.dummyContract()
         )
 
@@ -115,7 +115,7 @@ class TestProxyNFTLockedVesting:
         print(nergamount)
 
         sellerOutput = self.appKit.buildOutBox(
-            value=int(100000*self.vestedTokenPrice/self.nErgPrice),
+            value=int(100000*self.vestedTokenPrice/self.nErgPrice+1),
             tokens={self.whitelistTokenId: 100000},
             registers=None,
             contract=self.sellerAddress.getErgoContract()
@@ -189,12 +189,92 @@ class TestProxyNFTLockedVesting:
             tokenName="Vesting Key",
             tokenDesc="Vested",
             mintAmount=1,
+            decimals=0,
             contract=self.appKit.dummyContract()
         )
 
         sellerOutput = self.appKit.buildOutBox(
             value=int(1e6),
             tokens={self.whitelistTokenId: 100000, self.sigusd: 100},
+            registers=None,
+            contract=self.sellerAddress.getErgoContract()
+        )
+
+        unsignedTx = self.appKit.buildUnsignedTransaction(
+            inputs = [self.proxyVestingBox, userInputBox],
+            dataInputs= [self.oracleBox],
+            outputs = [proxyVestingOutput,vestingOutput,userOutput,sellerOutput],
+            fee = int(1e6),
+            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            preHeader = self.appKit.preHeader()
+        )
+
+        signed = False
+
+        try:
+            self.appKit.signTransaction(unsignedTx)
+            signed = True
+        except Exception as e:
+            print(f"Error: {e}")
+            signed = False
+    
+        assert signed
+
+    def test_vesting_erg_sigusd(self):
+        userInputBox = self.appKit.buildInputBox(
+            value=int(10e9),
+            tokens={self.whitelistTokenId: 100000, self.sigusd: 50},
+            registers=None,
+            contract=self.appKit.dummyContract()
+        )
+
+        proxyVestingOutput = self.appKit.buildOutBox(
+            value=int(1e6),
+            tokens={self.proxyNFT: 1, self.vestedTokenId: 900000},
+            registers = [
+                self.appKit.ergoValue([
+                    int(1000*60*60*24),     #redeemPeriod
+                    int(365),               #numberOfPeriods
+                    int(1648771200000),     #vestingStart
+                    int(1),                 #priceNum
+                    int(1000)                 #priceDenom
+                ],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                self.appKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                self.appKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+            ],
+            contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
+        )
+
+        vestingOutput = self.appKit.buildOutBox(
+            value=int(1e6), 
+            tokens={self.vestedTokenId: 100000}, 
+            registers=[       
+                self.appKit.ergoValue([
+                    int(1000*60*60*24), #Redeem period
+                    int(100000/365),    #Redeem amount per period  
+                    int(1648771200000), #Start vesting april 1st
+                    int(100000)         #Initial vesting amount
+                ], ErgoValueT.LongArray),            
+                #Vesting key
+                self.appKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
+            ], 
+            contract=self.appKit.contractFromTree(self.nftLockedVestingContractTree)
+        )
+
+        userOutput = self.appKit.mintToken(
+            value=int(1e6),
+            tokenId=self.proxyVestingBox.getId().toString(),
+            tokenName="Vesting Key",
+            tokenDesc="Vested",
+            mintAmount=1,
+            decimals=0,
+            contract=self.appKit.dummyContract()
+        )
+
+        sellerOutput = self.appKit.buildOutBox(
+            value=int(50000*self.vestedTokenPrice/self.nErgPrice+1),
+            tokens={self.whitelistTokenId: 100000, self.sigusd: 50},
             registers=None,
             contract=self.sellerAddress.getErgoContract()
         )

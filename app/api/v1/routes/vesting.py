@@ -1,10 +1,12 @@
+from decimal import Decimal
 import requests, json, os
-import math
+import fractions
 from sqlalchemy import create_engine
-from starlette.responses import JSONResponse 
+from starlette.responses import JSONResponse
+from core.auth import get_current_active_superuser 
 from wallet import Wallet, NetworkEnvironment # ergopad.io library
 from config import Config, Network # api specific config
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 from typing import Optional
 from pydantic import BaseModel
 from time import sleep, time
@@ -571,3 +573,125 @@ def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to find tokens for exchange')
 
     return ergopadTokenBoxes
+
+class BootstrapRoundRequest(BaseModel):
+    roundName: str
+    tokenId: str
+    roundAllocation: Decimal
+    vestingPeriods: int
+    vestingPeriodDuration_ms: int
+    vestingStart_ms: int
+    tokenSigUSDPrice: Decimal
+    whitelistTokenMultiplier: Decimal
+
+@r.post('/bootstrapRound', name="vesting:bootstrapRound")
+async def bootstrapRound(req: BootstrapRoundRequest, 
+#current_user=Depends(get_current_active_superuser)
+):
+    vestedToken = getTokenInfo(req.tokenId)
+    vestedTokenAmount = int(req.roundAllocation*10**vestedToken["decimals"])
+
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+
+    ergoPadContract = appKit.contractFromAddress(CFG.ergopadWallet)
+
+    initialInputs = appKit.boxesToSpend(CFG.ergopadWallet, int(5e6), {req.tokenId: vestedTokenAmount})
+
+    nftId = initialInputs[0].getId().toString()
+
+    presaleRoundNFTBox = appKit.mintToken(
+                            value=int(1e6),
+                            tokenId=nftId,
+                            tokenName=f"{req.roundName} NFT",
+                            tokenDesc="NFT identifying the presale round box",
+                            mintAmount=1,
+                            decimals=0,
+                            contract=ergoPadContract)
+    tokenBox = appKit.buildOutBox(
+        value = int(3e6),
+        tokens = {req.tokenId: vestedTokenAmount},
+        registers = None,
+        contract=ergoPadContract
+    )
+
+    nftMintUnsignedTx = appKit.buildUnsignedTransaction(
+                            inputs=initialInputs,
+                            outputs=[presaleRoundNFTBox,tokenBox],
+                            fee=int(1e6),
+                            sendChangeTo=ergoPadContract.getAddress().getErgoAddress())
+
+    nftMintSignedTx = appKit.signTransactionWithNode(nftMintUnsignedTx)
+
+    appKit.sendTransaction(nftMintSignedTx)
+
+    whitelistTokenId = nftMintSignedTx.getOutputsToSpend()[0].getId().toString()
+
+    whiteListTokenBox = appKit.mintToken(
+                            value=int(1e6),
+                            tokenId=whitelistTokenId,
+                            tokenName=f"{req.roundName} whitelist token",
+                            tokenDesc=f"Token proving allocation for the {req.roundName} round",
+                            mintAmount=int(vestedTokenAmount*req.whitelistTokenMultiplier),
+                            decimals=vestedToken["decimals"],
+                            contract=ergoPadContract)
+
+    sigusd = "81ba2a45d4539045995ad6ceeecf9f14b942f944a1c9771430a89c3f88ee898a"
+    ergusdoracle = "011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
+
+    with open(f'contracts/NFTLockedVesting.es') as f:
+        script = f.read()
+    nftLockedVestingContractTree = appKit.compileErgoScript(script)
+
+    with open(f'contracts/proxyNFTLockedVesting.es') as f:
+        script = f.read()
+    proxyNftLockedVestingTree = appKit.compileErgoScript(
+        script,
+        {
+            "_NFTLockedVestingContract": appKit.ergoValue(blake2b(bytes.fromhex(nftLockedVestingContractTree.bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
+            "_ErgUSDOracleNFT": appKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue(),
+            "_SigUSDTokenId": appKit.ergoValue(sigusd, ErgoValueT.ByteArrayFromHex).getValue()     
+        }
+    )
+
+    price = fractions.Fraction(req.tokenSigUSDPrice*10**(int(vestedToken["decimals"]-2)))
+    proxyContractBox = appKit.buildOutBox(
+        value = int(1e6),
+        tokens = {
+            nftId: 1,
+            req.tokenId: vestedTokenAmount
+        },
+        registers=[
+            appKit.ergoValue(
+                [
+                    req.vestingPeriodDuration_ms,   #redeemPeriod
+                    req.vestingPeriods,             #numberOfPeriods
+                    req.vestingStart_ms,            #vestingStart
+                    price.numerator,                #priceNum
+                    price.denominator               #priceDenom
+                ], ErgoValueT.LongArray),
+            appKit.ergoValue(req.tokenId, ErgoValueT.ByteArrayFromHex),                  #vestedTokenId
+            appKit.ergoValue(ergoPadContract.getErgoTree().bytes(), ErgoValueT.ByteArray), #Seller address
+            appKit.ergoValue(whitelistTokenId, ErgoValueT.ByteArrayFromHex)              #Whitelist tokenid
+        ],
+        contract=appKit.contractFromTree(proxyNftLockedVestingTree)
+    )
+
+    bootstrapUnsigned = appKit.buildUnsignedTransaction(
+        inputs=[nftMintSignedTx.getOutputsToSpend()[0],nftMintSignedTx.getOutputsToSpend()[1]],
+        outputs=[whiteListTokenBox,proxyContractBox],
+        fee=int(1e6),
+        sendChangeTo=ergoPadContract.getAddress().getErgoAddress()
+    )
+
+    bootstrapSigned = appKit.signTransactionWithNode(bootstrapUnsigned)
+
+    appKit.sendTransaction(bootstrapSigned)
+
+    return {
+        'Whitelist token id': whitelistTokenId,
+        'Proxy NFT': nftId,
+        'NFT mint transaction': nftMintSignedTx.getId(),
+        'Whitelist token mint and token lock transaction': bootstrapSigned.getId(),
+        'Proxy address': appKit.contractFromTree(proxyNftLockedVestingTree).getAddress().toString()
+    }
+

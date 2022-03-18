@@ -9,6 +9,7 @@
 .vscode/*
 *.jar
 /venv
+*.log
 
 ### PYTHON
 # Byte-compiled / optimized / DLL files
