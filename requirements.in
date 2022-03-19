@@ -19,6 +19,7 @@ pyjwt
 passlib[bcrypt]
 pytest
 pytest-asyncio
+pytest-mock
 httpx
 asgi-lifespan
 ecdsa
