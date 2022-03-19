@@ -37,7 +37,7 @@ async def test_checkEventConstraints_for_paideia_staker_success(mocker):
 
     # act
     whitelist = Whitelist(
-        event="paideia-presale-staker-202203wl",
+        event="staker-seed-paideia-202203wl",
         ergoAddress="test",
         email="test@test.com",
         name="test",
@@ -62,7 +62,7 @@ async def test_checkEventConstraints_for_paideia_staker_not_enough_staked(mocker
 
     # act
     whitelist = Whitelist(
-        event="paideia-presale-staker-202203wl",
+        event="staker-seed-paideia-202203wl",
         ergoAddress="test",
         email="test@test.com",
         name="test",
