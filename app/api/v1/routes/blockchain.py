@@ -61,6 +61,8 @@ Complete
 DEBUG = CFG.debug
 DATABASE = CFG.connectionString
 EXPLORER = CFG.csExplorer
+STAKE_ADDRESS = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
+STAKE_KEY_ID = '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee'
 
 try:
     headers            = {'Content-Type': 'application/json'}
@@ -359,7 +361,7 @@ def getNFTBox(tokenId: str, allowCached=False):
                     "ok": ok,
                     "memResContent": memResContent
                 }
-                cache.set("get_explorer_mempool_boxes_unspent", content, 300)
+                cache.set("get_explorer_mempool_boxes_unspent", content, 600) # 10 mins
         else:
             # if cached is not allowed force api call
             memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
@@ -391,11 +393,91 @@ def getNFTBox(tokenId: str, allowCached=False):
             if len(items) == 1:
                 return items[0]
             else:
-                logging.error(f'ERR:{myself()}: multiple nft box ({e})')
+                logging.error(f'ERR:{myself()}: multiple nft box or tokenId doesn\'t exist')
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
 
+# GET unspent stake boxes
+# Note: Run with useExplorerApi = True in case local explorer service failure
+def getUnspentStakeBoxes(useExplorerApi=False):
+    if useExplorerApi:
+        # slow, makes 10+ api calls each taking 1 to 1.5 seconds on average
+        boxes = []
+        offset = 0
+        limit = 100
+        done = False
+        while not done:
+            res = getTokenBoxes(STAKE_KEY_ID, offset, limit)
+            boxes.extend(res)
+            offset += limit
+            if len(res) < limit:
+                done = True
+        return boxes
+    else:
+        # fast, average response time around 3 seconds
+        return getUnspentStakeBoxesFromExplorerDB()
+
+# GET unspent boxes by token id direct from explorer db
+def getUnspentStakeBoxesFromExplorerDB():
+    try:
+        con = create_engine(EXPLORER)
+        sql = f"""
+            -- /unspent/byTokenId (optimized for stakeTokenId)
+            select
+                o.box_id as box_id,
+                -- additional registers in JSON format
+                -- R4 penalty
+                -- R5 stake key
+                o.additional_registers as additional_registers,
+                a.token_id as token_id,
+                -- index of the token in assets list
+                -- 0 stake token
+                -- 1 ergopad staked
+                a.index as index,
+                 -- amount of token in the box
+                a.value as value
+            from
+                node_outputs o
+                join node_assets a on a.box_id = o.box_id
+                and a.header_id = o.header_id
+            where
+                o.box_id in (
+                    -- sub query to get unspent box ids
+                    -- non correlated sub query => executed once
+                    select
+                        o.box_id as box_id
+                    from
+                        node_outputs o
+                        left join node_inputs i on i.box_id = o.box_id
+                        join node_assets a on a.box_id = o.box_id
+                        and a.header_id = o.header_id
+                    where
+                        o.main_chain = true
+                        and o.address = '{STAKE_ADDRESS}' -- all stake boxes are for this address
+                        and i.box_id is null -- output with no input = unspent
+                        and a.token_id = '{STAKE_KEY_ID}' -- stake key token id
+                        and coalesce(a.value, 0) > 0
+                );
+        """
+        res = con.execute(sql).fetchall()
+        boxes = {}
+        for data in res:
+            if data["box_id"] in boxes:
+                boxes[data["box_id"]]["assets"].insert(data["index"], {"tokenId": data["token_id"], "index": data["index"], "amount": data["value"]})
+            else:
+                boxes[data["box_id"]] = {
+                    "boxId": data["box_id"],
+                    "additionalRegisters": data["additional_registers"],
+                    "assets": [{"tokenId": data["token_id"], "index": data["index"], "amount": data["value"]}]
+                }
+        return list(boxes.values())
+        
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content='failed to read data from explorer db')
+
+# GET token boxes legacy code using explorer API
 def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100):
     try:
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}?offset={offset}&limit={limit}')

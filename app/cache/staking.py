@@ -15,6 +15,7 @@ class SyncMap:
         if key not in self.data:
             self.data[key] = 0
         self.data[key] += value
+        self.data[key] = round(self.data[key], 2)
         self.lock.release()
 
     def error(self):
@@ -45,6 +46,7 @@ class AsyncSnapshotEngine:
     THREAD_COUNT = 4
 
     def __init__(self):
+        self.errors = SyncMap()
         self.output = SyncMap()
         self.inputs = list()
 
@@ -56,7 +58,7 @@ class AsyncSnapshotEngine:
         if (key_holder):
             self.output.increment(key_holder["address"], amount)
         else:
-            self.output.error()
+            self.errors.increment(token_id, 1)
 
     def compute(self):
         # warm up cache
@@ -83,7 +85,7 @@ class AsyncSnapshotEngine:
         self.inputs = list()
 
     def get(self):
-        if self.output.get_error():
-            return None
-        else:
-            return self.output.get_data()
+        return {
+            "errors": self.errors.get_data(),
+            "output": self.output.get_data()
+        }

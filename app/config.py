@@ -47,7 +47,7 @@ class Stopwatch(object):
 POSTGRES_PORT = os.getenv('POSTGRES_PORT')
 POSTGRES_USER = os.getenv('POSTGRES_USER')
 
-Network = os.getenv('ERGONODE_NETWORK')
+Network = os.getenv('ERGONODE_NETWORK', default='mainnet')
 Config = {
   # 'devnet':
   'testnet': dotdict({

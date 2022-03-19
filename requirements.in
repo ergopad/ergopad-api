@@ -19,8 +19,12 @@ pyjwt
 passlib[bcrypt]
 pytest
 pytest-asyncio
+pytest-mock
 httpx
 asgi-lifespan
 ecdsa
 pyblake2
 base58
+jpype1
+python-dotenv
+psycopg2

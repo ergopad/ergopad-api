@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.requests import Request
 import uvicorn
 
 from api.v1.routes.users import users_router
