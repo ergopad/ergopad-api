@@ -108,6 +108,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 , buffer_sigusd
                 , start_dtz
                 , end_dtz
+                , "individualCap"
                 , coalesce(allowance_sigusd, 0.0) as allowance_sigusd
                 , coalesce(spent_sigusd, 0.0) as spent_sigusd
             from "events" evt
@@ -140,6 +141,10 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
         eventId = res['id']
         whitelist.sigValue = int(whitelist.sigValue)
+
+        # does individual cap exceed?
+        if whitelist.sigValue > res['individualCap']:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup individual cap is {res['individualCap']} sigUSD")
 
         # find wallet
         logging.debug(f'connecting to: {CFG.connectionString}')
@@ -183,8 +188,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 NOW).strftime(DATEFORMAT)
             dfWhitelist = dfWhitelist.rename(
                 columns={'sigValue': 'allowance_sigusd'})
-            dfWhitelist['lastAssemblerStatus'] = dfWhitelist['allowance_sigusd']
-            dfWhitelist['allowance_sigusd'] = 20000
+            dfWhitelist['lastAssemblerStatus'] = dfWhitelist['allowance_sigusd'] # ? why 
+            # dfWhitelist['allowance_sigusd'] = 20000
             dfWhitelist.to_sql('whitelist', con=con,
                                if_exists='append', index=False)
 
@@ -215,7 +220,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
 async def checkEventConstraints(whitelist: Whitelist):
     # Check special contraints for events
     # return True if valid else return (False, reason)
-    if whitelist.event == 'paideia-presale-staker-202203wl':
+    if whitelist.event == 'staker-seed-paideia-202203wl':
         # make sure address has ergopad staked
         address = whitelist.ergoAddress
         try:
@@ -265,8 +270,7 @@ async def whitelistInfo(eventName):
             'now': NOW,
             'isBeforeSignup': NOW < int(res['start_dtz'].timestamp()),
             'isAfterSignup': NOW > int(res['end_dtz'].timestamp()),
-            # res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']),
-            'isFundingComplete': False,
+            'isFundingComplete': res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']),
             'name': res['name'],
             'description': res['description'],
             'total_sigusd': res['total_sigusd'],
