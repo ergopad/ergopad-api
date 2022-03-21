@@ -4,7 +4,7 @@
     val blockTime           = CONTEXT.preHeader.timestamp
 
     val redeemPeriod        = SELF.R4[Coll[Long]].get(0)
-    val redeemAmount        = SELF.R4[Coll[Long]].get(1)
+    val numberOfPeriods     = SELF.R4[Coll[Long]].get(1)
     val vestingStart        = SELF.R4[Coll[Long]].get(2)
     val totalVested         = SELF.R4[Coll[Long]].get(3)
     val vestingKeyId        = SELF.R5[Coll[Byte]].get
@@ -12,11 +12,11 @@
     val timeVested          = blockTime - vestingStart
     val periods             = timeVested/redeemPeriod
     val redeemed            = totalVested - SELF.tokens(0)._2
-    val totalRedeemable     = periods * redeemAmount
+    val totalRedeemable     = periods * totalVested / numberOfPeriods
 
     /*This is a test to find out whether we have arrived at the final redeeming period, which might 
       have extra tokens due to rounding after dividing by amount of periods.*/
-    val redeemableTokens    = if (totalVested - totalRedeemable < redeemAmount) 
+    val redeemableTokens    = if (periods >= numberOfPeriods) 
                                 totalVested - redeemed 
                               else 
                                 totalRedeemable - redeemed

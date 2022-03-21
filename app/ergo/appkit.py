@@ -180,12 +180,10 @@ class ErgoAppKit:
         unsignedErgoTx.setDataInputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionDataInput())).to(unsignedErgoLikeTx.dataInputs()))
         unsignedErgoTx.setOutputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionOutput())).to(unsignedErgoLikeTx.outputs()))
         signRequest.setTx(unsignedErgoTx)
-        logging.info(signRequest)
         api = self._client.createService(WalletApi)
         ergoTx = api.walletTransactionSign(signRequest).execute().body()
         tx = ScalaBridge.isoErgoTransaction().to(ergoTx)
         signedTx = SignedTransactionImpl(self.getBlockChainContext(),tx,0)
-        logging.info(signedTx)
         return signedTx
 
         

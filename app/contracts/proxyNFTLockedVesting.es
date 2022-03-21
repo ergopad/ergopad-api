@@ -77,7 +77,7 @@
                                         vestingOutputBox.tokens(0)._1                   == vestedTokenId,
                                         vestingOutputBox.tokens(0)._2                   == vestedTokens,
                                         vestingOutputBox.R4[Coll[Long]].get(0)          == redeemPeriod,
-                                        vestingOutputBox.R4[Coll[Long]].get(1)          == vestedTokens/numberOfPeriods,
+                                        vestingOutputBox.R4[Coll[Long]].get(1)          == numberOfPeriods,
                                         //We need to avoid cases where the amount 
                                         //redeemed per period is 0 
                                         vestingOutputBox.R4[Coll[Long]].get(1)          > 0,   

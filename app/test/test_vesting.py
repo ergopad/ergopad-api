@@ -91,7 +91,7 @@ class TestProxyNFTLockedVesting:
             registers=[       
                 self.appKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
-                    int(100000/365),    #Redeem amount per period  
+                    int(365),           #Number of periods
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -173,7 +173,7 @@ class TestProxyNFTLockedVesting:
             registers=[       
                 self.appKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
-                    int(100000/365),    #Redeem amount per period  
+                    int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -252,7 +252,7 @@ class TestProxyNFTLockedVesting:
             registers=[       
                 self.appKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
-                    int(100000/365),    #Redeem amount per period  
+                    int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -321,7 +321,7 @@ class TestNFTLockedVesting:
             [       
                 appKit.ergoValue([
                     duration,           #Redeem period
-                    int(999999/365),    #Redeem amount per period  
+                    int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -341,12 +341,12 @@ class TestNFTLockedVesting:
         preHeader = self.appKit.preHeader(timestamp=int(1648771200000+self.duration*2.5))
 
         newVestingBox = self.appKit.buildOutBox(self.vestingInputBox.getValue(), {
-                self.vestedTokenId: int(999999-int(999999/365)*2)
+                self.vestedTokenId: int(999999-int(2*999999/365))
             },
             [
                 self.appKit.ergoValue([
                     self.duration,      #Redeem period
-                    int(999999/365),    #Redeem amount per period  
+                    int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -356,7 +356,7 @@ class TestNFTLockedVesting:
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
             self.vestingKey: 1,
-            self.vestedTokenId: int(999999/365)*2
+            self.vestedTokenId: int(2*999999/365)
             }, registers=None, contract=self.appKit.dummyContract())
 
         unsignedTx = self.appKit.buildUnsignedTransaction(
@@ -419,12 +419,12 @@ class TestNFTLockedVesting:
         preHeader = self.appKit.preHeader(timestamp=int(1648771200000+self.duration*2.5))
 
         newVestingBox = self.appKit.buildOutBox(self.vestingInputBox.getValue(), {
-                self.vestedTokenId: int(999999-int(999999/365)*3)
+                self.vestedTokenId: int(999999-int(3*999999/365))
             },
             [
                 self.appKit.ergoValue([
                     self.duration,      #Redeem period
-                    int(999999/365),    #Redeem amount per period  
+                    int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -434,7 +434,7 @@ class TestNFTLockedVesting:
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
             self.vestingKey: 1,
-            self.vestedTokenId: int(999999/365)*3
+            self.vestedTokenId: int(3*999999/365)
             }, registers=None, contract=self.appKit.dummyContract())
 
         unsignedTx = self.appKit.buildUnsignedTransaction(
@@ -459,12 +459,12 @@ class TestNFTLockedVesting:
         preHeader = self.appKit.preHeader(timestamp=int(1648771200000+self.duration*2.5))
 
         newVestingBox = self.appKit.buildOutBox(self.vestingInputBox.getValue(), {
-                self.vestedTokenId: int(999999-int(999999/365)*2)
+                self.vestedTokenId: int(999999-int(2*999999/365))
             },
             [
                 self.appKit.ergoValue([
                     self.duration,      #Redeem period
-                    int(999999/365),    #Redeem amount per period  
+                    int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -474,7 +474,7 @@ class TestNFTLockedVesting:
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
             self.fakeVestingKey: 1,
-            self.vestedTokenId: int(999999/365)*2
+            self.vestedTokenId: int(2*999999/365)
             }, registers=None, contract=self.appKit.dummyContract())
 
         unsignedTx = self.appKit.buildUnsignedTransaction(
@@ -498,12 +498,12 @@ class TestNFTLockedVesting:
         preHeader = self.appKit.preHeader(timestamp=int(1648771200000+self.duration*2.5))
 
         newVestingBox = self.appKit.buildOutBox(self.vestingInputBox.getValue(), {
-                self.vestedTokenId: int(999999-int(999999/365)*1)
+                self.vestedTokenId: int(999999-int(999999/365))
             },
             [
                 self.appKit.ergoValue([
                     self.duration,      #Redeem period
-                    int(999999/365),    #Redeem amount per period  
+                    int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
@@ -513,7 +513,7 @@ class TestNFTLockedVesting:
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
             self.vestingKey: 1,
-            self.vestedTokenId: int(999999/365)*1
+            self.vestedTokenId: int(999999/365)
             }, registers=None, contract=self.appKit.dummyContract())
 
         unsignedTx = self.appKit.buildUnsignedTransaction(
