@@ -16,12 +16,13 @@ except OSError:
 
 
 from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, BlockchainContext, BoxOperations, ConstantsBuilder, ErgoClient, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.appkit import Address, BlockchainContext, BoxOperations, ConstantsBuilder, ErgoClient, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
 from org.ergoplatform.restapi.client import ApiClient, Asset, ErgoTransactionDataInput, ErgoTransactionOutput, ErgoTransactionUnsignedInput, Registers, TransactionSigningRequest, UnsignedErgoTransaction, WalletApi
 from org.ergoplatform.explorer.client import ExplorerApiClient
-from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoNodeFacade, ErgoTreeContract, ExplorerFacade, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
+from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoNodeFacade, ErgoTreeContract, ExplorerFacade, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
 from special.collection import Coll
 from sigmastate.Values import ErgoTree
+from sigmastate.serialization import ErgoTreeSerializer
 from scala import Byte as SByte, Long as SLong
 import java
 import scala
@@ -79,7 +80,6 @@ class ErgoAppKit:
         ctx = self.getBlockChainContext()
         tb = ctx.newTxBuilder()
         ergoTokens = []
-
         for token in tokens.keys():
             ergoTokens.append(ErgoToken(token,tokens[token]))
         tb = tb.outBoxBuilder().contract(contract).value(value).tokens(ergoTokens)
@@ -88,6 +88,18 @@ class ErgoAppKit:
             tb = tb.registers(registers)
 
         return tb.build()
+
+    def getBoxesById(self, boxIds: list[str]) -> list[InputBox]:
+        ctx = self.getBlockChainContext()
+        _ok = self._client.getOkBuilder().build()
+        _retrofit = self._client.getAdapterBuilder().client(_ok).build()
+        res = []
+        for id in boxIds:
+            boxData = ErgoNodeFacade.getBoxWithPoolById(_retrofit, id)
+            if boxData is None:
+                raise ErgoClientException("Cannot load UTXO box " + id, None)
+            res.append(InputBoxImpl(ctx, boxData))
+        return res
     
     def mintToken(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, decimals: int, contract: ErgoContract) -> OutBox:
         ctx = self.getBlockChainContext()
@@ -141,6 +153,10 @@ class ErgoAppKit:
     def contractFromAddress(self,addr: str) -> ErgoContract:
         return ErgoTreeContract(Address.create(addr).getErgoAddress().script(),self._networkType)
 
+    def treeFromBytes(self,bytes: bytes) -> ErgoTree:
+        treeSerializer = ErgoTreeSerializer()
+        return self._addrEnc.fromProposition(treeSerializer.deserializeErgoTree(bytes)).get().script()
+
     def preHeader(self, timestamp: int = None) -> PreHeader:
         ctx = self.getBlockChainContext()
         phb = ctx.createPreHeader()
@@ -148,14 +164,15 @@ class ErgoAppKit:
             phb = phb.timestamp(JLong(timestamp))
         return phb.build()
 
-    def buildUnsignedTransaction(self, inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, dataInputs: List[DataInput] = None, preHeader: PreHeader = None) -> UnsignedTransaction:
+    def buildUnsignedTransaction(self, inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, dataInputs: List[InputBox] = None, preHeader: PreHeader = None) -> UnsignedTransaction:
         ctx = self.getBlockChainContext()
         tb = ctx.newTxBuilder()
-        tb = tb.boxesToSpend(java.util.ArrayList(inputs)).fee(fee).outputs(outputs).sendChangeTo(sendChangeTo)
         if preHeader is not None:
             tb = tb.preHeader(preHeader)
         if dataInputs is not None:
             tb = tb.withDataInputs(java.util.ArrayList(dataInputs))
+        tb = tb.boxesToSpend(java.util.ArrayList(inputs)).fee(fee).outputs(outputs).sendChangeTo(sendChangeTo)
+        logging.info(tb.getInputBoxes())
         return tb.build()
 
     def signTransaction(self, unsignedTx: UnsignedTransaction) -> SignedTransaction:

@@ -178,6 +178,11 @@ def getEmmissionAmount(tokenId):
         logging.error(f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid getEmmissionAmount request')
 
+@r.get("/ergusdoracle", name="blockchain:ergusdoracle")
+async def ergusdoracle():
+    res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
+    return json.loads(res.json())
+
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
 def ergopadInCirculation():
