@@ -181,6 +181,10 @@ def getEmmissionAmount(tokenId):
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
 def ergopadInCirculation():
+    # check cache
+    cached = cache.get("get_api_blockchain_ergopad_in_circulation")
+    if cached:
+        return cached
     try:
         con = create_engine(EXPLORER)
         supply = totalSupply('d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413')
@@ -254,6 +258,8 @@ def ergopadInCirculation():
         reserved = 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
         ergopadInCirculation = supply - stakePool - vested - reserved - emitted
 
+        # set cache
+        cache.set("get_api_blockchain_ergopad_in_circulation", ergopadInCirculation) # default 15 min TTL
         return ergopadInCirculation
         
     except Exception as e:
@@ -263,6 +269,10 @@ def ergopadInCirculation():
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
 def totalSupply(tokenId):
+    # check cache
+    cached = cache.get(f"get_api_blockchain_total_supply_{tokenId}")
+    if cached:
+        return cached
     try:
         # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)
         # ergopad: d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413
@@ -293,6 +303,8 @@ def totalSupply(tokenId):
         res = con.execute(sqlTotalSupply).fetchone()
         totalSupply = res['totalSupply']
 
+        # set cache
+        cache.set(f"get_api_blockchain_total_supply_{tokenId}", totalSupply) # default 15 min TTL
         return totalSupply
         
     except Exception as e:
