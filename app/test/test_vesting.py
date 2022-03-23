@@ -16,7 +16,7 @@ class TestProxyNFTLockedVesting:
     proxyNFT = "021d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
     vestedTokenId = "031d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
     sellerAddress = Address.create("9h7L7sUHZk43VQC3PHtSp5ujAWcZtYmWATBH746wi75C5XHi68b")
-    sellerProp = sellerAddress.getErgoContract().getErgoTree()
+    sellerProp = sellerAddress.toErgoContract().getErgoTree()
     whitelistTokenId = "041d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
     nErgPrice = 3.19e-7 #
     vestedTokenPrice = 0.001 #2 decimals
@@ -57,7 +57,7 @@ class TestProxyNFTLockedVesting:
         value=int(1e6),
         tokens={ergusdoracle: 1},
         registers = [appKit.ergoValue(313479623,ErgoValueT.Long)],
-        contract = Address.create("NTkuk55NdwCXkF1e2nCABxq7bHjtinX3wH13zYPZ6qYT71dCoZBe1gZkh9FAr7GeHo2EpFoibzpNQmoi89atUjKRrhZEYrTapdtXrWU4kq319oY7BEWmtmRU9cMohX69XMuxJjJP5hRM8WQLfFnffbjshhEP3ck9CKVEkFRw1JDYkqVke2JVqoMED5yxLVkScbBUiJJLWq9BSbE1JJmmreNVskmWNxWE6V7ksKPxFMoqh1SVePh3UWAaBgGQRZ7TWf4dTBF5KMVHmRXzmQqEu2Fz2yeSLy23sM3pfqa78VuvoFHnTFXYFFxn3DNttxwq3EU3Zv25SmgrWjLKiZjFcEcqGgH6DJ9FZ1DfucVtTXwyDJutY3ksUBaEStRxoUQyRu4EhDobixL3PUWRcxaRJ8JKA9b64ALErGepRHkAoVmS8DaE6VbroskyMuhkTo7LbrzhTyJbqKurEzoEfhYxus7bMpLTePgKcktgRRyB7MjVxjSpxWzZedvzbjzZaHLZLkWZESk1WtdM25My33wtVLNXiTvficEUbjA23sNd24pv1YQ72nY1aqUHa2").getErgoContract())
+        contract = Address.create("NTkuk55NdwCXkF1e2nCABxq7bHjtinX3wH13zYPZ6qYT71dCoZBe1gZkh9FAr7GeHo2EpFoibzpNQmoi89atUjKRrhZEYrTapdtXrWU4kq319oY7BEWmtmRU9cMohX69XMuxJjJP5hRM8WQLfFnffbjshhEP3ck9CKVEkFRw1JDYkqVke2JVqoMED5yxLVkScbBUiJJLWq9BSbE1JJmmreNVskmWNxWE6V7ksKPxFMoqh1SVePh3UWAaBgGQRZ7TWf4dTBF5KMVHmRXzmQqEu2Fz2yeSLy23sM3pfqa78VuvoFHnTFXYFFxn3DNttxwq3EU3Zv25SmgrWjLKiZjFcEcqGgH6DJ9FZ1DfucVtTXwyDJutY3ksUBaEStRxoUQyRu4EhDobixL3PUWRcxaRJ8JKA9b64ALErGepRHkAoVmS8DaE6VbroskyMuhkTo7LbrzhTyJbqKurEzoEfhYxus7bMpLTePgKcktgRRyB7MjVxjSpxWzZedvzbjzZaHLZLkWZESk1WtdM25My33wtVLNXiTvficEUbjA23sNd24pv1YQ72nY1aqUHa2").toErgoContract())
 
     def test_vesting_pure_erg(self):
         userInputBox = self.appKit.buildInputBox(
@@ -118,7 +118,7 @@ class TestProxyNFTLockedVesting:
             value=int(100000*self.vestedTokenPrice/self.nErgPrice+1),
             tokens={self.whitelistTokenId: 100000},
             registers=None,
-            contract=self.sellerAddress.getErgoContract()
+            contract=self.sellerAddress.toErgoContract()
         )
 
         unsignedTx = self.appKit.buildUnsignedTransaction(
@@ -126,7 +126,7 @@ class TestProxyNFTLockedVesting:
             dataInputs= [self.oracleBox],
             outputs = [proxyVestingOutput,vestingOutput,userOutput,sellerOutput],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = self.appKit.preHeader()
         )
 
@@ -197,7 +197,7 @@ class TestProxyNFTLockedVesting:
             value=int(1e6),
             tokens={self.whitelistTokenId: 100000, self.sigusd: 100},
             registers=None,
-            contract=self.sellerAddress.getErgoContract()
+            contract=self.sellerAddress.toErgoContract()
         )
 
         unsignedTx = self.appKit.buildUnsignedTransaction(
@@ -205,7 +205,7 @@ class TestProxyNFTLockedVesting:
             dataInputs= [self.oracleBox],
             outputs = [proxyVestingOutput,vestingOutput,userOutput,sellerOutput],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = self.appKit.preHeader()
         )
 
@@ -276,7 +276,7 @@ class TestProxyNFTLockedVesting:
             value=int(50000*self.vestedTokenPrice/self.nErgPrice+1),
             tokens={self.whitelistTokenId: 100000, self.sigusd: 50},
             registers=None,
-            contract=self.sellerAddress.getErgoContract()
+            contract=self.sellerAddress.toErgoContract()
         )
 
         unsignedTx = self.appKit.buildUnsignedTransaction(
@@ -284,7 +284,7 @@ class TestProxyNFTLockedVesting:
             dataInputs= [self.oracleBox],
             outputs = [proxyVestingOutput,vestingOutput,userOutput,sellerOutput],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = self.appKit.preHeader()
         )
 
@@ -363,7 +363,7 @@ class TestNFTLockedVesting:
             inputs = [self.vestingInputBox, userInputBox],
             outputs = [newVestingBox,newUserBox],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = preHeader
         )
         signed = False
@@ -395,7 +395,7 @@ class TestNFTLockedVesting:
             inputs = [self.vestingInputBox, userInputBox],
             outputs = [newUserBox],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = preHeader
         )
         signed = False
@@ -441,7 +441,7 @@ class TestNFTLockedVesting:
             inputs = [self.vestingInputBox, userInputBox],
             outputs = [newVestingBox,newUserBox],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = preHeader
         )
 
@@ -481,7 +481,7 @@ class TestNFTLockedVesting:
             inputs = [self.vestingInputBox, userInputBox],
             outputs = [newVestingBox,newUserBox],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = preHeader
         )
         with pytest.raises(InterpreterException):
@@ -520,7 +520,7 @@ class TestNFTLockedVesting:
             inputs = [self.vestingInputBox, userInputBox],
             outputs = [newVestingBox,newUserBox],
             fee = int(1e6),
-            sendChangeTo = self.appKit.dummyContract().getAddress().getErgoAddress(),
+            sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = preHeader
         )
 

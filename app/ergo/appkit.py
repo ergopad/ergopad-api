@@ -1,4 +1,6 @@
+import json
 import typing
+
 from config import Config, Network
 import jpype
 import jpype.imports
@@ -16,10 +18,11 @@ except OSError:
 
 
 from org.ergoplatform import DataInput, ErgoAddress, ErgoAddressEncoder
-from org.ergoplatform.appkit import Address, BlockchainContext, BoxOperations, ConstantsBuilder, ErgoClient, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
+from org.ergoplatform.appkit import Address, BlockchainContext, BoxOperations, ConstantsBuilder, Eip4Token, ErgoClient, ErgoClientException, ErgoContract, ErgoToken, ErgoType, ErgoValue, InputBox, Iso, JavaHelpers, NetworkType, OutBox, PreHeader, ReducedTransaction, RestApiErgoClient, SignedTransaction, UnsignedTransaction
 from org.ergoplatform.restapi.client import ApiClient, Asset, ErgoTransactionDataInput, ErgoTransactionOutput, ErgoTransactionUnsignedInput, Registers, TransactionSigningRequest, UnsignedErgoTransaction, WalletApi
 from org.ergoplatform.explorer.client import ExplorerApiClient
-from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, ErgoNodeFacade, ErgoTreeContract, ExplorerFacade, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
+from org.ergoplatform.settings import ErgoAlgos
+from org.ergoplatform.appkit.impl import BlockchainContextBuilderImpl, BlockchainContextImpl, Eip4TokenBuilder, ErgoNodeFacade, ErgoTreeContract, ExplorerFacade, InputBoxImpl, ScalaBridge, SignedTransactionImpl, UnsignedTransactionImpl
 from special.collection import Coll
 from sigmastate.Values import ErgoTree
 from sigmastate.serialization import ErgoTreeSerializer
@@ -104,8 +107,7 @@ class ErgoAppKit:
     def mintToken(self, value: int, tokenId: str, tokenName: str, tokenDesc: str, mintAmount: int, decimals: int, contract: ErgoContract) -> OutBox:
         ctx = self.getBlockChainContext()
         tb = ctx.newTxBuilder()
-        
-        return tb.outBoxBuilder().contract(contract).value(value).mintToken(ErgoToken(tokenId,mintAmount),tokenName,tokenDesc,decimals).build()
+        return tb.outBoxBuilder().contract(contract).value(value).mintToken(Eip4Token(tokenId,mintAmount,tokenName,tokenDesc,decimals)).build()
 
     def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract) -> InputBox:
         return self.buildOutBox(value, tokens, registers, contract).convertToInputWith("ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d", 0)
@@ -172,7 +174,6 @@ class ErgoAppKit:
         if dataInputs is not None:
             tb = tb.withDataInputs(java.util.ArrayList(dataInputs))
         tb = tb.boxesToSpend(java.util.ArrayList(inputs)).fee(fee).outputs(outputs).sendChangeTo(sendChangeTo)
-        logging.info(tb.getInputBoxes())
         return tb.build()
 
     def signTransaction(self, unsignedTx: UnsignedTransaction) -> SignedTransaction:
@@ -203,6 +204,58 @@ class ErgoAppKit:
         signedTx = SignedTransactionImpl(self.getBlockChainContext(),tx,0)
         return signedTx
 
+    def getUnspentBoxes(self, address: str) -> List[InputBox]:
+        ctx = self.getBlockChainContext()
+        addr = Address.create(address)
+        offset = 0
+        limit = 100
+        result = []
+        pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
+        while len(pageResult) > 0:
+            result = result + list(pageResult)
+            offset += limit
+            pageResult = ctx.getUnspentBoxesFor(addr,offset,limit)
+        return result
+
+    def deserializeLongArray(self,hex: str) -> List[int]:
+        ergoValue = ErgoValue.fromHex(hex)
+        res = []
+        for val in ergoValue.getValue().toArray():
+            res.append(val)
+        return res
+
+    def unsignedTxToJson(self, unsignedTx: UnsignedTransactionImpl) -> str:
+        inputs = []
+        for i in unsignedTx.getInputs():
+            inputs.append(json.loads(i.toJson(False)))
+        dataInputs = []
+        for di in unsignedTx.getDataInputs():
+            dataInputs.append(json.loads(di.toJson(False)))
+        outputs = []
+        for o in unsignedTx.getOutputs():
+            logging.info(o)
+            assets = []
+            for t in o.getTokens():
+                assets.append({'tokenId': str(t.getId().toString()), 'amount': str(t.getValue())})
+            logging.info(assets)    
+            additionalRegisters = {}
+            r = 4
+            for additionalRegister in o.getRegisters():
+                additionalRegisters[f'R{r}']=additionalRegister.toHex()
+                r+=1
+            outputs.append({
+                'value': str(o.getValue()),
+                'ergoTree': o.getErgoTree().bytesHex(),
+                'assets': assets,
+                'additionalRegisters': additionalRegisters,
+                'creationHeight': o.getCreationHeight()
+            })
+
+        return {
+            'inputs': inputs,
+            'dataInputs': dataInputs,
+            'outputs': outputs
+        }
         
 
     

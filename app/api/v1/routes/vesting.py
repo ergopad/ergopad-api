@@ -3,11 +3,12 @@ import requests, json, os
 import fractions
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
+from api.v1.routes.staking import AddressList
 from core.auth import get_current_active_superuser 
 from wallet import Wallet, NetworkEnvironment # ergopad.io library
 from config import Config, Network # api specific config
 from fastapi import APIRouter, Depends, status
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 from time import sleep, time
 from datetime import date, datetime, timezone, timedelta
@@ -15,9 +16,10 @@ from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
 from ergo.util import encodeLong, encodeString
 import uuid
-from api.v1.routes.blockchain import ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta
+from api.v1.routes.blockchain import ergusdoracle, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta
 from ergo.appkit import ErgoAppKit, ErgoValueT
 from hashlib import blake2b
+from cache.cache import cache
 
 from org.ergoplatform.appkit import Address, InputBox
 from sigmastate.Values import ErgoTree
@@ -577,6 +579,126 @@ def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
 
     return ergopadTokenBoxes
 
+class RedeemWithNFTRequest(BaseModel):
+    boxId: str
+    address: str
+    utxos: List[str] = []
+
+@r.post("/redeemWithNFT", name="vesting:redeemWithNFT")
+async def redeemWithNFT(req: RedeemWithNFTRequest):
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+    vestingBox = appKit.getBoxesById([req.boxId])[0]
+    vestingBoxJson = vestingBox.toJson(False)
+    vestingKey = vestingBoxJson["additionalRegisters"]["R4"][4:]
+    parameters = appKit.deserializeLongArray(vestingBoxJson["additionalRegisters"]["R4"])
+    blockTime           = int(time()*1000)
+    redeemPeriod        = parameters[0]
+    numberOfPeriods     = parameters[1]
+    vestingStart        = parameters[2]
+    totalVested         = parameters[3]
+
+    timeVested          = blockTime - vestingStart
+    periods             = int(timeVested/redeemPeriod)
+    redeemed            = totalVested - int(vestingBoxJson["assets"][0]["amount"])
+    totalRedeemable     = int(periods * totalVested / numberOfPeriods)
+
+    redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
+
+    outputs = []
+
+    if periods < numberOfPeriods:
+        outputs.append(appKit.buildOutBox(
+            value=vestingBox.getValue(),
+            tokens={
+                vestingBoxJson["assets"][0]["tokenId"]: (totalVested-(redeemed+redeemableTokens))
+            },
+            registers=vestingBoxJson['additionalRegisters'],
+            contract=appKit.contractFromTree(vestingBox.getErgoTree())
+        ))
+    outputs.append(appKit.buildOutBox(
+        value=int(1e6),
+        tokens={
+            vestingBoxJson["assets"][0]["tokenId"]: redeemableTokens
+        },
+        registers=None,
+        contract=appKit.contractFromTree(vestingBox.getErgoTree())
+    ))
+
+@r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
+async def vested(req: AddressList):
+    CACHE_TTL = 600 # 10 mins
+    vestingAddress = '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU'
+    try:
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+        vestingKeys = {}
+        for address in req.addresses:
+            # cache balance confirmed
+            ok = False
+            data = None
+            cached = cache.get(f"get_vesting_vested_addresses_{address}_balance_confirmed")
+            if cached:
+                ok = True
+                data = cached
+            else:
+                res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                ok = res.ok
+                if ok:
+                    data = res.json()
+                    cache.set(f"get_vesting_vested_addresses_{address}_balance_confirmed", data, CACHE_TTL)
+            if ok:
+                if 'tokens' in data:
+                    for token in data["tokens"]:
+                        if 'name' in token and 'tokenId' in token:
+                            if token["name"] is not None:
+                                if "Vesting Key" in token["name"]:
+                                    vestingKeys[token["tokenId"]] = address
+            else:
+                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failure to fetch balance for {address}')
+        
+        vested = {}
+        
+        # getTokenBoxes from cache
+        checkBoxes = []
+        cached = cache.get(f"get_vesting_vested_token_boxes")
+        if cached:
+            checkBoxes = cached
+        else:
+            appKitBoxes = appKit.getUnspentBoxes(vestingAddress)
+            for appKitBox in appKitBoxes:
+                checkBoxes.append(json.loads(appKitBox.toJson(False)))
+            cache.set(f"get_vesting_vested_token_boxes", checkBoxes, CACHE_TTL)
+        for box in checkBoxes:
+            if box["additionalRegisters"]["R5"][4:] in vestingKeys.keys():
+                parameters = appKit.deserializeLongArray(box["additionalRegisters"]["R4"])
+                blockTime           = int(time()*1000)
+
+                redeemPeriod        = parameters[0]
+                numberOfPeriods     = parameters[1]
+                vestingStart        = parameters[2]
+                totalVested         = parameters[3]
+
+                timeVested          = blockTime - vestingStart
+                periods             = int(timeVested/redeemPeriod)
+                redeemed            = totalVested - int(box["assets"][0]["amount"])
+                totalRedeemable     = int(periods * totalVested / numberOfPeriods)
+
+                redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
+                vestedTokenInfo = getTokenInfo(box["assets"][0]["tokenId"])
+                if vestedTokenInfo["name"] not in vested:
+                    vested[vestedTokenInfo["name"]] = []
+                vested[vestedTokenInfo["name"]].append({
+                    'boxId': box["boxId"],
+                    'Remaining': round(box["assets"][0]["amount"]*10**(-1*vestedTokenInfo["decimals"]),vestedTokenInfo["decimals"]),
+                    'Redeemable': round(redeemableTokens*10**(-1*vestedTokenInfo["decimals"]),vestedTokenInfo["decimals"]),
+                    'Vesting Key Id': box["additionalRegisters"]["R5"][4:]
+                })
+
+        return vested
+        
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during staked')
+
 class BootstrapRoundRequest(BaseModel):
     roundName: str
     tokenId: str
@@ -621,7 +743,7 @@ async def bootstrapRound(req: BootstrapRoundRequest,
                             inputs=initialInputs,
                             outputs=[presaleRoundNFTBox,tokenBox],
                             fee=int(1e6),
-                            sendChangeTo=ergoPadContract.getAddress().getErgoAddress())
+                            sendChangeTo=ergoPadContract.toAddress().getErgoAddress())
 
     nftMintSignedTx = appKit.signTransactionWithNode(nftMintUnsignedTx)
 
@@ -683,7 +805,7 @@ async def bootstrapRound(req: BootstrapRoundRequest,
         inputs=[nftMintSignedTx.getOutputsToSpend()[0],nftMintSignedTx.getOutputsToSpend()[1]],
         outputs=[whiteListTokenBox,proxyContractBox],
         fee=int(1e6),
-        sendChangeTo=ergoPadContract.getAddress().getErgoAddress()
+        sendChangeTo=ergoPadContract.toAddress().getErgoAddress()
     )
 
     bootstrapSigned = appKit.signTransactionWithNode(bootstrapUnsigned)
@@ -695,13 +817,64 @@ async def bootstrapRound(req: BootstrapRoundRequest,
         'Proxy NFT': nftId,
         'NFT mint transaction': nftMintSignedTx.getId(),
         'Whitelist token mint and token lock transaction': bootstrapSigned.getId(),
-        'Proxy address': appKit.contractFromTree(proxyNftLockedVestingTree).getAddress().toString()
+        'Proxy address': appKit.contractFromTree(proxyNftLockedVestingTree).toAddress().toString()
     }
 
-class VestFromProxyRequest(BaseModel):
+@r.get('/activeRounds', name='vesting:activeRounds')
+async def activeRounds():
+    proxyAddress = 'Jf7SDZuaVDGiCwCxC7N2y8cuptH3cgNT1nteJK469effW2gNarYn1AxsYjNcP7zYtvzmVjNPMmE3PYJRMC2E7m3yTDBrHvv9BQ1uoBZ9ijAHnZduK58qcephAxQdgRLkjg31phyvByEu2sbwigdsKbp4vRzXbQjL7Mip4pR9BwCAfGRir27nFnXpcAV4HGBgfTDgsd7ZdEJiHETwxHkMkGNge5KCd6opPUKTHcnVkxN8bUb21DhwHqYDUwKfPsYZ2cmpEgUjp2Nk9J82GfC9ien2Qv99kFnJbAvr7cXQx47PTbH7mp5coDZQa4jweBBUMTTwdyDmHaNxHXo7HiLetMViswACR6PQ5VouP57QSRjEPzFDGVjACBSrKSKwH9Sb8Zo93Q8KrRpVpKfKKtJQ9wrEy5SSfg3kFyM23dhkhaMkDbManVHboxpHXPGkDY7djNjpk91bWPhYhyqDDC6tGGEnVn3zxNjzcJaxutzkjQXabpUTb1toQN2jRgN37Kh4agvpdPjJ8pQhUvBMPUBA1HYLH3JirDmir88oXby2kUi2V7bF4XVjr6JLcz6hjVut19MKncrp715Vf3dhiAMv3K5S88YvzKVJrC6nnVniqgWmthQGF7FyzMSAdaqK9m7BWNquLSW3etPaM42DSxdT4HboAwxN9qk3sevQyuvT3GAC5BiAzNAt9jE3kxoMu6mJVCg59mX6oVcriqUTYtXpjFASTjUJD9Lp1cZMK3JgWj7Pi6BbtqNs2qny2hXZqNHhm7TWVoVMwFB39nD1tXBJEQhu6Gfw6LcnDfxTKWj2AVLTdvkqqW8RSaFrCAxuQhqvEdE5NeHg1PqP2gdS4JhMGwBgkDwnDqJQyPN4NmKP1ncXcVXKVF1VxJ28ZxQe8kQ3VJQqEnhqah'
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+    proxyBoxes = appKit.getUnspentBoxes(proxyAddress)
+    result = {'activeRounds': [], 'soldOutRounds': []}
+    for proxyBox in proxyBoxes:
+        logging.info(proxyBox)
+        tokens = list(proxyBox.getTokens())
+        roundInfo = getTokenInfo(tokens[0].getId().toString())
+        if len(tokens) > 1:
+            vestedInfo = getTokenInfo(tokens[1].getId().toString())
+            result['activeRounds'].append({'roundName': roundInfo["name"], 'proxyNFT': tokens[0].getId().toString(), 'remaining': tokens[1].getValue()*10**(-1*vestedInfo["decimals"])})
+        else:
+            result['soldOutRounds'].append({'roundName': roundInfo["name"], 'proxyNFT': tokens[0].getId().toString()})
+    return result
+
+class RequiredNergTokensRequest(BaseModel):
     proxyNFT: str
     vestingAmount: Decimal
     sigUSDAmount: Decimal
+
+@r.post('/requiredNergTokens', name="vesting:requiredNergTokens")
+async def requiredNergTokens(req: RequiredNergTokensRequest):
+    proxyBox = getNFTBox(req.proxyNFT)
+    whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
+    vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
+    roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
+    priceNum = roundParameters[3]
+    priceDenom = roundParameters[4]
+    vestedTokenInfo = getTokenInfo(vestedTokenId)
+    oracleInfo = await ergusdoracle()
+    nErgPerUSD = oracleInfo["latest_datapoint"]
+    sigUsdDecimals = int(2)
+    sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
+    whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
+    requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
+    nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
+
+    result = {
+        'nErgRequired': nergRequired,
+        'tokens': [
+            {
+                'tokenId': whitelistTokenId,
+                'amount': whitelistTokens
+            }
+        ]
+    }
+
+    if sigUsdTokens > 0:
+        result['tokens'].append({'tokenId': sigusd, 'amount': sigUsdTokens})
+
+    return result
+
+class VestFromProxyRequest(RequiredNergTokensRequest):   
     address: str
     utxos: list[str] = []
 
@@ -717,17 +890,13 @@ async def vestFromProxy(req: VestFromProxyRequest):
     priceNum = roundParameters[3]
     priceDenom = roundParameters[4]
     vestedTokenInfo = getTokenInfo(vestedTokenId)
-    oracleInfo = await ergusdoracle()
-    logging.info(oracleInfo)
-    nErgPerUSD = oracleInfo["latest_datapoint"]
+    oracleInfo = getNFTBox(ergUsdOracleNFT)
+    nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
     sigUsdDecimals = int(2)
     sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
     whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
     requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
     nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
-    logging.info(nErgPerUSD)
-    logging.info((requiredSigUSDTokens-sigUsdTokens))
-    logging.info((nErgPerUSD*10**(-1*sigUsdDecimals)))
     userInputs = list[InputBox]
     if len(req.utxos) == 0:
         tokensToSpend = {whitelistTokenId: whitelistTokens}
@@ -737,7 +906,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
     else:
         userInputs = appKit.getBoxesById(req.utxos)
     inputs = list(appKit.getBoxesById([proxyBox["boxId"]])) + list(userInputs)
-    dataInputs = list(appKit.getBoxesById([oracleInfo["current_epoch_id"]]))
+    dataInputs = list(appKit.getBoxesById([oracleInfo["boxId"]]))
     proxyOutput = appKit.buildOutBox(
         value = inputs[0].getValue(),
         tokens = {
@@ -790,8 +959,12 @@ async def vestFromProxy(req: VestFromProxyRequest):
         sendChangeTo=Address.create(req.address).getErgoAddress()
     )
 
-    signedTx = appKit.signTransactionWithNode(unsignedTx)
+    # signedTx = appKit.signTransactionWithNode(unsignedTx)
 
-    return appKit.sendTransaction(signedTx)
+    # return appKit.sendTransaction(signedTx)
+
+    
+
+    return appKit.unsignedTxToJson(unsignedTx)
 
 
