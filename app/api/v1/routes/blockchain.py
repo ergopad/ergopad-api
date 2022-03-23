@@ -181,6 +181,10 @@ def getEmmissionAmount(tokenId):
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
 def ergopadInCirculation():
+    # check cache
+    cached = cache.get("get_api_blockchain_ergopad_in_circulation")
+    if cached:
+        return cached
     try:
         con = create_engine(EXPLORER)
         supply = totalSupply('d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413')
@@ -254,6 +258,8 @@ def ergopadInCirculation():
         reserved = 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
         ergopadInCirculation = supply - stakePool - vested - reserved - emitted
 
+        # set cache
+        cache.set("get_api_blockchain_ergopad_in_circulation", ergopadInCirculation) # default 15 min TTL
         return ergopadInCirculation
         
     except Exception as e:
@@ -263,6 +269,10 @@ def ergopadInCirculation():
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
 def totalSupply(tokenId):
+    # check cache
+    cached = cache.get(f"get_api_blockchain_total_supply_{tokenId}")
+    if cached:
+        return cached
     try:
         # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)
         # ergopad: d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413
@@ -293,6 +303,8 @@ def totalSupply(tokenId):
         res = con.execute(sqlTotalSupply).fetchone()
         totalSupply = res['totalSupply']
 
+        # set cache
+        cache.set(f"get_api_blockchain_total_supply_{tokenId}", totalSupply) # default 15 min TTL
         return totalSupply
         
     except Exception as e:
@@ -430,13 +442,17 @@ def getUnspentStakeBoxesFromExplorerDB():
                 -- R4 penalty
                 -- R5 stake key
                 o.additional_registers as additional_registers,
+                -- erg value
+                o.value as value,
+                -- address
+                o.address as address,
                 a.token_id as token_id,
                 -- index of the token in assets list
                 -- 0 stake token
                 -- 1 ergopad staked
                 a.index as index,
-                 -- amount of token in the box
-                a.value as value
+                -- amount of token in the box
+                a.value as token_value
             from
                 node_outputs o
                 join node_assets a on a.box_id = o.box_id
@@ -464,12 +480,14 @@ def getUnspentStakeBoxesFromExplorerDB():
         boxes = {}
         for data in res:
             if data["box_id"] in boxes:
-                boxes[data["box_id"]]["assets"].insert(data["index"], {"tokenId": data["token_id"], "index": data["index"], "amount": data["value"]})
+                boxes[data["box_id"]]["assets"].insert(data["index"], {"tokenId": data["token_id"], "index": data["index"], "amount": data["token_value"]})
             else:
                 boxes[data["box_id"]] = {
                     "boxId": data["box_id"],
                     "additionalRegisters": data["additional_registers"],
-                    "assets": [{"tokenId": data["token_id"], "index": data["index"], "amount": data["value"]}]
+                    "address": data["address"],
+                    "value": data["value"],
+                    "assets": [{"tokenId": data["token_id"], "index": data["index"], "amount": data["token_value"]}]
                 }
         return list(boxes.values())
         
