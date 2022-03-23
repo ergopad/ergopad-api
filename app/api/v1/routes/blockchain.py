@@ -442,13 +442,17 @@ def getUnspentStakeBoxesFromExplorerDB():
                 -- R4 penalty
                 -- R5 stake key
                 o.additional_registers as additional_registers,
+                -- erg value
+                o.value as value,
+                -- address
+                o.address as address,
                 a.token_id as token_id,
                 -- index of the token in assets list
                 -- 0 stake token
                 -- 1 ergopad staked
                 a.index as index,
-                 -- amount of token in the box
-                a.value as value
+                -- amount of token in the box
+                a.value as token_value
             from
                 node_outputs o
                 join node_assets a on a.box_id = o.box_id
@@ -476,12 +480,14 @@ def getUnspentStakeBoxesFromExplorerDB():
         boxes = {}
         for data in res:
             if data["box_id"] in boxes:
-                boxes[data["box_id"]]["assets"].insert(data["index"], {"tokenId": data["token_id"], "index": data["index"], "amount": data["value"]})
+                boxes[data["box_id"]]["assets"].insert(data["index"], {"tokenId": data["token_id"], "index": data["index"], "amount": data["token_value"]})
             else:
                 boxes[data["box_id"]] = {
                     "boxId": data["box_id"],
                     "additionalRegisters": data["additional_registers"],
-                    "assets": [{"tokenId": data["token_id"], "index": data["index"], "amount": data["value"]}]
+                    "address": data["address"],
+                    "value": data["value"],
+                    "assets": [{"tokenId": data["token_id"], "index": data["index"], "amount": data["token_value"]}]
                 }
         return list(boxes.values())
         
