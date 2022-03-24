@@ -189,17 +189,16 @@ async def unstake(req: UnstakeRequest):
             inputs = [stakeStateBox["boxId"],req.stakeBox]+req.utxos
             inputsRaw = getInputBoxes(inputs,txFormat=TXFormat.NODE)
 
-            request =  {
-                    "requests": outputs,
-                    "fee": int(0.001*nergsPerErg),
-                    "inputsRaw": inputsRaw
-                }
-
+            tx = {
+                "requests": outputs,
+                "fee": int(0.001*nergsPerErg),
+                "inputsRaw": inputsRaw
+            }
             if req.txFormat==TXFormat.NODE:
-                return request
-            
-            logging.info(request)
-            res = requests.post(f'{CFG.node}/wallet/transaction/generateUnsigned', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request)   
+                return tx
+            logging.info(tx)
+
+            res = requests.post(f'{CFG.node}/wallet/transaction/generateUnsigned', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=tx)   
             logging.info(res.content)
             unsignedTX = res.json()
             if req.txFormat==TXFormat.EIP_12:
@@ -232,10 +231,10 @@ async def unstake(req: UnstakeRequest):
             return result
         else:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake box')
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during unstaking')
-
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.get("/snapshot/", name="staking:snapshot")
 def snapshot(
@@ -266,8 +265,7 @@ def snapshot(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during snapshot')
-
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 def validPenalty(startTime: int):
     currentTime = int(time()*1000)
@@ -336,78 +334,88 @@ async def staked(req: AddressList):
             'totalStaked': totalStaked,
             'addresses': stakePerAddress
         }
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during staked')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.get("/status/", name="staking:status")
 def stakingStatus():
-    # check cache
-    cached = cache.get(f"get_api_staking_status")
-    if cached:
-        return cached
+    try:
+        # check cache
+        cached = cache.get(f"get_api_staking_status")
+        if cached:
+            return cached
 
-    stakeStateBox = getNFTBox(CFG.stakeStateNFT)
-    stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
+        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
+        stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
 
-    totalStaked = stakeStateR4[0]
+        totalStaked = stakeStateR4[0]
 
-    apy = 29300000.0*36500/totalStaked
+        apy = 29300000.0*36500/totalStaked
 
-    ret = {
-        'Total amount staked': totalStaked/10**2,
-        'Staking boxes': stakeStateR4[2],
-        'Cycle start': stakeStateR4[3],
-        'APY': apy
-    }
+        ret = {
+            'Total amount staked': totalStaked/10**2,
+            'Staking boxes': stakeStateR4[2],
+            'Cycle start': stakeStateR4[3],
+            'APY': apy
+        }
 
-    # cache and return
-    cache.set(f"get_api_staking_status", ret, timeout=300)
-    return ret
+        # cache and return
+        cache.set(f"get_api_staking_status", ret, timeout=300)
+        return ret
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 def compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox, emissionR4):
-    emissionAssets = [{
-                    'tokenId': CFG.emissionNFT,
-                    'amount': 1
-                }]
-    if totalReward < emissionBox["assets"][1]["amount"]:
-        emissionAssets.append({
-            'tokenId': CFG.stakedTokenID,
-            'amount': emissionBox["assets"][1]["amount"]-totalReward
-        })
+    try:
+        emissionAssets = [{
+                        'tokenId': CFG.emissionNFT,
+                        'amount': 1
+                    }]
+        if totalReward < emissionBox["assets"][1]["amount"]:
+            emissionAssets.append({
+                'tokenId': CFG.stakedTokenID,
+                'amount': emissionBox["assets"][1]["amount"]-totalReward
+            })
 
-    emissionOutput = {
-        'value': emissionBox["value"],
-        'address': emissionBox["address"],
-        'assets': emissionAssets,
-        'registers': {
-            'R4': encodeLongArray([
-                emissionR4[0],
-                emissionR4[1],
-                emissionR4[2]-len(stakeBoxes),
-                emissionR4[3]
-            ])
+        emissionOutput = {
+            'value': emissionBox["value"],
+            'address': emissionBox["address"],
+            'assets': emissionAssets,
+            'registers': {
+                'R4': encodeLongArray([
+                    emissionR4[0],
+                    emissionR4[1],
+                    emissionR4[2]-len(stakeBoxes),
+                    emissionR4[3]
+                ])
+            }
         }
-    }
 
-    txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
+        txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
 
-    inBoxesRaw = []
-    for box in [emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
-        res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
-        logging.info(box)
-        if res.ok:
-            inBoxesRaw.append(res.json()['bytes'])
-        else:
-            return res
+        inBoxesRaw = []
+        for box in [emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
+            res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
+            logging.info(box)
+            if res.ok:
+                inBoxesRaw.append(res.json()['bytes'])
+            else:
+                return res
 
-    request =  {
+        tx = {
             'requests': [emissionOutput]+stakeBoxesOutput,
             'fee': int(txFee),
             'inputsRaw': inBoxesRaw
         }
+        return tx
 
-    return request
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.post("/compound/", name="staking:compound")
 async def compound(
@@ -416,18 +424,28 @@ async def compound(
     # current_user=Depends(get_current_active_superuser)
 ):
     try:
-        emissionBox = getNFTBox(CFG.emissionNFT)
-        emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
-        if emissionR4[2] <= 0:
-            return {'remainingStakers': 0}
         stakeBoxes = []
         stakeBoxesOutput = []
         totalReward = 0
+
+        # emmission box contains current staking info        
+        emissionBox = getNFTBox(CFG.emissionNFT)
+        emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
+        
+        # emission box R4[2] contains current remaining stakers
+        if emissionR4[2] <= 0: 
+            return {'remainingStakers': 0}
+
+        # iterate over all staking boxes
         checkBoxes = getUnspentStakeBoxes()
         for box in checkBoxes:
-            if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
+
+            # make sure token exists, and ??
+            if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
                 boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
                 if boxR4[0] == emissionR4[1]:
+
+                    # calc rewards and build tx
                     stakeBoxes.append(box["boxId"])
                     stakeReward = int(box["assets"][1]["amount"] * emissionR4[3] / emissionR4[0])
                     totalReward += stakeReward
@@ -452,9 +470,11 @@ async def compound(
                             'R5': box["additionalRegisters"]["R5"]["serializedValue"]
                         }
                     })
+
+            # every <numBoxes>, go ahead and submit tx
             if len(stakeBoxes)>=req.numBoxes:
-                request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)
-                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)
+                tx = compoundTX(stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
+                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)
                 stakeBoxes = []
                 stakeBoxesOutput = []
                 totalReward = 0
@@ -463,15 +483,20 @@ async def compound(
                 emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
 
         if len(stakeBoxes) > 0: 
-            request = compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox,emissionR4)
-            res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)    
-            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': res.json()}
+            tx = compoundTX(stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
+            msg = '...'
+            try: 
+                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)   
+                msg = res.text
+            except: 
+                msg = 'invalid respons from <node>/wallet/transaction/send'
+            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': msg}
         else:
-            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes)} 
+            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': ''}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during compounding')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.post("/emit/", name="staking:emit")
 async def emit(
@@ -577,14 +602,14 @@ async def emit(
             else:
                 return res
 
-        request =  {
-                'requests': [stakeStateOutput,stakePoolOutput,emissionOutput],
-                'fee': int(0.001*nergsPerErg),
-                'inputsRaw': inBoxesRaw
-            }
+        tx = {
+            'requests': [stakeStateOutput,stakePoolOutput,emissionOutput],
+            'fee': int(0.001*nergsPerErg),
+            'inputsRaw': inBoxesRaw
+        }
+        logging.info(tx)
 
-        logging.info(request)
-        res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=request)  
+        res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)  
         logging.info(res.content) 
 
         return {
@@ -597,7 +622,7 @@ async def emit(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during emission')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.post("/stake/", name="staking:stake")
 async def stake(req: StakeRequest):
@@ -676,17 +701,16 @@ async def stake(req: StakeRequest):
         inputsRaw = getInputBoxes(inputs,txFormat=TXFormat.NODE)
         outputs = [stakeStateOutput,stakeOutput,userOutput]
 
-        request =  {
-                "requests": outputs,
-                "fee": int(0.001*nergsPerErg),
-                "inputsRaw": inputsRaw
-            }
-
+        tx = {
+            "requests": outputs,
+            "fee": int(0.001*nergsPerErg),
+            "inputsRaw": inputsRaw
+        }
         if req.txFormat==TXFormat.NODE:
-            return request
-        
-        logging.info(request)
-        res = requests.post(f'{CFG.node}/wallet/transaction/generateUnsigned', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request) 
+            return tx        
+        logging.info(tx)
+
+        res = requests.post(f'{CFG.node}/wallet/transaction/generateUnsigned', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=tx) 
         logging.info(res.content)  
         unsignedTX = res.json()
         if req.txFormat==TXFormat.EIP_12:
@@ -714,125 +738,116 @@ async def stake(req: StakeRequest):
         logging.info(result)
 
         return result
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Undefined error during staking')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 # bootstrap staking setup
 @r.post("/bootstrap/", name="staking:bootstrap")
 async def bootstrapStaking(req: BootstrapRequest):
+    try:
+        stakedToken = getTokenInfo(req.stakedTokenID)
+        stakedTokenDecimalMultiplier = 10**stakedToken["decimals"]
+        
+        stakeStateNFT = getTokenInfo(req.stakeStateNFT)
+        if (stakeStateNFT["name"] != f'{stakedToken["name"]} Stake State'):
+            return({"success": False, "Error": f"Wrong name for stake state NFT {stakeStateNFT['name']}"})
+        if (stakeStateNFT["emissionAmount"]>1):
+            return({"success": False, "Error": f"There should only be one {stakeStateNFT['name']}"})
 
-    stakedToken = getTokenInfo(req.stakedTokenID)
-    stakedTokenDecimalMultiplier = 10**stakedToken["decimals"]
-    stakeStateNFT = getTokenInfo(req.stakeStateNFT)
+        stakePoolNFT = getTokenInfo(req.stakePoolNFT)
+        if (stakePoolNFT["name"] != f'{stakedToken["name"]} Stake Pool'):
+            return({"success": False, "Error": f"Wrong name for stake pool NFT {stakePoolNFT['name']}"})
+        if (stakePoolNFT["emissionAmount"]>1):
+            return({"success": False, "Error": f"There should only be one {stakePoolNFT['name']}"})
 
-    if (stakeStateNFT["name"] != f'{stakedToken["name"]} Stake State'):
-        return({"success": False, "Error": f"Wrong name for stake state NFT {stakeStateNFT['name']}"})
-    if (stakeStateNFT["emissionAmount"]>1):
-        return({"success": False, "Error": f"There should only be one {stakeStateNFT['name']}"})
+        emissionNFT = getTokenInfo(req.emissionNFT)
+        if (emissionNFT["name"] != f'{stakedToken["name"]} Emission'):
+            return({"success": False, "Error": f"Wrong name for emission NFT {emissionNFT['name']}"})
+        if (emissionNFT["emissionAmount"]>1):
+            return({"success": False, "Error": f"There should only be one {emissionNFT['name']}"})
 
-    stakePoolNFT = getTokenInfo(req.stakePoolNFT)
+        stakeTokenID = getTokenInfo(req.stakeTokenID)
+        if (stakeTokenID["name"] != f'{stakedToken["name"]} Stake Token'):
+            return({"success": False, "Error": f"Wrong name for stake token {stakeTokenID['name']}"})
+        if (stakeTokenID["emissionAmount"]<1000000000):
+            return({"success": False, "Error": f"There should only be at least a billion {stakeTokenID['name']}"})
 
-    if (stakePoolNFT["name"] != f'{stakedToken["name"]} Stake Pool'):
-        return({"success": False, "Error": f"Wrong name for stake pool NFT {stakePoolNFT['name']}"})
-    if (stakePoolNFT["emissionAmount"]>1):
-        return({"success": False, "Error": f"There should only be one {stakePoolNFT['name']}"})
+        params = {}
+        params["stakedTokenID"] = hexstringToB64(req.stakedTokenID)
+        params["stakePoolNFT"] = hexstringToB64(req.stakePoolNFT)
+        params["emissionNFT"] = hexstringToB64(req.emissionNFT)
+        params["stakeStateNFT"] = hexstringToB64(req.stakeStateNFT)
+        params["stakeTokenID"] = hexstringToB64(req.stakeTokenID)
+        params["timestamp"] = int(time())
 
-    emissionNFT = getTokenInfo(req.emissionNFT)
+        emissionAddress = getErgoscript("emission",params=params)
+        stakePoolAddress = getErgoscript("stakePool", params=params)
+        stakeAddress = getErgoscript("stake",params=params)
+        stakeWallet = Wallet(stakeAddress)
+        stakeErgoTreeBytes = bytes.fromhex(stakeWallet.ergoTree()[2:])
+        stakeHash = b64encode(blake2b(stakeErgoTreeBytes, digest_size=32).digest()).decode('utf-8')
 
-    if (emissionNFT["name"] != f'{stakedToken["name"]} Emission'):
-        return({"success": False, "Error": f"Wrong name for emission NFT {emissionNFT['name']}"})
-    if (emissionNFT["emissionAmount"]>1):
-        return({"success": False, "Error": f"There should only be one {emissionNFT['name']}"})
+        params["stakeContractHash"] = stakeHash
 
-    stakeTokenID = getTokenInfo(req.stakeTokenID)
-
-    if (stakeTokenID["name"] != f'{stakedToken["name"]} Stake Token'):
-        return({"success": False, "Error": f"Wrong name for stake token {stakeTokenID['name']}"})
-    if (stakeTokenID["emissionAmount"]<1000000000):
-        return({"success": False, "Error": f"There should only be at least a billion {stakeTokenID['name']}"})
-
-    params = {}
-    params["stakedTokenID"] = hexstringToB64(req.stakedTokenID)
-    params["stakePoolNFT"] = hexstringToB64(req.stakePoolNFT)
-    params["emissionNFT"] = hexstringToB64(req.emissionNFT)
-    params["stakeStateNFT"] = hexstringToB64(req.stakeStateNFT)
-    params["stakeTokenID"] = hexstringToB64(req.stakeTokenID)
-    params["timestamp"] = int(time())
-
-
-    emissionAddress = getErgoscript("emission",params=params)
-
-    stakePoolAddress = getErgoscript("stakePool", params=params)
-
-    stakeAddress = getErgoscript("stake",params=params)
-
-    stakeWallet = Wallet(stakeAddress)
-    stakeErgoTreeBytes = bytes.fromhex(stakeWallet.ergoTree()[2:])
-
-    stakeHash = b64encode(blake2b(stakeErgoTreeBytes, digest_size=32).digest()).decode('utf-8')
-
-    params["stakeContractHash"] = stakeHash
-
-    stakeStateAddress = getErgoscript("stakeState",params=params)
-
-    stakePoolBox = {
-        'address': stakePoolAddress,
-        'value': int(0.001*nergsPerErg),
-        'registers': {
-            'R4': encodeLongArray([int(req.emissionAmount*stakedTokenDecimalMultiplier)])
-        },
-        'assets': [
-            {
-                'tokenId': req.stakePoolNFT,
-                'amount': 1
+        stakeStateAddress = getErgoscript("stakeState",params=params)
+        stakePoolBox = {
+            'address': stakePoolAddress,
+            'value': int(0.001*nergsPerErg),
+            'registers': {
+                'R4': encodeLongArray([int(req.emissionAmount*stakedTokenDecimalMultiplier)])
             },
-            {
-                'tokenId': req.stakedTokenID,
-                'amount': req.stakeAmount*stakedTokenDecimalMultiplier
-            }
-        ]
-    }
+            'assets': [
+                {
+                    'tokenId': req.stakePoolNFT,
+                    'amount': 1
+                },
+                {
+                    'tokenId': req.stakedTokenID,
+                    'amount': req.stakeAmount*stakedTokenDecimalMultiplier
+                }
+            ]
+        }
 
-    stakeStateBox = {
-        'address': stakeStateAddress,
-        'value': int(0.001*nergsPerErg),
-        'registers': {
-            'R4': encodeLongArray([0,0,0,int(time()*1000),req.cycleDuration_ms])
-        },
-        'assets': [
-            {
-                'tokenId': req.stakeStateNFT,
-                'amount': 1
+        stakeStateBox = {
+            'address': stakeStateAddress,
+            'value': int(0.001*nergsPerErg),
+            'registers': {
+                'R4': encodeLongArray([0,0,0,int(time()*1000),req.cycleDuration_ms])
             },
-            {
-                'tokenId': req.stakeTokenID,
-                'amount': 1000000000
-            }
-        ]
-    }
+            'assets': [
+                {
+                    'tokenId': req.stakeStateNFT,
+                    'amount': 1
+                },
+                {
+                    'tokenId': req.stakeTokenID,
+                    'amount': 1000000000
+                }
+            ]
+        }
 
-    emissionBox = {
-        'address': emissionAddress,
-        'value': int(0.001*nergsPerErg),
-        'registers': {
-            'R4': encodeLongArray([0,-1,0,req.emissionAmount*stakedTokenDecimalMultiplier])
-        },
-        'assets': [
-            {
-                'tokenId': req.emissionNFT,
-                'amount': 1
-            }
-        ]
-    }
+        emissionBox = {
+            'address': emissionAddress,
+            'value': int(0.001*nergsPerErg),
+            'registers': {
+                'R4': encodeLongArray([0,-1,0,req.emissionAmount*stakedTokenDecimalMultiplier])
+            },
+            'assets': [
+                {
+                    'tokenId': req.emissionNFT,
+                    'amount': 1
+                }
+            ]
+        }
 
+        res = {
+            'requests': [stakeStateBox,emissionBox,stakePoolBox],
+            'fee': int(0.001*nergsPerErg)
+        }
+        return(res)
 
-    request = {
-                'requests': [stakeStateBox,emissionBox,stakePoolBox],
-                'fee': int(0.001*nergsPerErg)
-            }
-    
-
-    return(request)
-
-    
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')

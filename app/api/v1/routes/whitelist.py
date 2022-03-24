@@ -214,7 +214,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: {e}')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to save whitelist request')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
 
 
 async def checkEventConstraints(whitelist: Whitelist):
@@ -283,7 +283,8 @@ async def whitelistInfo(eventName):
         }
 
     except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid whitelist request')
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
 # endregion ROUTES
 
 # MAIN
