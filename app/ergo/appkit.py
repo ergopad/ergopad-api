@@ -45,6 +45,9 @@ myself = lambda: inspect.stack()[1][3]
 
 CFG = Config[Network]
 
+class ErgoException(Exception):
+    pass
+
 class ErgoValueT(Enum):
     Long = 0,
     ByteArray = 1,
@@ -64,7 +67,7 @@ class ErgoAppKit:
             self._explorer = None
         self._addrEnc = ErgoAddressEncoder(self._networkType.networkPrefix)
 
-    def compileErgoScript(self, ergoScript: str, constants: dict[str,typing.Any] = {}) -> ErgoTree:
+    def compileErgoScript(self, ergoScript: str, constants: Dict[str,typing.Any] = {}) -> ErgoTree:
         return JavaHelpers.compile(constants,ergoScript,self._networkType.networkPrefix)
 
     def getBlockChainContext(self) -> BlockchainContextImpl:
@@ -92,7 +95,7 @@ class ErgoAppKit:
 
         return tb.build()
 
-    def getBoxesById(self, boxIds: list[str]) -> list[InputBox]:
+    def getBoxesById(self, boxIds: List[str]) -> List[InputBox]:
         ctx = self.getBlockChainContext()
         _ok = self._client.getOkBuilder().build()
         _retrofit = self._client.getAdapterBuilder().client(_ok).build()
@@ -112,7 +115,7 @@ class ErgoAppKit:
     def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract) -> InputBox:
         return self.buildOutBox(value, tokens, registers, contract).convertToInputWith("ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d", 0)
 
-    def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: dict[str,int] = {}) -> list[InputBox]:
+    def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
         ctx = self.getBlockChainContext()
         tts = []
         for token in tokensToSpend:
@@ -195,14 +198,20 @@ class ErgoAppKit:
             unsignedInput.setBoxId(unsignedTx.getInputs()[i].getId().toString())
             unsignedInput.setExtension(scala.collection.JavaConversions.mapAsJavaMap(input.extension().values()))
             unsignedErgoTx = unsignedErgoTx.addInputsItem(unsignedInput)
-        unsignedErgoTx.setDataInputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionDataInput())).to(unsignedErgoLikeTx.dataInputs()))
+        if unsignedErgoLikeTx.dataInputs().length() > 0:
+            unsignedErgoTx.setDataInputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionDataInput())).to(unsignedErgoLikeTx.dataInputs()))
         unsignedErgoTx.setOutputs(Iso.inverseIso(Iso.JListToIndexedSeq(ScalaBridge.isoErgoTransactionOutput())).to(unsignedErgoLikeTx.outputs()))
         signRequest.setTx(unsignedErgoTx)
         api = self._client.createService(WalletApi)
-        ergoTx = api.walletTransactionSign(signRequest).execute().body()
-        tx = ScalaBridge.isoErgoTransaction().to(ergoTx)
-        signedTx = SignedTransactionImpl(self.getBlockChainContext(),tx,0)
-        return signedTx
+        response = api.walletTransactionSign(signRequest).execute()
+        if response.isSuccessful():
+            ergoTx = response.body()
+            tx = ScalaBridge.isoErgoTransaction().to(ergoTx)
+            signedTx = SignedTransactionImpl(self.getBlockChainContext(),tx,0)
+            return signedTx
+        else:
+            error = json.loads(response.errorBody().string())
+            raise ErgoException(f'{error["reason"]}: {error["detail"]}')
 
     def getUnspentBoxes(self, address: str) -> List[InputBox]:
         ctx = self.getBlockChainContext()
@@ -233,11 +242,9 @@ class ErgoAppKit:
             dataInputs.append(json.loads(di.toJson(False)))
         outputs = []
         for o in unsignedTx.getOutputs():
-            logging.info(o)
             assets = []
             for t in o.getTokens():
-                assets.append({'tokenId': str(t.getId().toString()), 'amount': str(t.getValue())})
-            logging.info(assets)    
+                assets.append({'tokenId': str(t.getId().toString()), 'amount': str(t.getValue())})  
             additionalRegisters = {}
             r = 4
             for additionalRegister in o.getRegisters():
