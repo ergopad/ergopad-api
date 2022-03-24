@@ -1,39 +1,59 @@
-{{
+{
     //NFTLockedVesting, Vesting Key Box => NFTLockedVesting, Vesting Key + RedeemableTokens
-    val blockTime = CONTEXT.preHeader.timestamp
-    val redeemPeriod = SELF.R5[Long].get
-    val redeemAmount = SELF.R6[Long].get
-    val vestingStart = SELF.R7[Long].get
-    val totalVested = SELF.R8[Long].get
-    val timeVested = blockTime - vestingStart
-    val periods = timeVested/redeemPeriod
-    val redeemed = totalVested - SELF.tokens(0)._2
-    val totalRedeemable = periods * redeemAmount
-    val redeemableTokens = if (totalVested - totalRedeemable < redeemAmount) totalVested - redeemed else totalRedeemable - redeemed
 
-    val vestingKeyInput = allOf(Coll(
-        INPUTS(1).tokens.exists({{(token: (Coll[Byte], Long)) => token._1 == SELF.R4[Coll[Byte]].get}}),
-        INPUTS(0).id == SELF.id
-    ))
+    val blockTime           = CONTEXT.preHeader.timestamp
 
-    val redeemedOutput = allOf(Coll(OUTPUTS(1).propositionBytes == INPUTS(1).propositionBytes, 
-                                    OUTPUTS(1).tokens.size==2,
-                                    OUTPUTS(1).tokens(0)._1 == SELF.R4[Coll[Byte]].get,
-                                    OUTPUTS(1).tokens(1)._1 == SELF.tokens(0)._1,
-                                    OUTPUTS(1).tokens(1)._2 == redeemableTokens))
+    val redeemPeriod        = SELF.R4[Coll[Long]].get(0)
+    val numberOfPeriods     = SELF.R4[Coll[Long]].get(1)
+    val vestingStart        = SELF.R4[Coll[Long]].get(2)
+    val totalVested         = SELF.R4[Coll[Long]].get(3)
+    val vestingKeyId        = SELF.R5[Coll[Byte]].get
 
-    val selfOutput = SELF.tokens(0)._2 == redeemableTokens || //Either all remaining tokens are taken out OR
-                        allOf(Coll(OUTPUTS(0).value == SELF.value, //There is an output box with the exact same characteristics as the current box
-                                                    OUTPUTS(0).propositionBytes == SELF.propositionBytes,
-                                                    OUTPUTS(0).tokens(0)._1 == SELF.tokens(0)._1,
-                                                    OUTPUTS(0).tokens(0)._2 == SELF.tokens(0)._2 - redeemableTokens,
-                                                    OUTPUTS(0).R4[Coll[Byte]].get == SELF.R4[Coll[Byte]].get,
-                                                    OUTPUTS(0).R5[Long].get == SELF.R5[Long].get,
-                                                    OUTPUTS(0).R6[Long].get == SELF.R6[Long].get,
-                                                    OUTPUTS(0).R7[Long].get == SELF.R7[Long].get,
-                                                    OUTPUTS(0).R8[Long].get == SELF.R8[Long].get
-                        ))
+    val timeVested          = blockTime - vestingStart
+    val periods             = timeVested/redeemPeriod
+    val redeemed            = totalVested - SELF.tokens(0)._2
+    val totalRedeemable     = periods * totalVested / numberOfPeriods
 
-    // check for proper tokenId?
+    /*This is a test to find out whether we have arrived at the final redeeming period, which might 
+      have extra tokens due to rounding after dividing by amount of periods.*/
+    val redeemableTokens    = if (periods >= numberOfPeriods) 
+                                totalVested - redeemed 
+                              else 
+                                totalRedeemable - redeemed
+
+    /*If we are in the final redeeming period there will not be a vesting box in the output and the 
+      user box will be the first output*/
+    val userOutputBox       = if (SELF.tokens(0)._2 == redeemableTokens) 
+                                OUTPUTS(0) 
+                              else 
+                                OUTPUTS(1)
+
+    val vestingOutputBox    = OUTPUTS(0)
+
+    val vestingKeyInput     = allOf(Coll(
+                                INPUTS(1).tokens.exists({{(token: (Coll[Byte], Long)) => token._1 == vestingKeyId}}),
+                                INPUTS(0).id == SELF.id
+                            ))
+
+    val redeemedOutput      = allOf(Coll(
+                                userOutputBox.propositionBytes == INPUTS(1).propositionBytes, 
+                                userOutputBox.tokens.size==2,
+                                userOutputBox.tokens(0)._1 == vestingKeyId,
+                                userOutputBox.tokens(1)._1 == SELF.tokens(0)._1,
+                                userOutputBox.tokens(1)._2 == redeemableTokens
+                            ))
+
+    /*We need to make sure that we are in the final period or that we have a vesting box in the output 
+      that is the same as the current vesting box minus the tokens that are redeemed*/
+    val selfOutput          = SELF.tokens(0)._2 == redeemableTokens || 
+                                allOf(Coll(
+                                    vestingOutputBox.value == SELF.value, 
+                                    vestingOutputBox.propositionBytes == SELF.propositionBytes,
+                                    vestingOutputBox.tokens(0)._1 == SELF.tokens(0)._1,
+                                    vestingOutputBox.tokens(0)._2 == SELF.tokens(0)._2 - redeemableTokens,
+                                    vestingOutputBox.R5[Coll[Byte]].get == SELF.R5[Coll[Byte]].get,
+                                    vestingOutputBox.R4[Coll[Long]].get == SELF.R4[Coll[Long]].get
+                                ))
+
     sigmaProp(vestingKeyInput && redeemedOutput && selfOutput)
-}}
+}

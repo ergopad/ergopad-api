@@ -1,14 +1,20 @@
+from decimal import Decimal
 from enum import Enum
+from typing import Dict
+from xmlrpc.client import Boolean
 import requests, json
+from core.auth import get_current_active_superuser
+from ergo.appkit import ErgoAppKit
 from wallet import Wallet
 
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 from time import time
 from api.v1.routes.asset import get_asset_current_price
 from cache.cache import cache
 from config import Config, Network # api specific config
+from pydantic import BaseModel
 
 CFG = Config[Network]
 
@@ -177,6 +183,11 @@ def getEmmissionAmount(tokenId):
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
+
+@r.get("/ergusdoracle", name="blockchain:ergusdoracle")
+async def ergusdoracle():
+    res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
+    return json.loads(res.json())
 
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
@@ -655,6 +666,52 @@ def getErgoscript(name, params={}):
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to build script ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to build script ({e})')
+
+class AirdropRequest(BaseModel):
+    tokenId: str
+    submit: bool = False
+    addresses: Dict[str,Decimal]
+
+@r.post("/airdrop", name="blockchain:airdrop")
+async def airdrop( 
+    req: AirdropRequest,
+    current_user=Depends(get_current_active_superuser)
+):
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+    airdropTokenInfo = getTokenInfo(req.tokenId)
+    nErgRequired = 0
+    tokensRequired = 0
+    outputs = []
+    for address in req.addresses.keys():
+        tokenAmount = int(req.addresses[address]*10**airdropTokenInfo["decimals"])
+        tokensRequired += tokenAmount
+        nErgRequired += int(1e6)
+        outputs.append(appKit.buildOutBox(
+            value=int(1e6),
+            tokens={
+                req.tokenId: tokenAmount
+            },
+            registers=None,
+            contract=appKit.contractFromAddress(address)
+        ))
+    
+    feeRequired = max(int(1e6),int(len(outputs)*int(1e5)))
+
+    inputs = appKit.boxesToSpend(CFG.ergopadWallet,nErgRequired+feeRequired,{req.tokenId: tokensRequired})
+
+    unsignedTx = appKit.buildUnsignedTransaction(
+        inputs=inputs,
+        outputs=outputs,
+        fee=feeRequired,
+        sendChangeTo=appKit.contractFromAddress(CFG.ergopadWallet).toAddress().getErgoAddress()
+    )
+
+    signedTx = appKit.signTransactionWithNode(unsignedTx)
+
+    if req.submit:
+        return appKit.sendTransaction(signedTx)
+    
+    return appKit.unsignedTxToJson(unsignedTx)
 
 #endregion ROUTES
 
