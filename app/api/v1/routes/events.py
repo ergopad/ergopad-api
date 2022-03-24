@@ -67,11 +67,11 @@ def summary(eventName):
             except:
                 pass
 
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid events request')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid events request ({res.text})')
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: events info {e}')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid events request')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')
 
 @r.get("/info/{eventName}")
 def events(eventName):
@@ -112,4 +112,5 @@ def events(eventName):
         return events
 
     except:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid events request')
+        logging.error(f'ERR:{myself()}: events info {e}')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')

@@ -406,7 +406,7 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: allowance remaining ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'allowance remaining')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: allowance remaining ({e})')
 
     logging.info(f'sigusd: 0 (not found)')
     return {'wallet': wallet, 'sigusd': 0.0, 'message': 'not found'}

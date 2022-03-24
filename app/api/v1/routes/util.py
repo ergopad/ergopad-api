@@ -68,42 +68,47 @@ myself = lambda: inspect.stack()[1][3]
 
 @r.post("/email")
 async def email(email: Email, request: Request):
-    # validate referer
-    logging.debug(request.headers)
-    validEmailApply = CFG.validEmailApply
-    referer = request.headers.get('referer') or ''
-    validateMe = request.headers.get('validate_me') or ''
-    isValidReferer = False
-    if referer in validEmailApply: isValidReferer = True
-    if '54.214.59.165' in referer: isValidReferer = True
-    if validateMe == CFG.validateMe: isValidReferer = True
-    if not isValidReferer:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
+    try:
+        # validate referer
+        logging.debug(request.headers)
+        validEmailApply = CFG.validEmailApply
+        referer = request.headers.get('referer') or ''
+        validateMe = request.headers.get('validate_me') or ''
+        isValidReferer = False
+        if referer in validEmailApply: isValidReferer = True
+        if '54.214.59.165' in referer: isValidReferer = True
+        if validateMe == CFG.validateMe: isValidReferer = True
+        if not isValidReferer:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
 
-    usr = CFG.emailUsername
-    pwd = CFG.emailPassword
-    svr = CFG.emailSMTP
-    frm = CFG.emailFrom
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-    
-    # create connection
-    logging.info(f'creating connection for: {svr} as {usr}')
-    con = SMTP(svr, 587)
-    res = con.ehlo()
-    res = con.starttls(context=ctx)
-    if res[0] == 220: logging.info('starttls success')
-    else: logging.error(res)
-    res = con.ehlo()
-    res = con.login(usr, pwd)
-    if res[0] == 235: logging.info('login success')
-    else: logging.error(res)
-    
-    msg = f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}"""
-    res = con.sendmail(frm, email.to, msg) # con.sendmail(frm, 'erickson.winter@gmail.com', msg)
-    if res == {}: logging.info('message sent')
-    else: logging.error(res)
-    
-    return {'status': 'success', 'detail': f'email sent to {email.to}'}
+        usr = CFG.emailUsername
+        pwd = CFG.emailPassword
+        svr = CFG.emailSMTP
+        frm = CFG.emailFrom
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+        
+        # create connection
+        logging.info(f'creating connection for: {svr} as {usr}')
+        con = SMTP(svr, 587)
+        res = con.ehlo()
+        res = con.starttls(context=ctx)
+        if res[0] == 220: logging.info('starttls success')
+        else: logging.error(res)
+        res = con.ehlo()
+        res = con.login(usr, pwd)
+        if res[0] == 235: logging.info('login success')
+        else: logging.error(res)
+        
+        msg = f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}"""
+        res = con.sendmail(frm, email.to, msg) # con.sendmail(frm, 'erickson.winter@gmail.com', msg)
+        if res == {}: logging.info('message sent')
+        else: logging.error(res)
+        
+        return {'status': 'success', 'detail': f'email sent to {email.to}'}
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.post("/compileErgoscript", name="blockchain:sendPayment")
 def compileErgoscript(ergoscript: Ergoscript):
@@ -116,8 +121,8 @@ def compileErgoscript(ergoscript: Ergoscript):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid ergoscript:\n{ergoscript.script}')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to send payment ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to compile ergoscript')
+        logging.error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to compile ergoscript ({e})')
 
 # TEST - send payment from test wallet
 @r.get("/sendPayment/{address}/{nergs}/{tokens}", name="blockchain:sendPayment")
@@ -172,7 +177,7 @@ def sendPayment(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to send payment ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send payment')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to send payment ({e})')
 
 # Utilities
 class InvalidateCacheRequest(BaseModel):
