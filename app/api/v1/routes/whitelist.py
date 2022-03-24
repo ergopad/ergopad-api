@@ -1,21 +1,22 @@
-import requests, json, os
+import inspect
+import logging
 import pandas as pd
-
-from starlette.responses import JSONResponse 
+from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
-from wallet import Wallet, NetworkEnvironment # ergopad.io library
-from fastapi import APIRouter, Response, status #, Request
+from fastapi import APIRouter, status, Request
 from fastapi.encoders import jsonable_encoder
-from typing import Optional
 from pydantic import BaseModel
 from time import time
 from datetime import datetime as dt
-from config import Config, Network # api specific config
+from api.v1.routes.staking import staked, AddressList
+from core.security import get_md5_hash
+from config import Config, Network  # api specific config
+
 CFG = Config[Network]
 
 whitelist_router = r = APIRouter()
 
-#region BLOCKHEADER
+# region BLOCKHEADER
 """
 Whitelist API
 ---------
@@ -26,29 +27,32 @@ Contributor(s): https://github.com/Luivatra
 
 Notes: 
 """
-#endregion BLOCKHEADER
+# endregion BLOCKHEADER
 
-#region INIT
-DEBUG      = CFG.debug
-DATABASE   = CFG.connectionString
+# region INIT
+DEBUG = CFG.debug
+DATABASE = CFG.connectionString
 DATEFORMAT = '%m/%d/%Y %H:%M'
-headers    = {'Content-Type': 'application/json'}
+headers = {'Content-Type': 'application/json'}
 # NOW = int(time()) # !! NOTE: can't use here; will only update once if being imported
-#endregion INIT
+MIN_ERGOPAD_VALUE_FOR_STAKER = 1000
+# endregion INIT
 
-#region LOGGING
-import logging
+# region LOGGING
 levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
+logging.basicConfig(
+    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
 
-import inspect
-myself = lambda: inspect.stack()[1][3]
-#endregion LOGGING
 
-#region CLASSES
-# dat = {'name': 'bob', 'email': 'email', 'qty': 9, 'wallet': '1234', 'handle1': 'h1', 'platform1': 'p1', 'handle2': 'h2', 'platform2': 'p2', 'canInvest': 1, 'hasRisk': 1, 'isIDO': 1}
+def myself(): return inspect.stack()[1][3]
+# endregion LOGGING
+
+
+# region CLASSES
+
+# Whitelist Request Model
 class Whitelist(BaseModel):
-    ergoAddress: str # wallet
+    ergoAddress: str  # wallet
     email: str
     event: str
     name: str
@@ -72,15 +76,19 @@ class Whitelist(BaseModel):
                 'chatPlatform': 'discord',
             }
         }
-#endregion CLASSES
+# endregion CLASSES
 
-#region ROUTES
-@r.post("/signup")
-async def email(whitelist: Whitelist, response: Response):
+
+# region ROUTES
+
+# TODO: update /signup route
+# 1. Switch from pd.Dataframe().to_sql
+# 2. rewrite logic for max sigusd allowance
+@r.post("/signup", name="whitelist:signup")
+async def whitelistSignUp(whitelist: Whitelist, request: Request):
     NOW = int(time())
     try:
         eventName = whitelist.event
-
         logging.debug(DATABASE)
         con = create_engine(DATABASE)
         logging.debug('sql')
@@ -100,6 +108,7 @@ async def email(whitelist: Whitelist, response: Response):
                 , buffer_sigusd
                 , start_dtz
                 , end_dtz
+                , "individualCap"
                 , coalesce(allowance_sigusd, 0.0) as allowance_sigusd
                 , coalesce(spent_sigusd, 0.0) as spent_sigusd
             from "events" evt
@@ -113,26 +122,30 @@ async def email(whitelist: Whitelist, response: Response):
 
         # event not found
         if res == None or len(res) == 0:
-            # response.status_code = status.HTTP_400_BAD_REQUEST
-            # return {'status': 'error', 'message': f'whitelist event, {eventName} not found.'}
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'whitelist event, {eventName} not found.')
 
         # is valid signup window?
         if (NOW < int(res['start_dtz'].timestamp())) or (NOW > int(res['end_dtz'].timestamp())):
-            # response.status_code = status.HTTP_400_BAD_REQUEST
-            # return {'status': 'error', 'message': f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}."}
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}.")
 
         # is funding complete?
         if res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']):
-            # response.status_code = status.HTTP_400_BAD_REQUEST
-            # return {'status': 'error', 'message': f'whitelist funds complete.'}
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'whitelist funds complete.')
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist funds complete.")
 
-        logging.debug(f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
+        # special checks
+        validation = await checkEventConstraints(whitelist)
+        if not validation[0]:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup failed. {validation[1]}")
+
+        logging.debug(
+            f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
         eventId = res['id']
         whitelist.sigValue = int(whitelist.sigValue)
-        
+
+        # does individual cap exceed?
+        if whitelist.sigValue > res['individualCap']:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup individual cap is {res['individualCap']} sigUSD")
+
         # find wallet
         logging.debug(f'connecting to: {CFG.connectionString}')
         con = create_engine(DATABASE)
@@ -146,13 +159,17 @@ async def email(whitelist: Whitelist, response: Response):
 
         # create wallet if it doesn't exist
         if res.rowcount == 0:
-            dfWallet = df[['ergoAddress', 'email', 'socialHandle', 'socialPlatform', 'chatHandle', 'chatPlatform']]
+            dfWallet = df[['ergoAddress', 'email', 'socialHandle',
+                           'socialPlatform', 'chatHandle', 'chatPlatform']]
             dfWallet['network'] = Network
-            dfWallet['lastSeen_dtz'] = dt.fromtimestamp(NOW).strftime(DATEFORMAT)
-            dfWallet['created_dtz'] = dt.fromtimestamp(NOW).strftime(DATEFORMAT)
+            dfWallet['lastSeen_dtz'] = dt.fromtimestamp(
+                NOW).strftime(DATEFORMAT)
+            dfWallet['created_dtz'] = dt.fromtimestamp(
+                NOW).strftime(DATEFORMAT)
             dfWallet = dfWallet.rename(columns={'ergoAddress': 'address'})
             logging.debug(f'save wallet: {dfWallet}')
-            dfWallet.to_sql('wallets', con=con, if_exists='append', index=False)
+            dfWallet.to_sql('wallets', con=con,
+                            if_exists='append', index=False)
 
         # check this wallet has not already registered for this event
         res = con.execute(sqlFindWallet).fetchone()
@@ -161,16 +178,32 @@ async def email(whitelist: Whitelist, response: Response):
         res = con.execute(sqlAlreadyWhitelisted)
         if res.rowcount == 0:
             # add whitelist entry
+            # TODO: clean up logic
             logging.debug(f'found id: {walletId}')
             dfWhitelist = df[['sigValue']]
             dfWhitelist['walletId'] = walletId
             dfWhitelist['eventId'] = eventId
             dfWhitelist['isWhitelist'] = 1
-            dfWhitelist['created_dtz'] = dt.fromtimestamp(NOW).strftime(DATEFORMAT)
-            dfWhitelist = dfWhitelist.rename(columns={'sigValue': 'allowance_sigusd'})
-            dfWhitelist['lastAssemblerStatus'] = dfWhitelist['allowance_sigusd']
-            dfWhitelist['allowance_sigusd'] = 20000
-            dfWhitelist.to_sql('whitelist', con=con, if_exists='append', index=False)
+            dfWhitelist['created_dtz'] = dt.fromtimestamp(
+                NOW).strftime(DATEFORMAT)
+            dfWhitelist = dfWhitelist.rename(
+                columns={'sigValue': 'allowance_sigusd'})
+            dfWhitelist['lastAssemblerStatus'] = dfWhitelist['allowance_sigusd'] # ? why 
+            # dfWhitelist['allowance_sigusd'] = 20000
+            dfWhitelist.to_sql('whitelist', con=con,
+                               if_exists='append', index=False)
+
+            # log ip hash for analytics and backend filtering
+            # secure bcrypt one way hash
+            ipHash = get_md5_hash(request.client.host)
+            dfEventsIp = pd.DataFrame({
+                "walletId": [walletId],
+                "eventId": [eventId],
+                "ipHash": [ipHash]
+            })
+            logging.debug(f'save ipHash: {dfEventsIp}')
+            dfEventsIp.to_sql('eventsIp', con=con,
+                              if_exists='append', index=False)
 
             # whitelist success
             return {'status': 'success', 'detail': f'added to whitelist'}
@@ -181,10 +214,29 @@ async def email(whitelist: Whitelist, response: Response):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: {e}')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to save whitelist request')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
 
-@r.get("/info/{eventName}")
-async def whitelist(eventName):
+
+async def checkEventConstraints(whitelist: Whitelist):
+    # Check special contraints for events
+    # return True if valid else return (False, reason)
+    if whitelist.event == 'staker-seed-paideia-202203wl':
+        # make sure address has ergopad staked
+        address = whitelist.ergoAddress
+        try:
+            stakedRes = await staked(AddressList(addresses=[address]))
+            if stakedRes["totalStaked"] >= MIN_ERGOPAD_VALUE_FOR_STAKER:
+                return (True, "ok")
+            else:
+                return (False, f"Not enough ergopad staked for this address. Min stake required is {MIN_ERGOPAD_VALUE_FOR_STAKER}.")
+        except:
+            return (False, "Explorer API failed. Could not validate if enough ergopad is staked.")
+    else:
+        return (True, "ok")
+
+
+@r.get("/info/{eventName}", name="whitelist:info")
+async def whitelistInfo(eventName):
     NOW = int(time())
     try:
         logging.debug(DATABASE)
@@ -214,26 +266,27 @@ async def whitelist(eventName):
         res = con.execute(sql).fetchone()
         logging.debug(res)
         return {
-            'status': 'success', 
+            'status': 'success',
             'now': NOW,
             'isBeforeSignup': NOW < int(res['start_dtz'].timestamp()),
             'isAfterSignup': NOW > int(res['end_dtz'].timestamp()),
-            'isFundingComplete': False, # res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']),
-            'name': res['name'], 
-            'description': res['description'], 
-            'total_sigusd': res['total_sigusd'], 
-            'buffer_sigusd': res['buffer_sigusd'], 
-            'start_dtz': int(res['start_dtz'].timestamp()), 
-            'end_dtz': int(res['end_dtz'].timestamp()), 
-            'allowance_sigusd': int(res['allowance_sigusd']), 
-            'spent_sigusd': int(res['spent_sigusd']), 
+            'isFundingComplete': res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']),
+            'name': res['name'],
+            'description': res['description'],
+            'total_sigusd': res['total_sigusd'],
+            'buffer_sigusd': res['buffer_sigusd'],
+            'start_dtz': int(res['start_dtz'].timestamp()),
+            'end_dtz': int(res['end_dtz'].timestamp()),
+            'allowance_sigusd': int(res['allowance_sigusd']),
+            'spent_sigusd': int(res['spent_sigusd']),
             'gmt': NOW
         }
 
     except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid whitelist request')
-#endregion ROUTES
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
+# endregion ROUTES
 
-### MAIN
+# MAIN
 if __name__ == '__main__':
     print('API routes: ...')
