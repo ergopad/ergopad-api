@@ -742,8 +742,9 @@ class BootstrapRoundRequest(BaseModel):
     sellerAddress: str
 
 @r.post('/bootstrapRound', name="vesting:bootstrapRound")
-async def bootstrapRound(req: BootstrapRoundRequest, 
-#current_user=Depends(get_current_active_superuser)
+async def bootstrapRound(
+    req: BootstrapRoundRequest, 
+    current_user=Depends(get_current_active_superuser)
 ):
     vestedToken = getTokenInfo(req.tokenId)
     vestedTokenAmount = int(req.roundAllocation*10**vestedToken["decimals"])
@@ -865,7 +866,13 @@ async def activeRounds():
         roundInfo = getTokenInfo(tokens[0].getId().toString())
         if len(tokens) > 1:
             vestedInfo = getTokenInfo(tokens[1].getId().toString())
-            result['activeRounds'].append({'roundName': roundInfo["name"], 'proxyNFT': tokens[0].getId().toString(), 'remaining': tokens[1].getValue()*10**(-1*vestedInfo["decimals"])})
+            whitelistTokenId = list(proxyBox.getRegisters())[3].toHex()[4:]
+            result['activeRounds'].append({
+                'roundName': roundInfo["name"], 
+                'proxyNFT': tokens[0].getId().toString(), 
+                'remaining': tokens[1].getValue()*10**(-1*vestedInfo["decimals"]),
+                'Whitelist tokenId': whitelistTokenId
+                })
         else:
             result['soldOutRounds'].append({'roundName': roundInfo["name"], 'proxyNFT': tokens[0].getId().toString()})
     return result
@@ -913,91 +920,98 @@ class VestFromProxyRequest(RequiredNergTokensRequest):
 
 @r.post('/vestFromProxy', name="vesting:vestFromProxy")
 async def vestFromProxy(req: VestFromProxyRequest):
-    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
-    proxyBox = getNFTBox(req.proxyNFT)
-    roundInfo = getTokenInfo(req.proxyNFT)
-    whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
-    vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
-    sellerAddress = proxyBox["additionalRegisters"]["R6"]["renderedValue"]
-    roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
-    priceNum = roundParameters[3]
-    priceDenom = roundParameters[4]
-    vestedTokenInfo = getTokenInfo(vestedTokenId)
-    oracleInfo = getNFTBox(ergUsdOracleNFT)
-    nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
-    sigUsdDecimals = int(2)
-    sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
-    whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
-    requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
-    nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
-    userInputs = List[InputBox]
-    if len(req.utxos) == 0:
-        tokensToSpend = {whitelistTokenId: whitelistTokens}
-        if req.sigUSDAmount>0:
-            tokensToSpend[sigusd] = sigUsdTokens
-        userInputs = appKit.boxesToSpend(req.address,int(4e6+nergRequired),tokensToSpend)
-    else:
-        userInputs = appKit.getBoxesById(req.utxos)
-    inputs = list(appKit.getBoxesById([proxyBox["boxId"]])) + list(userInputs)
-    dataInputs = list(appKit.getBoxesById([oracleInfo["boxId"]]))
-    proxyOutput = appKit.buildOutBox(
-        value = inputs[0].getValue(),
-        tokens = {
-            req.proxyNFT: 1,
-            vestedTokenId: inputs[0].getTokens()[1].getValue()-whitelistTokens
-        },
-        registers=list(inputs[0].getRegisters()),
-        contract=appKit.contractFromTree(inputs[0].getErgoTree())
-    )
-    with open(f'contracts/NFTLockedVesting.es') as f:
-        script = f.read()
-    nftLockedVestingContractTree = appKit.compileErgoScript(script)
-    vestingOutput = appKit.buildOutBox(
-        value=int(1e6),
-        tokens={
-            vestedTokenId: whitelistTokens
-        },
-        registers=[
-            appKit.ergoValue([
-                roundParameters[0],
-                roundParameters[1],
-                roundParameters[2],
-                whitelistTokens
-            ],ErgoValueT.LongArray),
-            appKit.ergoValue(proxyBox["boxId"],ErgoValueT.ByteArrayFromHex)
-        ],
-        contract=appKit.contractFromTree(nftLockedVestingContractTree)
-    )
-    userOutput = appKit.mintToken(
-        value=int(1e6),
-        tokenId=proxyBox["boxId"],
-        tokenName=f"{roundInfo['name']} Vesting Key",
-        tokenDesc=f'{{"Vesting Round": {roundInfo["name"]}, "Vesting start": "{datetime.fromtimestamp(roundParameters[2]/1000)}", "Periods": {roundParameters[1]}, "Period length": "{timedelta(milliseconds=roundParameters[0]).days} day(s)", "Total vested": {req.vestingAmount} }}',
-        mintAmount=1,
-        decimals=0,
-        contract=appKit.contractFromTree(userInputs[0].getErgoTree())
-    )
-    sellerOutput = appKit.buildOutBox(
-        value=int(1e6)+nergRequired,
-        tokens=tokensToSpend,
-        registers=None,
-        contract=appKit.contractFromTree(appKit.treeFromBytes(bytes.fromhex(sellerAddress)))
-    )
+    try:
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+        proxyBox = getNFTBox(req.proxyNFT)
+        if proxyBox is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
+        roundInfo = getTokenInfo(req.proxyNFT)
+        whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
+        vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
+        sellerAddress = proxyBox["additionalRegisters"]["R6"]["renderedValue"]
+        roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
+        priceNum = roundParameters[3]
+        priceDenom = roundParameters[4]
+        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        oracleInfo = getNFTBox(ergUsdOracleNFT)
+        if oracleInfo is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle box')
+        nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
+        sigUsdDecimals = int(2)
+        sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
+        whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
+        requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
+        nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
+        userInputs = List[InputBox]
+        if len(req.utxos) == 0:
+            tokensToSpend = {whitelistTokenId: whitelistTokens}
+            if req.sigUSDAmount>0:
+                tokensToSpend[sigusd] = sigUsdTokens
+            userInputs = appKit.boxesToSpend(req.address,int(4e6+nergRequired),tokensToSpend)
+        else:
+            userInputs = appKit.getBoxesById(req.utxos)
+        if userInputs is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find input boxes')
+        inputs = list(appKit.getBoxesById([proxyBox["boxId"]])) + list(userInputs)
+        dataInputs = list(appKit.getBoxesById([oracleInfo["boxId"]]))
+        proxyOutput = appKit.buildOutBox(
+            value = inputs[0].getValue(),
+            tokens = {
+                req.proxyNFT: 1,
+                vestedTokenId: inputs[0].getTokens()[1].getValue()-whitelistTokens
+            },
+            registers=list(inputs[0].getRegisters()),
+            contract=appKit.contractFromTree(inputs[0].getErgoTree())
+        )
+        with open(f'contracts/NFTLockedVesting.es') as f:
+            script = f.read()
+        nftLockedVestingContractTree = appKit.compileErgoScript(script)
+        vestingOutput = appKit.buildOutBox(
+            value=int(1e6),
+            tokens={
+                vestedTokenId: whitelistTokens
+            },
+            registers=[
+                appKit.ergoValue([
+                    roundParameters[0],
+                    roundParameters[1],
+                    roundParameters[2],
+                    whitelistTokens
+                ],ErgoValueT.LongArray),
+                appKit.ergoValue(proxyBox["boxId"],ErgoValueT.ByteArrayFromHex)
+            ],
+            contract=appKit.contractFromTree(nftLockedVestingContractTree)
+        )
+        userOutput = appKit.mintToken(
+            value=int(1e6),
+            tokenId=proxyBox["boxId"],
+            tokenName=f"{roundInfo['name']} Vesting Key",
+            tokenDesc=f'{{"Vesting Round": {roundInfo["name"]}, "Vesting start": "{datetime.fromtimestamp(roundParameters[2]/1000)}", "Periods": {roundParameters[1]}, "Period length": "{timedelta(milliseconds=roundParameters[0]).days} day(s)", "Total vested": {req.vestingAmount} }}',
+            mintAmount=1,
+            decimals=0,
+            contract=appKit.contractFromTree(userInputs[0].getErgoTree())
+        )
+        sellerOutput = appKit.buildOutBox(
+            value=int(1e6)+nergRequired,
+            tokens=tokensToSpend,
+            registers=None,
+            contract=appKit.contractFromTree(appKit.treeFromBytes(bytes.fromhex(sellerAddress)))
+        )
 
-    unsignedTx = appKit.buildUnsignedTransaction(
-        inputs=inputs,
-        outputs=[proxyOutput,vestingOutput,userOutput,sellerOutput],
-        dataInputs=dataInputs,
-        fee=int(1e6),
-        sendChangeTo=Address.create(req.address).getErgoAddress()
-    )
+        unsignedTx = appKit.buildUnsignedTransaction(
+            inputs=inputs,
+            outputs=[proxyOutput,vestingOutput,userOutput,sellerOutput],
+            dataInputs=dataInputs,
+            fee=int(1e6),
+            sendChangeTo=Address.create(req.address).getErgoAddress()
+        )
 
-    # signedTx = appKit.signTransactionWithNode(unsignedTx)
+        # signedTx = appKit.signTransactionWithNode(unsignedTx)
 
-    # return appKit.sendTransaction(signedTx)
+        # return appKit.sendTransaction(signedTx)
 
-    
-
-    return appKit.unsignedTxToJson(unsignedTx)
+        return appKit.unsignedTxToJson(unsignedTx)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Uncaught error: {e}')
 
 
