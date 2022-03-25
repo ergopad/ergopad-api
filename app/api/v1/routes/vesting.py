@@ -957,10 +957,10 @@ async def vestFromProxy(req: VestFromProxyRequest):
         requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
         nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
         userInputs = List[InputBox]
+        tokensToSpend = {whitelistTokenId: whitelistTokens}
+        if req.sigUSDAmount>0:
+            tokensToSpend[sigusd] = sigUsdTokens
         if len(req.utxos) == 0:
-            tokensToSpend = {whitelistTokenId: whitelistTokens}
-            if req.sigUSDAmount>0:
-                tokensToSpend[sigusd] = sigUsdTokens
             userInputs = appKit.boxesToSpend(req.address,int(4e6+nergRequired),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)

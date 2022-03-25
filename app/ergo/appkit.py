@@ -236,7 +236,12 @@ class ErgoAppKit:
     def unsignedTxToJson(self, unsignedTx: UnsignedTransactionImpl) -> str:
         inputs = []
         for i in unsignedTx.getInputs():
-            inputs.append(json.loads(i.toJson(False)))
+            j = json.loads(i.toJson(False))
+            j["extension"] = {}
+            j["value"] = str(j["value"])
+            for ass in j["assets"]:
+                ass["amount"] = str(ass["amount"])
+            inputs.append(j)
         dataInputs = []
         for di in unsignedTx.getDataInputs():
             dataInputs.append(json.loads(di.toJson(False)))
