@@ -961,7 +961,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
         if req.sigUSDAmount>0:
             tokensToSpend[sigusd] = sigUsdTokens
         if len(req.utxos) == 0:
-            userInputs = appKit.boxesToSpend(req.address,int(4e6+nergRequired),tokensToSpend)
+            userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)
         if userInputs is None:
@@ -1000,7 +1000,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
             value=int(1e6),
             tokenId=proxyBox["boxId"],
             tokenName=f"{roundInfo['name']} Vesting Key",
-            tokenDesc=f'{{"Vesting Round": {roundInfo["name"]}, "Vesting start": "{datetime.fromtimestamp(roundParameters[2]/1000)}", "Periods": {roundParameters[1]}, "Period length": "{timedelta(milliseconds=roundParameters[0]).days} day(s)", "Total vested": {req.vestingAmount} }}',
+            tokenDesc=f'{{"Vesting Round": "{roundInfo["name"]}", "Vesting start": "{datetime.fromtimestamp(roundParameters[2]/1000)}", "Periods": {roundParameters[1]}, "Period length": "{timedelta(milliseconds=roundParameters[0]).days} day(s)", "Total vested": {req.vestingAmount} }}',
             mintAmount=1,
             decimals=0,
             contract=appKit.contractFromTree(userInputs[0].getErgoTree())
@@ -1016,7 +1016,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
             inputs=inputs,
             outputs=[proxyOutput,vestingOutput,userOutput,sellerOutput],
             dataInputs=dataInputs,
-            fee=int(1e6),
+            fee=int(17e6),
             sendChangeTo=Address.create(req.address).getErgoAddress()
         )
 
