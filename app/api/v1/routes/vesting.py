@@ -1000,7 +1000,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
             value=int(1e6),
             tokenId=proxyBox["boxId"],
             tokenName=f"{roundInfo['name']} Vesting Key",
-            tokenDesc=f'{{"Vesting Round": {roundInfo["name"]}, "Vesting start": "{datetime.fromtimestamp(roundParameters[2]/1000)}", "Periods": {roundParameters[1]}, "Period length": "{timedelta(milliseconds=roundParameters[0]).days} day(s)", "Total vested": {req.vestingAmount} }}',
+            tokenDesc=f'{{"Vesting Round": "{roundInfo["name"]}", "Vesting start": "{datetime.fromtimestamp(roundParameters[2]/1000)}", "Periods": {roundParameters[1]}, "Period length": "{timedelta(milliseconds=roundParameters[0]).days} day(s)", "Total vested": {req.vestingAmount} }}',
             mintAmount=1,
             decimals=0,
             contract=appKit.contractFromTree(userInputs[0].getErgoTree())
