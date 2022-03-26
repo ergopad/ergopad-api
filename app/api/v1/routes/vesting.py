@@ -612,7 +612,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
     totalVested         = parameters[3]
 
     timeVested          = blockTime - vestingStart
-    periods             = int(timeVested/redeemPeriod)
+    periods             = max(0,int(timeVested/redeemPeriod))
     redeemed            = totalVested - int(vestingBoxJson["assets"][0]["amount"])
     totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
@@ -640,6 +640,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 
     outputs = []
     tokens={
+            vestingKey: 1, 
             vestingBoxJson["assets"][0]["tokenId"]: redeemableTokens
         }
     if periods < numberOfPeriods:
@@ -651,7 +652,6 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
             registers=list(vestingBox.getRegisters()),
             contract=appKit.contractFromTree(vestingBox.getErgoTree())
         ))
-        tokens[vestingKey] = 1 
     outputs.append(appKit.buildOutBox(
         value=int(1e6),
         tokens=tokens,
@@ -722,7 +722,7 @@ async def vested(req: AddressList):
                 totalVested         = parameters[3]
 
                 timeVested          = blockTime - vestingStart
-                periods             = int(timeVested/redeemPeriod)
+                periods             = max(0,int(timeVested/redeemPeriod))
                 redeemed            = totalVested - int(box["assets"][0]["amount"])
                 totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
