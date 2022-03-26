@@ -47,7 +47,6 @@ logging.basicConfig(
 def myself(): return inspect.stack()[1][3]
 # endregion LOGGING
 
-
 # region CLASSES
 
 # Whitelist Request Model
@@ -78,8 +77,16 @@ class Whitelist(BaseModel):
         }
 # endregion CLASSES
 
-
 # region ROUTES
+
+@r.get("/checkIp")
+async def go(request: Request):
+    # return {}
+    logging.debug(request.client.host)
+    return {
+        'ip': request.client.host,
+        'hash': get_md5_hash(request.client.host)
+    }
 
 # TODO: update /signup route
 # 1. Switch from pd.Dataframe().to_sql
