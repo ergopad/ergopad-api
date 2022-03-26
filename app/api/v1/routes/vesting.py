@@ -961,7 +961,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
         if req.sigUSDAmount>0:
             tokensToSpend[sigusd] = sigUsdTokens
         if len(req.utxos) == 0:
-            userInputs = appKit.boxesToSpend(req.address,int(4e6+nergRequired),tokensToSpend)
+            userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)
         if userInputs is None:
@@ -1016,7 +1016,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
             inputs=inputs,
             outputs=[proxyOutput,vestingOutput,userOutput,sellerOutput],
             dataInputs=dataInputs,
-            fee=int(1e6),
+            fee=int(17e6),
             sendChangeTo=Address.create(req.address).getErgoAddress()
         )
 
