@@ -244,7 +244,12 @@ class ErgoAppKit:
             inputs.append(j)
         dataInputs = []
         for di in unsignedTx.getDataInputs():
-            dataInputs.append(json.loads(di.toJson(False)))
+            j = json.loads(di.toJson(False))
+            j["extension"] = {}
+            j["value"] = str(j["value"])
+            for ass in j["assets"]:
+                ass["amount"] = str(ass["amount"])
+            dataInputs.append(j)
         outputs = []
         for o in unsignedTx.getOutputs():
             assets = []
