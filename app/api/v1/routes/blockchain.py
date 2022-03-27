@@ -363,6 +363,7 @@ def getInputBoxes(boxes, txFormat: TXFormat):
         return unsignedInputs
     return None
 
+@r.get("/followInfo
 def getNFTBox(tokenId: str, allowCached=False):
     try:
         ok = False
@@ -444,7 +445,7 @@ def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
             for data in res:
                 boxes[data["box_id"]] = data["additional_registers"]
                     
-            return list(boxes.values())
+            return boxes
         
         # not implemented
         else:
