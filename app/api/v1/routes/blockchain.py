@@ -443,7 +443,10 @@ def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
             res = con.execute(sql).fetchall()
             boxes = {}
             for data in res:
-                boxes[data["box_id"]] = data["additional_registers"]
+                boxes[data["box_id"]] { 
+                    'boxId': data["box_id"],
+                    'additionalRegisters': data["additional_registers"],
+                }
 
             return boxes
         
