@@ -422,6 +422,40 @@ def getNFTBox(tokenId: str, allowCached=False):
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
 
+def getUnspentBoxesByTokenId(useExplorerApi=True):
+    try:
+        if not useExplorerApi:
+            con = create_engine(EXPLORER)
+            sql = f"""    
+                select
+                    o.box_id as box_id
+                    , o.additional_registers as additional_registers
+                from
+                    node_outputs o
+                    left join node_inputs i on i.box_id = o.box_id
+                    join node_assets a on a.box_id = o.box_id
+                    and a.header_id = o.header_id
+                where
+                    o.main_chain = true
+                    and i.box_id is null -- output with no input = unspent
+                    and a.token_id = '87fb172d186d260f1855eb627fc7a70beb9bafdcadfd5c1ff392f094442cf35e' -- stake key token id
+                    and coalesce(a.value, 0) > 0
+            """
+            res = con.execute(sql).fetchall()
+            boxes = {}
+            for data in res:
+                boxes[data["box_id"]] = data["additional_registers"]
+                    
+            return list(boxes.values())
+        
+        # not implemented
+        else:
+            return {}
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: failed to get boxes by token id ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to get boxes by token id ({e})')
+
 # GET unspent stake boxes
 # Note: Run with useExplorerApi = True in case local explorer service failure
 def getUnspentStakeBoxes(useExplorerApi=False):
