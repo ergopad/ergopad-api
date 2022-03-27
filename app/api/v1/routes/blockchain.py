@@ -363,7 +363,6 @@ def getInputBoxes(boxes, txFormat: TXFormat):
         return unsignedInputs
     return None
 
-@r.get("/followInfo
 def getNFTBox(tokenId: str, allowCached=False):
     try:
         ok = False
@@ -423,6 +422,7 @@ def getNFTBox(tokenId: str, allowCached=False):
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
 
+# @r.get("/getUnspentBoxesByTokenId/{tokenId}", name='blockchain:getUnspentBoxesByTokenId')
 def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
     try:
         if not useExplorerApi:
