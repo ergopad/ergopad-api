@@ -448,7 +448,7 @@ def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
                     'additionalRegisters': data["additional_registers"],
                 }
 
-            return boxes
+            return list(boxes.values())
         
         # not implemented
         else:
