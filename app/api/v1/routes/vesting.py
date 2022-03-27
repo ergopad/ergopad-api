@@ -16,7 +16,7 @@ from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
 from ergo.util import encodeLong, encodeString
 import uuid
-from api.v1.routes.blockchain import ergusdoracle, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta
+from api.v1.routes.blockchain import ergusdoracle, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta, getUnspentBoxesByTokenId
 from ergo.appkit import ErgoAppKit, ErgoValueT
 from hashlib import blake2b
 from cache.cache import cache
@@ -612,7 +612,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
     totalVested         = parameters[3]
 
     timeVested          = blockTime - vestingStart
-    periods             = int(timeVested/redeemPeriod)
+    periods             = max(0,int(timeVested/redeemPeriod))
     redeemed            = totalVested - int(vestingBoxJson["assets"][0]["amount"])
     totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
@@ -640,6 +640,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 
     outputs = []
     tokens={
+            vestingKey: 1, 
             vestingBoxJson["assets"][0]["tokenId"]: redeemableTokens
         }
     if periods < numberOfPeriods:
@@ -651,7 +652,6 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
             registers=list(vestingBox.getRegisters()),
             contract=appKit.contractFromTree(vestingBox.getErgoTree())
         ))
-        tokens[vestingKey] = 1 
     outputs.append(appKit.buildOutBox(
         value=int(1e6),
         tokens=tokens,
@@ -722,7 +722,7 @@ async def vested(req: AddressList):
                 totalVested         = parameters[3]
 
                 timeVested          = blockTime - vestingStart
-                periods             = int(timeVested/redeemPeriod)
+                periods             = max(0,int(timeVested/redeemPeriod))
                 redeemed            = totalVested - int(box["assets"][0]["amount"])
                 totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
@@ -947,7 +947,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
         vestedTokenInfo = getTokenInfo(vestedTokenId)
-        oracleInfo = getNFTBox(ergUsdOracleNFT)
+        oracleInfo = getUnspentBoxesByTokenId(ergUsdOracleNFT)[0]
         if oracleInfo is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle box')
         nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
