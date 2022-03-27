@@ -422,7 +422,7 @@ def getNFTBox(tokenId: str, allowCached=False):
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
 
-def getUnspentBoxesByTokenId(tokenId, useExplorerApi=True):
+def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
     try:
         if not useExplorerApi:
             con = create_engine(EXPLORER)
