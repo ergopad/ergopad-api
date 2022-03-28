@@ -389,9 +389,9 @@ def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[
                 emissionR4[2]-len(stakeBoxes),
                 emissionR4[3]],ErgoValueT.LongArray)
             ],
-            contract=appKit.contractFromAddress(emissionBox["addresss"]))
+            contract=appKit.contractFromAddress(emissionBox["address"]))
 
-        txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
+        txFee = int(max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg))
 
         inputs = appKit.getBoxesById([emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()))
 
@@ -458,6 +458,7 @@ async def compound(
                 unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
                 signedTX = appKit.signTransactionWithNode(unsignedTx)
                 txId = appKit.sendTransaction(signedTX)
+                await asyncio.sleep(1)
                 compoundTransactions.append(txId)
                 emissionR4[2]=emissionR4[2]-len(stakeBoxes)
                 emissionBox["assets"][1]["amount"] = emissionBox["assets"][1]["amount"]-totalReward
