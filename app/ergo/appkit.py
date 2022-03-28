@@ -86,9 +86,11 @@ class ErgoAppKit:
         ctx = self.getBlockChainContext()
         tb = ctx.newTxBuilder()
         ergoTokens = []
-        for token in tokens.keys():
-            ergoTokens.append(ErgoToken(token,tokens[token]))
-        tb = tb.outBoxBuilder().contract(contract).value(value).tokens(ergoTokens)
+        tb = tb.outBoxBuilder().contract(contract).value(value)
+        if tokens is not None:
+            for token in tokens.keys():
+                ergoTokens.append(ErgoToken(token,tokens[token]))
+            tb = tb.tokens(ergoTokens)
 
         if registers is not None:
             tb = tb.registers(registers)

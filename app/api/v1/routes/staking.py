@@ -18,6 +18,9 @@ from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 
+from ergo.appkit import ErgoAppKit, ErgoValueT
+from org.ergoplatform.appkit import Address, OutBox
+
 staking_router = r = APIRouter()
 
 #region INIT
@@ -369,49 +372,37 @@ def stakingStatus():
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
-def compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox, emissionR4):
+def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[OutBox],totalReward: int,emissionBox, emissionR4):
     try:
-        emissionAssets = [{
-                        'tokenId': CFG.emissionNFT,
-                        'amount': 1
-                    }]
+        emissionAssets = {
+                        CFG.emissionNFT: 1
+                    }
         if totalReward < emissionBox["assets"][1]["amount"]:
-            emissionAssets.append({
-                'tokenId': CFG.stakedTokenID,
-                'amount': emissionBox["assets"][1]["amount"]-totalReward
-            })
+            emissionAssets[CFG.stakedTokenID] = emissionBox["assets"][1]["amount"]-totalReward
 
-        emissionOutput = {
-            'value': emissionBox["value"],
-            'address': emissionBox["address"],
-            'assets': emissionAssets,
-            'registers': {
-                'R4': encodeLongArray([
-                    emissionR4[0],
-                    emissionR4[1],
-                    emissionR4[2]-len(stakeBoxes),
-                    emissionR4[3]
-                ])
-            }
-        }
+        emissionOutput = appKit.buildOutBox(
+            value=emissionBox["value"],
+            tokens=emissionAssets,
+            registers=[appKit.ergoValue([
+                emissionR4[0],
+                emissionR4[1],
+                emissionR4[2]-len(stakeBoxes),
+                emissionR4[3]],ErgoValueT.LongArray)
+            ],
+            contract=appKit.contractFromAddress(emissionBox["addresss"]))
 
         txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
 
-        inBoxesRaw = []
-        for box in [emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
-            res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
-            logging.info(box)
-            if res.ok:
-                inBoxesRaw.append(res.json()['bytes'])
-            else:
-                return res
+        inputs = appKit.getBoxesById([emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()))
 
-        tx = {
-            'requests': [emissionOutput]+stakeBoxesOutput,
-            'fee': int(txFee),
-            'inputsRaw': inBoxesRaw
-        }
-        return tx
+        unsignedTx = appKit.buildUnsignedTransaction(
+            inputs=inputs,
+            outputs=[emissionOutput]+stakeBoxesOutput,
+            fee=txFee,
+            sendChangeTo=Address.create(CFG.ergopadWallet).getErgoAddress()
+        )
+
+        return unsignedTx
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
@@ -424,10 +415,11 @@ async def compound(
     # current_user=Depends(get_current_active_superuser)
 ):
     try:
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
         stakeBoxes = []
         stakeBoxesOutput = []
         totalReward = 0
-
+        compoundTransactions = []
         # emmission box contains current staking info        
         emissionBox = getNFTBox(CFG.emissionNFT)
         emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
@@ -439,7 +431,6 @@ async def compound(
         # iterate over all staking boxes
         checkBoxes = getUnspentStakeBoxes()
         for box in checkBoxes:
-
             # make sure token exists, and ??
             if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
                 boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
@@ -449,50 +440,40 @@ async def compound(
                     stakeBoxes.append(box["boxId"])
                     stakeReward = int(box["assets"][1]["amount"] * emissionR4[3] / emissionR4[0])
                     totalReward += stakeReward
-                    stakeBoxesOutput.append({
-                        'value': box["value"],
-                        'address': box["address"],
-                        'assets': [
-                            {                                                                   
-                                'tokenId': CFG.stakeTokenID,
-                                'amount': 1
-                            },
-                            {
-                                'tokenId': CFG.stakedTokenID,
-                                'amount': box["assets"][1]["amount"] + stakeReward
-                            }
+                    stakeBoxesOutput.append(appKit.buildOutBox(
+                        value=box["value"],
+                        tokens={
+                            CFG.stakeTokenID: 1,
+                            CFG.stakedTokenID: box["assets"][1]["amount"] + stakeReward
+                        },
+                        registers=[
+                            appKit.ergoValue([boxR4[0]+1,boxR4[1]],ErgoValueT.LongArray),
+                            appKit.ergoValue(box["additionalRegisters"]["R5"]["renderedValue"],ErgoValueT.ByteArrayFromHex)
                         ],
-                        'registers': {
-                            'R4': encodeLongArray([
-                                boxR4[0]+1,
-                                boxR4[1]
-                            ]),
-                            'R5': box["additionalRegisters"]["R5"]["serializedValue"]
-                        }
-                    })
+                        contract=appKit.contractFromAddress(box["address"])
+                    ))
 
             # every <numBoxes>, go ahead and submit tx
             if len(stakeBoxes)>=req.numBoxes:
-                tx = compoundTX(stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
-                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)
+                unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
+                signedTX = appKit.signTransactionWithNode(unsignedTx)
+                txId = appKit.sendTransaction(signedTX)
+                compoundTransactions.append(txId)
+                emissionR4[2]=emissionR4[2]-len(stakeBoxes)
+                emissionBox["assets"][1]["amount"] = emissionBox["assets"][1]["amount"]-totalReward
+                emissionBox["boxId"] = signedTX.getOutputsToSpend()[0].getId().toString()
                 stakeBoxes = []
                 stakeBoxesOutput = []
                 totalReward = 0
-                await asyncio.sleep(10)
-                emissionBox = getNFTBox(CFG.emissionNFT)
-                emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
 
         if len(stakeBoxes) > 0: 
-            tx = compoundTX(stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
-            msg = '...'
-            try: 
-                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)   
-                msg = res.text
-            except: 
-                msg = 'invalid respons from <node>/wallet/transaction/send'
-            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': msg}
-        else:
-            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': ''}
+            unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
+            signedTX = appKit.signTransactionWithNode(unsignedTx)
+            txId = appKit.sendTransaction(signedTX)
+            compoundTransactions.append(txId)
+            emissionR4[2]=emissionR4[2]-len(stakeBoxes)
+            
+        return {'remainingBoxes': emissionR4[2], 'compoundTx': compoundTransactions}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
@@ -627,117 +608,82 @@ async def emit(
 @r.post("/stake/", name="staking:stake")
 async def stake(req: StakeRequest):
     try:
-        params = {}
-        params["stakedTokenID"] = hexstringToB64(CFG.stakedTokenID)
-        params["stakePoolNFT"] = hexstringToB64(CFG.stakePoolNFT)
-        params["emissionNFT"] = hexstringToB64(CFG.emissionNFT)
-        params["stakeStateNFT"] = hexstringToB64(CFG.stakeStateNFT)
-        params["stakeTokenID"] = hexstringToB64(CFG.stakeTokenID)
-
         stakedTokenInfo = getTokenInfo(CFG.stakedTokenID)
 
-        stakeAddress = getErgoscript("stake", params=params)
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+        with open(f'contracts/stakeAppkit.es') as f:
+            script = f.read()
+        stakeTree = appKit.compileErgoScript(
+        script,
+            {
+                "_stakeStateNFT": appKit.ergoValue(CFG.stakeStateNFT, ErgoValueT.ByteArrayFromHex).getValue(),
+                "_emissionNFT": appKit.ergoValue(CFG.emissionNFT, ErgoValueT.ByteArrayFromHex).getValue()    
+            }
+        )
 
         stakeStateBox = getNFTBox(CFG.stakeStateNFT)
 
         tokenAmount = int(req.amount*10**stakedTokenInfo["decimals"])
         
         r4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
-        stakeStateOutput = {
-            'address': stakeStateBox["address"],
-            'value': stakeStateBox["value"],
-            'registers': {
-                'R4': encodeLongArray([int(r4[0])+tokenAmount,
+        stakeStateOutput = appKit.buildOutBox(
+            value=stakeStateBox["value"],
+            tokens={
+                stakeStateBox["assets"][0]["tokenId"]: stakeStateBox["assets"][0]["amount"],
+                stakeStateBox["assets"][1]["tokenId"]: stakeStateBox["assets"][1]["amount"]-1
+            },
+            registers=[appKit.ergoValue([int(r4[0])+tokenAmount,
                         int(r4[1]),
                         int(r4[2])+1,
                         int(r4[3]),
-                        int(r4[4])])
+                        int(r4[4])], ErgoValueT.LongArray)],
+            contract=appKit.contractFromAddress(stakeStateBox["address"])
+        )
+
+        stakeOutput = appKit.buildOutBox(
+            value=int(0.001*nergsPerErg),
+            tokens={
+                stakeStateBox["assets"][1]["tokenId"]: 1,
+                CFG.stakedTokenID: tokenAmount
             },
-            'assets': [
-                {
-                    'tokenId': stakeStateBox["assets"][0]["tokenId"],
-                    'amount': stakeStateBox["assets"][0]["amount"]
-                },
-                {
-                    'tokenId': stakeStateBox["assets"][1]["tokenId"],
-                    'amount': stakeStateBox["assets"][1]["amount"]-1
-                }
-            ]
-        }
+            registers=[
+                appKit.ergoValue([
+                    int(r4[1]),
+                    int(time()*1000)],ErgoValueT.LongArray),
+                appKit.ergoValue(stakeStateBox["boxId"],ErgoValueT.ByteArrayFromHex)
+            ],
+            contract=appKit.contractFromTree(stakeTree)
+        )
+        userInputs = appKit.getBoxesById(req.utxos)
 
-        stakeOutput = {
-            'address': stakeAddress,
-            'value': int(0.001*nergsPerErg),
-            'registers': {
-                'R4': encodeLongArray([int(r4[1]),int(time()*1000)]),
-                'R5': encodeString(stakeStateBox["boxId"])
-            },
-            'assets': [
-                {
-                    'tokenId': stakeStateBox["assets"][1]["tokenId"],
-                    'amount': 1
-                },
-                {
-                    'tokenId': CFG.stakedTokenID,
-                    'amount': tokenAmount
-                }
-            ]
-        }
+        userOutput = appKit.mintToken(
+            value=int(0.01*nergsPerErg),
+            tokenId=stakeStateBox["boxId"],
+            tokenName=f'{stakedTokenInfo["name"]} Stake Key',
+            tokenDesc=f'{{"originalAmountStaked": {req.amount}, "stakeTime": "{datetime.now()}"}}',
+            mintAmount=1,
+            decimals=0,
+            contract=appKit.contractFromTree(userInputs[0].getErgoTree())
+        )
+        
+        feeOutput = appKit.buildOutBox(
+            value=int(0.25*nergsPerErg),
+            tokens=None,
+            registers=None,
+            contract=appKit.contractFromAddress(CFG.ergopadWallet)
+        )
 
-        firstUserInput = getInputBoxes([req.utxos[0]],TXFormat.EIP_12)[0]
-        nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{firstUserInput['ergoTree']}").json()
-        address = nodeRes['address']
+        inputs = appKit.getBoxesById([stakeStateBox["boxId"]])+userInputs
+        outputs = [stakeStateOutput,stakeOutput,userOutput,feeOutput]
 
-        userOutput = {
-            'address': address,
-            'ergValue': int(0.01*nergsPerErg),
-            'amount': 1,
-            'name': f'{stakedTokenInfo["name"]} Stake Key',
-            'description': f'{{"originalAmountStaked": {req.amount}, "stakeTime": "{datetime.now()}"}}',
-            'decimals': "0"
-        }
+        unsignedTx = appKit.buildUnsignedTransaction(
+            inputs=inputs,
+            outputs=outputs,
+            fee=int(0.001*nergsPerErg),
+            sendChangeTo=Address.create(req.wallet).getErgoAddress()
+        )
 
-        inputs = [stakeStateBox["boxId"]]+req.utxos
-        inputsRaw = getInputBoxes(inputs,txFormat=TXFormat.NODE)
-        outputs = [stakeStateOutput,stakeOutput,userOutput]
-
-        tx = {
-            "requests": outputs,
-            "fee": int(0.001*nergsPerErg),
-            "inputsRaw": inputsRaw
-        }
-        if req.txFormat==TXFormat.NODE:
-            return tx        
-        logging.info(tx)
-
-        res = requests.post(f'{CFG.node}/wallet/transaction/generateUnsigned', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=tx) 
-        logging.info(res.content)  
-        unsignedTX = res.json()
-        if req.txFormat==TXFormat.EIP_12:
-            logging.info(unsignedTX["inputs"])
-            nodeInputs = unsignedTX["inputs"]
-            eip12Inputs = []
-            for ni in nodeInputs:
-                eip12Input = getInputBoxes([ni["boxId"]],TXFormat.EIP_12)[0]
-                eip12Input["extension"] = ni["extension"]
-                eip12Inputs.append(eip12Input)
-            unsignedTX["inputs"] = eip12Inputs
-            for out in unsignedTX["outputs"]:
-                out["value"] = str(out["value"])
-                for token in out["assets"]:
-                    token["amount"] = str(token["amount"])
-            if len(unsignedTX["outputs"])==5:
-                unsignedTX["outputs"][4]["ergoTree"] = unsignedTX["outputs"][2]["ergoTree"]
-
-        result = {
-            'inputs': unsignedTX["inputs"],
-            'dataInputs': unsignedTX["dataInputs"],
-            'outputs': unsignedTX["outputs"]
-        }
-
-        logging.info(result)
-
-        return result
+        return appKit.unsignedTxToJson(unsignedTx)
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
