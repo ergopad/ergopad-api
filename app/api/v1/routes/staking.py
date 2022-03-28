@@ -19,7 +19,7 @@ from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 
 from ergo.appkit import ErgoAppKit, ErgoValueT
-from org.ergoplatform.appkit import Address
+from org.ergoplatform.appkit import Address, OutBox
 
 staking_router = r = APIRouter()
 
@@ -372,49 +372,37 @@ def stakingStatus():
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
-def compoundTX(stakeBoxes,stakeBoxesOutput,totalReward,emissionBox, emissionR4):
+def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[OutBox],totalReward: int,emissionBox, emissionR4):
     try:
-        emissionAssets = [{
-                        'tokenId': CFG.emissionNFT,
-                        'amount': 1
-                    }]
+        emissionAssets = {
+                        CFG.emissionNFT: 1
+                    }
         if totalReward < emissionBox["assets"][1]["amount"]:
-            emissionAssets.append({
-                'tokenId': CFG.stakedTokenID,
-                'amount': emissionBox["assets"][1]["amount"]-totalReward
-            })
+            emissionAssets[CFG.stakedTokenID] = emissionBox["assets"][1]["amount"]-totalReward
 
-        emissionOutput = {
-            'value': emissionBox["value"],
-            'address': emissionBox["address"],
-            'assets': emissionAssets,
-            'registers': {
-                'R4': encodeLongArray([
-                    emissionR4[0],
-                    emissionR4[1],
-                    emissionR4[2]-len(stakeBoxes),
-                    emissionR4[3]
-                ])
-            }
-        }
+        emissionOutput = appKit.buildOutBox(
+            value=emissionBox["value"],
+            tokens=emissionAssets,
+            registers=[appKit.ergoValue([
+                emissionR4[0],
+                emissionR4[1],
+                emissionR4[2]-len(stakeBoxes),
+                emissionR4[3]],ErgoValueT.LongArray)
+            ],
+            contract=appKit.contractFromAddress(emissionBox["addresss"]))
 
         txFee = max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg)
 
-        inBoxesRaw = []
-        for box in [emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()):
-            res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
-            logging.info(box)
-            if res.ok:
-                inBoxesRaw.append(res.json()['bytes'])
-            else:
-                return res
+        inputs = appKit.getBoxesById([emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()))
 
-        tx = {
-            'requests': [emissionOutput]+stakeBoxesOutput,
-            'fee': int(txFee),
-            'inputsRaw': inBoxesRaw
-        }
-        return tx
+        unsignedTx = appKit.buildUnsignedTransaction(
+            inputs=inputs,
+            outputs=[emissionOutput]+stakeBoxesOutput,
+            fee=txFee,
+            sendChangeTo=Address.create(CFG.ergopadWallet).getErgoAddress()
+        )
+
+        return unsignedTx
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
@@ -427,10 +415,11 @@ async def compound(
     # current_user=Depends(get_current_active_superuser)
 ):
     try:
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
         stakeBoxes = []
         stakeBoxesOutput = []
         totalReward = 0
-
+        compoundTransactions = []
         # emmission box contains current staking info        
         emissionBox = getNFTBox(CFG.emissionNFT)
         emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
@@ -442,7 +431,6 @@ async def compound(
         # iterate over all staking boxes
         checkBoxes = getUnspentStakeBoxes()
         for box in checkBoxes:
-
             # make sure token exists, and ??
             if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
                 boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
@@ -452,50 +440,40 @@ async def compound(
                     stakeBoxes.append(box["boxId"])
                     stakeReward = int(box["assets"][1]["amount"] * emissionR4[3] / emissionR4[0])
                     totalReward += stakeReward
-                    stakeBoxesOutput.append({
-                        'value': box["value"],
-                        'address': box["address"],
-                        'assets': [
-                            {                                                                   
-                                'tokenId': CFG.stakeTokenID,
-                                'amount': 1
-                            },
-                            {
-                                'tokenId': CFG.stakedTokenID,
-                                'amount': box["assets"][1]["amount"] + stakeReward
-                            }
+                    stakeBoxesOutput.append(appKit.buildOutBox(
+                        value=box["value"],
+                        tokens={
+                            CFG.stakeTokenID: 1,
+                            CFG.stakedTokenID: box["assets"][1]["amount"] + stakeReward
+                        },
+                        registers=[
+                            appKit.ergoValue([boxR4[0]+1,boxR4[1]],ErgoValueT.LongArray),
+                            appKit.ergoValue(box["additionalRegisters"]["R5"]["renderedValue"],ErgoValueT.ByteArrayFromHex)
                         ],
-                        'registers': {
-                            'R4': encodeLongArray([
-                                boxR4[0]+1,
-                                boxR4[1]
-                            ]),
-                            'R5': box["additionalRegisters"]["R5"]["serializedValue"]
-                        }
-                    })
+                        contract=appKit.contractFromAddress(box["address"])
+                    ))
 
             # every <numBoxes>, go ahead and submit tx
             if len(stakeBoxes)>=req.numBoxes:
-                tx = compoundTX(stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
-                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)
+                unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
+                signedTX = appKit.signTransactionWithNode(unsignedTx)
+                txId = appKit.sendTransaction(signedTX)
+                compoundTransactions.append(txId)
+                emissionR4[2]=emissionR4[2]-len(stakeBoxes)
+                emissionBox["assets"][1]["amount"] = emissionBox["assets"][1]["amount"]-totalReward
+                emissionBox["boxId"] = signedTX.getOutputsToSpend()[0].getId().toString()
                 stakeBoxes = []
                 stakeBoxesOutput = []
                 totalReward = 0
-                await asyncio.sleep(10)
-                emissionBox = getNFTBox(CFG.emissionNFT)
-                emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
 
         if len(stakeBoxes) > 0: 
-            tx = compoundTX(stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
-            msg = '...'
-            try: 
-                res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)   
-                msg = res.text
-            except: 
-                msg = 'invalid respons from <node>/wallet/transaction/send'
-            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': msg}
-        else:
-            return {'remainingBoxes': emissionR4[2]-len(stakeBoxes), 'compoundTx': ''}
+            unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
+            signedTX = appKit.signTransactionWithNode(unsignedTx)
+            txId = appKit.sendTransaction(signedTX)
+            compoundTransactions.append(txId)
+            emissionR4[2]=emissionR4[2]-len(stakeBoxes)
+            
+        return {'remainingBoxes': emissionR4[2], 'compoundTx': compoundTransactions}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
