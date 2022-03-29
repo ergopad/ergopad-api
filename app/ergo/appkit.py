@@ -130,7 +130,7 @@ class ErgoAppKit:
                 err = '\n'.join([err,stackTraceElement.toString()])
             err = '\n'.join([err,str(e.getMessage())])
             logging.info(err)
-        if coveringBoxes.isCovered:
+        if coveringBoxes.isCovered():
             return coveringBoxes.getBoxes()
         else:
             return None
@@ -234,6 +234,26 @@ class ErgoAppKit:
         for val in ergoValue.getValue().toArray():
             res.append(val)
         return res
+
+    def getBalance(self, boxes: List[InputBox]) -> Dict[str,int]:
+        res = {"erg":0}
+        for box in boxes:
+            res["erg"] += box.getValue()
+            for token in box.getTokens():
+                if token.getId().toString() not in res.keys():
+                    res[token.getId().toString()] = token.getValue()
+                else:
+                    res[token.getId().toString()] += token.getValue()      
+        return res
+
+    def boxesCovered(self, inputs: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> bool:
+        balance = self.getBalance(inputs)
+        if balance["erg"] < nErgRequired:
+            return False
+        for token in list(tokensToSpend.keys()):
+            if balance[token] < tokensToSpend[token]:
+                return False
+        return True
 
     def unsignedTxToJson(self, unsignedTx: UnsignedTransactionImpl) -> str:
         inputs = []
