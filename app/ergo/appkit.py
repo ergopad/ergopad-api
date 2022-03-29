@@ -251,7 +251,7 @@ class ErgoAppKit:
         if balance["erg"] < nErgRequired:
             return False
         for token in list(tokensToSpend.keys()):
-            if balance[token] < tokensToSpend[token]:
+            if balance.get(token,0) < tokensToSpend[token]:
                 return False
         return True
 
