@@ -948,6 +948,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
         priceDenom = roundParameters[4]
         vestedTokenInfo = getTokenInfo(vestedTokenId)
         oracleInfo = getUnspentBoxesByTokenId(ergUsdOracleNFT)[0]
+        #oracleInfo = getNFTBox(ergUsdOracleNFT)
         if oracleInfo is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle box')
         nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
@@ -964,8 +965,10 @@ async def vestFromProxy(req: VestFromProxyRequest):
             userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)
+            if not appKit.boxesCovered(userInputs,int(20e6+nergRequired),tokensToSpend):
+                userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
         if userInputs is None:
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find input boxes')
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
         inputs = list(appKit.getBoxesById([proxyBox["boxId"]])) + list(userInputs)
         dataInputs = list(appKit.getBoxesById([oracleInfo["boxId"]]))
         proxyOutput = appKit.buildOutBox(
