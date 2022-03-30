@@ -31,6 +31,7 @@ import java
 import scala
 from java.math import BigInteger
 from java.lang import NullPointerException
+import base64
 
 DEBUG = True # CFG.DEBUG
 
@@ -117,11 +118,15 @@ class ErgoAppKit:
     def buildInputBox(self,value: int, tokens: Dict[str,int], registers, contract) -> InputBox:
         return self.buildOutBox(value, tokens, registers, contract).convertToInputWith("ce552663312afc2379a91f803c93e2b10b424f176fbc930055c10def2fd88a5d", 0)
 
+    def mapToErgoTokenList(self, map: Dict[str,int]) -> List[ErgoToken]:
+        tts = []
+        for entry in map:
+            tts.append(ErgoToken(entry,map[entry]))
+        return tts
+
     def boxesToSpend(self, address: str, nergToSpend: int, tokensToSpend: Dict[str,int] = {}) -> List[InputBox]:
         ctx = self.getBlockChainContext()
-        tts = []
-        for token in tokensToSpend:
-            tts.append(ErgoToken(token,tokensToSpend[token]))
+        tts = self.mapToErgoTokenList(tokensToSpend)
         try:
             coveringBoxes = ctx.getCoveringBoxesFor(Address.create(address),nergToSpend,java.util.ArrayList(tts))
         except NullPointerException as e:
@@ -171,13 +176,15 @@ class ErgoAppKit:
             phb = phb.timestamp(JLong(timestamp))
         return phb.build()
 
-    def buildUnsignedTransaction(self, inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, dataInputs: List[InputBox] = None, preHeader: PreHeader = None) -> UnsignedTransaction:
+    def buildUnsignedTransaction(self, inputs: List[InputBox], outputs: List[OutBox], fee: int, sendChangeTo: ErgoAddress, tokensToBurn: Dict[str,int] = None, dataInputs: List[InputBox] = None, preHeader: PreHeader = None) -> UnsignedTransaction:
         ctx = self.getBlockChainContext()
         tb = ctx.newTxBuilder()
         if preHeader is not None:
             tb = tb.preHeader(preHeader)
         if dataInputs is not None:
             tb = tb.withDataInputs(java.util.ArrayList(dataInputs))
+        if tokensToBurn is not None:
+            tb = tb.tokensToBurn(self.mapToErgoTokenList(tokensToBurn))
         tb = tb.boxesToSpend(java.util.ArrayList(inputs)).fee(fee).outputs(outputs).sendChangeTo(sendChangeTo)
         return tb.build()
 
@@ -295,6 +302,27 @@ class ErgoAppKit:
             'dataInputs': dataInputs,
             'outputs': outputs
         }
+
+    def reducedTx(self, unsignedTx: UnsignedTransactionImpl) -> ReducedTransaction:
+        ctx = self.getBlockChainContext()
+        return ctx.newProverBuilder().build().reduce(unsignedTx,0)
+
+    def formErgoPaySigningRequest(
+        self,
+        reducedTx: ReducedTransaction, 
+        address: str = None, 
+        message: str = None,
+        messageSeverity: str = None,
+        replyTo: str = None) -> str:
+        result = {}
+        result['reducedTx'] = base64.urlsafe_b64encode(reducedTx.toBytes()).decode()
+        if address is not None: result['address'] = address
+        if message is not None: result['message'] = message
+        if messageSeverity is not None: result['messageSeverity'] = messageSeverity
+        if replyTo is not None: result['replyTo'] = replyTo
+        return result
+
+
         
 
     

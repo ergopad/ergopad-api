@@ -15,6 +15,7 @@ from api.v1.routes.asset import get_asset_current_price
 from cache.cache import cache
 from config import Config, Network # api specific config
 from pydantic import BaseModel
+from cache.cache import cache
 
 CFG = Config[Network]
 
@@ -421,6 +422,10 @@ def getNFTBox(tokenId: str, allowCached=False):
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
+
+@r.get("/signingRequest/{txId}", name="blockchain:signingRequest")
+def signingRequest(txId):
+    return cache.get(f'ergopay_signing_request_{txId}')
 
 # @r.get("/getUnspentBoxesByTokenId/{tokenId}", name='blockchain:getUnspentBoxesByTokenId')
 def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
