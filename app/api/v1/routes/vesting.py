@@ -16,7 +16,7 @@ from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
 from ergo.util import encodeLong, encodeString
 import uuid
-from api.v1.routes.blockchain import ergusdoracle, getNFTBox, getTokenBoxes, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta, getUnspentBoxesByTokenId
+from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta, getUnspentBoxesByTokenId
 from ergo.appkit import ErgoAppKit, ErgoValueT
 from hashlib import blake2b
 from cache.cache import cache
@@ -597,6 +597,7 @@ class RedeemWithNFTRequest(BaseModel):
     boxId: str
     address: str
     utxos: List[str] = []
+    txFormat: TXFormat = TXFormat.EIP_12
 
 @r.post("/redeemWithNFT", name="vesting:redeemWithNFT")
 async def redeemWithNFT(req: RedeemWithNFTRequest):
@@ -636,7 +637,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         if not keyFound:
             otherBoxes.append(box)
 
-    userInputs = [keyBox] #+ list(otherBoxes)
+    userInputs = [keyBox] + list(otherBoxes)
 
     outputs = []
     tokens={
@@ -666,7 +667,18 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         sendChangeTo=Address.create(req.address).getErgoAddress()
     )
 
-    return appKit.unsignedTxToJson(unsignedTx)
+    if req.txFormat == TXFormat.EIP_12:
+        return appKit.unsignedTxToJson(unsignedTx)
+
+    if req.txFormat == TXFormat.ERGO_PAY:
+        reducedTx = appKit.reducedTx(unsignedTx)
+        ergoPaySigningRequest = appKit.formErgoPaySigningRequest(
+            reducedTx,
+            address=req.address
+        )
+        cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
+        return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
+
 
 @r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
 async def vested(req: AddressList):
@@ -931,6 +943,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
 class VestFromProxyRequest(RequiredNergTokensRequest):   
     address: str
     utxos: List[str] = []
+    txFormat: TXFormat = TXFormat.EIP_12
 
 @r.post('/vestFromProxy', name="vesting:vestFromProxy")
 async def vestFromProxy(req: VestFromProxyRequest):
@@ -1023,11 +1036,17 @@ async def vestFromProxy(req: VestFromProxyRequest):
             sendChangeTo=Address.create(req.address).getErgoAddress()
         )
 
-        # signedTx = appKit.signTransactionWithNode(unsignedTx)
+        if req.txFormat == TXFormat.EIP_12:
+            return appKit.unsignedTxToJson(unsignedTx)
 
-        # return appKit.sendTransaction(signedTx)
-
-        return appKit.unsignedTxToJson(unsignedTx)
+        if req.txFormat == TXFormat.ERGO_PAY:
+            reducedTx = appKit.reducedTx(unsignedTx)
+            ergoPaySigningRequest = appKit.formErgoPaySigningRequest(
+                reducedTx,
+                address=req.address
+            )
+            cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
+            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Uncaught error: {e}')
 
