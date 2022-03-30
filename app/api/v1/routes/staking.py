@@ -455,10 +455,18 @@ async def compound(
 
             # every <numBoxes>, go ahead and submit tx
             if len(stakeBoxes)>=req.numBoxes:
-                unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
-                signedTX = appKit.signTransactionWithNode(unsignedTx)
-                txId = appKit.sendTransaction(signedTX)
-                await asyncio.sleep(1)
+                retriesLeft = 10
+                while retriesLeft > 0:
+                    try:
+                        unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
+                        signedTX = appKit.signTransactionWithNode(unsignedTx)
+                        txId = appKit.sendTransaction(signedTX)
+                        retriesLeft = 0
+                    except Exception:
+                        retriesLeft -= 1
+                        await asyncio.sleep(3)
+                if txId is None:
+                    return {'status':'error', 'remainingBoxes': emissionR4[2], 'compoundTx': compoundTransactions}
                 compoundTransactions.append(txId)
                 emissionR4[2]=emissionR4[2]-len(stakeBoxes)
                 emissionBox["assets"][1]["amount"] = emissionBox["assets"][1]["amount"]-totalReward
@@ -474,7 +482,7 @@ async def compound(
             compoundTransactions.append(txId)
             emissionR4[2]=emissionR4[2]-len(stakeBoxes)
             
-        return {'remainingBoxes': emissionR4[2], 'compoundTx': compoundTransactions}
+        return {'status': 'success', 'remainingBoxes': emissionR4[2], 'compoundTx': compoundTransactions}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
