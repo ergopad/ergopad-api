@@ -365,12 +365,12 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
         con = create_engine(DATABASE)
         sql = f"""
             with evt as (
-                select id, address
+                select id
                 from events
                 where name = {eventName!r}
             )
             , wal as (
-                select id
+                select id, address
                 from wallets
                 where address = {wallet!r}
             )
