@@ -262,6 +262,14 @@ class ErgoAppKit:
                 return False
         return True
 
+    def cutOffExcessUTXOs(self, utxos: List[InputBox], nErgRequired: int, tokensToSpend: Dict[str,int]) -> List[InputBox]:
+        result = []
+        for utxo in utxos:
+            result.append(utxo)
+            if self.boxesCovered(result,nErgRequired,tokensToSpend):
+                return result
+        return result
+
     def unsignedTxToJson(self, unsignedTx: UnsignedTransactionImpl) -> str:
         inputs = []
         for i in unsignedTx.getInputs():

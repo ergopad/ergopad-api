@@ -166,8 +166,24 @@ async def unstake(req: UnstakeRequest):
                 userInputs = list(appKit.boxesToSpend(changeAddress,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1}))
             else:
                 userInputs = appKit.getBoxesById(req.utxos)
+
+            keyBox = None
+            otherBoxes = []
+
+            for box in userInputs:
+                keyFound = False
+                for token in box.getTokens():
+                    if token.getId().toString() == stakeBox["additionalRegisters"]["R5"]["renderedValue"]:
+                        keyBox = box
+                        keyFound=True
+                if not keyFound:
+                    otherBoxes.append(box)
+
+            userInputs = [keyBox] + list(otherBoxes)
+
+            userInputs = appKit.cutOffExcessUTXOs(userInputs,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
             
-            inputs = appKit.getBoxesById([stakeStateBox["boxId"],req.stakeBox]+req.utxos)
+            inputs = appKit.getBoxesById([stakeStateBox["boxId"],req.stakeBox])
 
             unsignedTx = appKit.buildUnsignedTransaction(inputs+userInputs,outputs,int(1e6),Address.create(changeAddress).getErgoAddress(),tokensToBurn=assetsToBurn)
             
