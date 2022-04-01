@@ -1,15 +1,20 @@
 import inspect
 import logging
 import pandas as pd
+import typing as t
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
-from fastapi import APIRouter, status, Request
+from fastapi import APIRouter, Depends, status, Request
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from time import time
 from datetime import datetime as dt
 from api.v1.routes.staking import staked, AddressList
+from db.crud.whitelist_events import create_whitelist_event, delete_whitelist_event, edit_whitelist_event, get_whitelist_event_by_name, get_whitelist_events
+from db.session import get_db
+from db.schemas.whitelistEvents import CreateWhitelistEvent, WhitelistEvent
 from core.security import get_md5_hash
+from core.auth import get_current_active_superuser
 from config import Config, Network  # api specific config
 
 CFG = Config[Network]
@@ -146,6 +151,10 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         if whitelist.sigValue > res['individualCap']:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup individual cap is {res['individualCap']} sigUSD")
 
+        # sigValue 0 check
+        if whitelist.sigValue <= 0:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"Invalid SigUSD value.")
+
         # find wallet
         logging.debug(f'connecting to: {CFG.connectionString}')
         con = create_engine(DATABASE)
@@ -188,7 +197,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 NOW).strftime(DATEFORMAT)
             dfWhitelist = dfWhitelist.rename(
                 columns={'sigValue': 'allowance_sigusd'})
-            dfWhitelist['lastAssemblerStatus'] = dfWhitelist['allowance_sigusd'] # ? why 
+            # ? why
+            dfWhitelist['lastAssemblerStatus'] = dfWhitelist['allowance_sigusd']
             # dfWhitelist['allowance_sigusd'] = 20000
             dfWhitelist.to_sql('whitelist', con=con,
                                if_exists='append', index=False)
@@ -206,7 +216,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                               if_exists='append', index=False)
 
             # whitelist success
-            return {'status': 'success', 'detail': f'added to whitelist'}
+            return {'status': 'success', 'detail': f'added to whitelist: SigUSD value: {whitelist.sigValue}'}
 
         # already whitelisted
         else:
@@ -285,6 +295,88 @@ async def whitelistInfo(eventName):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
+
+
+@r.get(
+    "/events",
+    response_model_exclude_none=True,
+    name="whitelist:all-events"
+)
+async def whitelist_event_list(
+    db=Depends(get_db),
+):
+    """
+    Get all events
+    """
+    try:
+        return get_whitelist_events(db)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
+
+@r.get(
+    "/events/{projectName}/{roundName}",
+    response_model_exclude_none=True,
+    name="whitelist:event"
+)
+async def whitelist_event(projectName: str, roundName: str,
+                          db=Depends(get_db),
+                          ):
+    """
+    Get event
+    """
+    try:
+        return get_whitelist_event_by_name(db, projectName, roundName)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
+
+@r.post("/events", response_model_exclude_none=True, name="whitelist:create-event")
+async def whitelist_event_create(
+    whitelist_event: CreateWhitelistEvent,
+    db=Depends(get_db),
+    current_user=Depends(get_current_active_superuser),
+):
+    """
+    Create a new event
+    """
+    try:
+        return create_whitelist_event(db, whitelist_event)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
+
+@r.put(
+    "/events/{id}", response_model_exclude_none=True, name="whitelist:edit-event"
+)
+async def whitelist_event_edit(
+    id: int,
+    whitelist_event: CreateWhitelistEvent,
+    db=Depends(get_db),
+    current_user=Depends(get_current_active_superuser)
+):
+    """
+    Update existing event
+    """
+    return edit_whitelist_event(db, id, whitelist_event)
+
+
+@r.delete(
+    "/{id}", response_model_exclude_none=True, name="whitelist:delete-event"
+)
+async def whitelist_event_delete(
+    id: int,
+    db=Depends(get_db),
+    current_user=Depends(get_current_active_superuser),
+):
+    """
+    Delete event
+    """
+    try:
+        return delete_whitelist_event(db, id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
 # endregion ROUTES
 
 # MAIN
