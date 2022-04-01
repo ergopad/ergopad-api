@@ -245,7 +245,7 @@ async def checkEventConstraints(whitelist: Whitelist):
         return (True, "ok")
 
 
-@r.get("/info/{eventName}", name="whitelist:info")
+@r.get("/info/{eventName}", name="whitelist:info [DEPRECATED]")
 async def whitelistInfo(eventName):
     NOW = int(time())
     try:
@@ -362,7 +362,7 @@ async def whitelist_event_edit(
 
 
 @r.delete(
-    "/{id}", response_model_exclude_none=True, name="whitelist:delete-event"
+    "/events/{id}", response_model_exclude_none=True, name="whitelist:delete-event"
 )
 async def whitelist_event_delete(
     id: int,
