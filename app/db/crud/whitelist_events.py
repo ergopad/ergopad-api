@@ -51,6 +51,36 @@ def get_whitelist_event(db: Session, id: int):
         )
 
 
+def get_whitelist_event_by_event_id(db: Session, event_id: int):
+    whitelist_event = db.query(whitelistEvents.WhitelistEvent).filter(
+        whitelistEvents.WhitelistEvent.eventId == event_id).first()
+    if not whitelist_event:
+        return None
+    else:
+        event = db.query(events.Event).filter(
+            events.Event.id == event_id).first()
+        if not event:
+            None
+        return schema.WhitelistEvent(
+            id=whitelist_event.id,
+            eventName=event.name,
+            description=event.description,
+            total_sigusd=event.total_sigusd,
+            buffer_sigusd=event.buffer_sigusd,
+            individualCap=event.individualCap,
+            start_dtz=event.start_dtz,
+            end_dtz=event.end_dtz,
+            projectName=whitelist_event.projectName,
+            roundName=whitelist_event.roundName,
+            eventId=event.id,
+            title=whitelist_event.title,
+            subtitle=whitelist_event.subtitle,
+            details=whitelist_event.details,
+            checkBoxes=whitelist_event.checkBoxes,
+            additionalDetails=whitelist_event.additionalDetails
+        )
+
+
 def get_whitelist_events(db: Session, skip: int = 0, limit: int = 100):
     return db.query(whitelistEvents.WhitelistEvent).offset(skip).limit(limit).all()
 
