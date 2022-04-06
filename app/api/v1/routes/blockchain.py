@@ -11,10 +11,11 @@ from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Depends, status
 from time import time
-from api.v1.routes.asset import get_asset_current_price
+from api.v1.routes.asset import get_asset_balance_from_address, get_asset_current_price
 from cache.cache import cache
 from config import Config, Network # api specific config
 from pydantic import BaseModel
+from cache.cache import cache
 
 CFG = Config[Network]
 
@@ -422,6 +423,46 @@ def getNFTBox(tokenId: str, allowCached=False):
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
 
+@r.get("/signingRequest/{txId}", name="blockchain:signingRequest")
+def signingRequest(txId):
+    return cache.get(f'ergopay_signing_request_{txId}')
+
+# @r.get("/getUnspentBoxesByTokenId/{tokenId}", name='blockchain:getUnspentBoxesByTokenId')
+def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
+    try:
+        if not useExplorerApi:
+            con = create_engine(EXPLORER)
+            sql = f"""    
+                select
+                    o.box_id as box_id
+                    , o.additional_registers as additional_registers
+                from node_outputs o
+                    left join node_inputs i on i.box_id = o.box_id
+                    join node_assets a on a.box_id = o.box_id
+                        and a.header_id = o.header_id
+                where
+                    o.main_chain = true
+                    and i.box_id is null -- output with no input = unspent
+                    and a.token_id = '{tokenId}'
+            """
+            res = con.execute(sql).fetchall()
+            boxes = []
+            for data in res:
+                boxes.append({ 
+                    'boxId': data["box_id"],
+                    'additionalRegisters': data["additional_registers"],
+                })
+
+            return boxes
+        
+        # not implemented
+        else:
+            return {}
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: failed to get boxes by token id ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to get boxes by token id ({e})')
+
 # GET unspent stake boxes
 # Note: Run with useExplorerApi = True in case local explorer service failure
 def getUnspentStakeBoxes(useExplorerApi=False):
@@ -712,6 +753,45 @@ async def airdrop(
         return appKit.sendTransaction(signedTx)
     
     return appKit.unsignedTxToJson(unsignedTx)
+
+@r.get("/tvl/{tokenId}", name="blockchain:tvl")
+async def tvl(tokenId: str):
+    
+    cached = cache.get(f"get_tvl_{tokenId}")
+    if cached:
+        return cached
+    else:
+        stakingAddress = "3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9"
+        vestingAddress = "Y2JDKcXN5zrz3NxpJqhGcJzgPRqQcmMhLqsX3TkkqMxQKK86Sh3hAZUuUweRZ97SLuCYLiB2duoEpYY2Zim3j5aJrDQcsvwyLG2ixLLzgMaWfBhTqxSbv1VgQQkVMKrA4Cx6AiyWJdeXSJA6UMmkGcxNCANbCw7dmrDS6KbnraTAJh6Qj6s9r56pWMeTXKWFxDQSnmB4oZ1o1y6eqyPgamRsoNuEjFBJtkTWKqYoF8FsvquvbzssZMpF6FhA1fkiH3n8oKpxARWRLjx2QwsL6W5hyydZ8VFK3SqYswFvRnCme5Ywi4GvhHeeukW4w1mhVx6sbAaJihWLHvsybRXLWToUXcqXfqYAGyVRJzD1rCeNa8kUb7KHRbzgynHCZR68Khi3G7urSunB9RPTp1EduL264YV5pmRLtoNnH9mf2hAkkmqwydi9LoULxrwsRvp"
+        vestingWithNFTAddress = "2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU"
+        
+        stakingBalanceC = get_asset_balance_from_address(stakingAddress)
+        vestingBalanceC = get_asset_balance_from_address(vestingAddress)
+        vestingWithNFTBalanceC = get_asset_balance_from_address(vestingWithNFTAddress)
+
+        stakingBalance = await stakingBalanceC
+        vestingBalance = await vestingBalanceC
+        vestingWithNFTBalance = await vestingWithNFTBalanceC
+
+        stakingTVL = 0
+        for token in stakingBalance["balance"]["ERG"]["tokens"]:
+            if token["tokenId"] == tokenId:
+                stakingTVL += round(token["amount"]*10**(-1*token["decimals"])*token["price"],2)
+
+        vestingTVL = 0
+        for token in vestingBalance["balance"]["ERG"]["tokens"] + vestingWithNFTBalance["balance"]["ERG"]["tokens"]:
+            if token["tokenId"] == tokenId:
+                vestingTVL += round(token["amount"]*10**(-1*token["decimals"])*token["price"],2)
+        result = {
+            'tvl': {
+                'total': stakingTVL + vestingTVL,
+                'staked': stakingTVL,
+                'vested': vestingTVL
+            }
+        }
+        cache.set(f"get_tvl_{tokenId}",result)
+
+        return result
 
 #endregion ROUTES
 

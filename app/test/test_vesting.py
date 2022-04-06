@@ -11,7 +11,7 @@ DEBUG = True # CFG.DEBUG
 class TestProxyNFTLockedVesting:
     appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
 
-    sigusd = "81ba2a45d4539045995ad6ceeecf9f14b942f944a1c9771430a89c3f88ee898a"
+    sigusd = "03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04"
     ergusdoracle = "011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
     proxyNFT = "021d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
     vestedTokenId = "031d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
