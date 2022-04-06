@@ -59,10 +59,6 @@ class Whitelist(BaseModel):
     event: str
     name: str
     sigValue: float
-    socialHandle: str
-    socialPlatform: str
-    chatHandle: str
-    chatPlatform: str
 
     class Config:
         schema_extra = {
@@ -72,10 +68,6 @@ class Whitelist(BaseModel):
                 'event': 'IDO',
                 'name': 'Jo Smith',
                 'sigValue': 2000.5,
-                'socialHandle': '@tweetyBird',
-                'socialPlatform': 'twitter',
-                'chatHandle': '@puddyTat',
-                'chatPlatform': 'discord',
             }
         }
 # endregion CLASSES
@@ -173,8 +165,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
 
         # create wallet if it doesn't exist
         if res.rowcount == 0:
-            dfWallet = df[['ergoAddress', 'email', 'socialHandle',
-                           'socialPlatform', 'chatHandle', 'chatPlatform']]
+            dfWallet = df[['ergoAddress', 'email']]
             dfWallet['network'] = Network
             dfWallet['lastSeen_dtz'] = dt.fromtimestamp(
                 NOW).strftime(DATEFORMAT)
@@ -202,8 +193,6 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 NOW).strftime(DATEFORMAT)
             dfWhitelist = dfWhitelist.rename(
                 columns={'sigValue': 'allowance_sigusd'})
-            # ? why
-            dfWhitelist['lastAssemblerStatus'] = dfWhitelist['allowance_sigusd']
             # dfWhitelist['allowance_sigusd'] = 20000
             dfWhitelist.to_sql('whitelist', con=con,
                                if_exists='append', index=False)
