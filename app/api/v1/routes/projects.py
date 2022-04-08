@@ -11,14 +11,13 @@ from core.auth import get_current_active_superuser
 
 from db.session import get_db
 from db.crud.projects import (
-    get_project_team,
     get_projects,
     get_project,
     create_project,
     edit_project,
     delete_project
 )
-from db.schemas.projects import CreateAndUpdateProjectWithTeam, Project, ProjectWithTeam
+from db.schemas.projects import CreateAndUpdateProject, Project
 
 from aws.s3 import AWS_REGION, S3, S3_BUCKET, S3_KEY
 
@@ -32,7 +31,6 @@ projects_router = r = APIRouter()
     name="projects:all-projects"
 )
 async def projects_list(
-    response: Response,
     db=Depends(get_db),
 ):
     """
@@ -44,38 +42,23 @@ async def projects_list(
 
 @r.get(
     "/{id}",
-    response_model=ProjectWithTeam,
+    response_model=Project,
     response_model_exclude_none=True,
     name="projects:project-details"
 )
 async def project_details(
-    request: Request,
     id: str,
     db=Depends(get_db),
 ):
     """
     Get any project details
     """
-    project = get_project(db, id)
-    project_id = project.id
-    project_team = get_project_team(db, project_id)
-    return ProjectWithTeam(
-        id=project.id,
-        name=project.name,
-        fundsRaised=project.fundsRaised,
-        shortDescription=project.shortDescription,
-        description=project.description,
-        socials=project.socials,
-        bannerImgUrl=project.bannerImgUrl,
-        isLaunched=project.isLaunched,
-        team=project_team
-    )
+    return get_project(db, id)
 
 
-@r.post("/", response_model=ProjectWithTeam, response_model_exclude_none=True, name="projects:create")
+@r.post("/", response_model=Project, response_model_exclude_none=True, name="projects:create")
 async def project_create(
-    request: Request,
-    project: CreateAndUpdateProjectWithTeam,
+    project: CreateAndUpdateProject,
     db=Depends(get_db),
     current_user=Depends(get_current_active_superuser),
 ):
@@ -86,12 +69,11 @@ async def project_create(
 
 
 @r.put(
-    "/{project_id}", response_model=ProjectWithTeam, response_model_exclude_none=True, name="projects:edit"
+    "/{project_id}", response_model=Project, response_model_exclude_none=True, name="projects:edit"
 )
 async def project_edit(
-    request: Request,
     project_id: int,
-    project: CreateAndUpdateProjectWithTeam,
+    project: CreateAndUpdateProject,
     db=Depends(get_db),
     current_user=Depends(get_current_active_superuser)
 ):
@@ -105,7 +87,6 @@ async def project_edit(
     "/{project_id}", response_model=Project, response_model_exclude_none=True, name="projects:delete"
 )
 async def project_delete(
-    request: Request,
     project_id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_superuser),

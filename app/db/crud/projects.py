@@ -11,21 +11,10 @@ from db.schemas import projects as schemas
 ####################################
 
 
-def social_compatible_project(project):
-    try:
-        project.socials = schemas.Socials.parse_obj(
-            json.loads(project.socials))
-    except:
-        # make backward compatible with older data
-        project.socials = schemas.Socials(telegram=project.socials)
-    return project
-
-
 def get_projects(
     db: Session, skip: int = 0, limit: int = 100
 ) -> t.List[schemas.Project]:
-    data = db.query(models.Project).offset(skip).limit(limit).all()
-    return [social_compatible_project(project) for project in data]
+    return db.query(models.Project).offset(skip).limit(limit).all()
 
 
 def generate_project_slug(title: str) -> str:
@@ -35,7 +24,7 @@ def generate_project_slug(title: str) -> str:
     return (''.join(title.split()), '_'.join(title.split()))
 
 
-def get_project(db: Session, id: str, model="out"):
+def get_project(db: Session, id: str):
     project = None
     id = str(id)
     if (id.isdecimal()):
@@ -51,51 +40,26 @@ def get_project(db: Session, id: str, model="out"):
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="project not found")
-    if model == "db":
-        return project
-    else:
-        return social_compatible_project(project)
+    return project
 
 
-def get_project_team(db: Session, projectId: int, skip: int = 0, limit: int = 100) -> t.List[schemas.ProjectTeamMember]:
-    return db.query(models.ProjectTeam).filter(models.ProjectTeam.projectId == projectId).all()
-
-
-def create_project(db: Session, project: schemas.CreateAndUpdateProjectWithTeam):
+def create_project(db: Session, project: schemas.CreateAndUpdateProject):
     db_project = models.Project(
         name=project.name,
         shortDescription=project.shortDescription,
         description=project.description,
         fundsRaised=project.fundsRaised,
-        socials=str(project.socials.json()),
         bannerImgUrl=project.bannerImgUrl,
         isLaunched=project.isLaunched,
+        socials=project.socials.dict(),
+        roadmap=project.roadmap.dict(),
+        team=project.team.dict(),
+        tokenomics=project.tokenomics.dict()
     )
     db.add(db_project)
     db.commit()
     db.refresh(db_project)
-    if (project.team):
-        set_project_team(db, db_project.id, project.team)
-    return schemas.ProjectWithTeam(
-        id=db_project.id,
-        name=db_project.name,
-        shortDescription=db_project.shortDescription,
-        description=db_project.description,
-        fundsRaised=db_project.fundsRaised,
-        socials=schemas.Socials.parse_obj(json.loads(db_project.socials)),
-        bannerImgUrl=db_project.bannerImgUrl,
-        isLaunched=db_project.isLaunched,
-        team=get_project_team(db, db_project.id)
-    )
-
-
-def set_project_team(db: Session, projectId: int, teamMembers: t.List[schemas.CreateAndUpdateProjectTeamMember]):
-    db_teamMembers = list(map(lambda teamMember: models.ProjectTeam(
-        name=teamMember.name, description=teamMember.description, profileImgUrl=teamMember.profileImgUrl, projectId=projectId), teamMembers))
-    delete_project_team(db, projectId)
-    db.add_all([member for member in db_teamMembers])
-    db.commit()
-    return get_project_team(db, projectId)
+    return db_project
 
 
 def delete_project(db: Session, id: int):
@@ -103,50 +67,25 @@ def delete_project(db: Session, id: int):
     if not project:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail="project not found")
-    delete_project_team(db, id)
     db.delete(project)
     db.commit()
-    return social_compatible_project(project)
-
-
-def delete_project_team(db: Session, projectId: int):
-    ret = get_project_team(db, projectId)
-    db.query(models.ProjectTeam).filter(models.ProjectTeam.projectId ==
-                                        projectId).delete(synchronize_session=False)
-    db.commit()
-    return ret
+    return project
 
 
 def edit_project(
-    db: Session, id: int, project: schemas.CreateAndUpdateProjectWithTeam
+    db: Session, id: int, project: schemas.CreateAndUpdateProject
 ):
-    db_project = get_project(db, id, model="db")
+    db_project = get_project(db, id)
     if not db_project:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail="project not found")
 
     update_data = project.dict(exclude_unset=True)
     for key, value in update_data.items():
-        if key == "socials":
-            setattr(db_project, key, str(project.socials.json()))
-        else:
-            setattr(db_project, key, value)
+        setattr(db_project, key, value)
 
     db.add(db_project)
     db.commit()
     db.refresh(db_project)
 
-    if (project.team != None):
-        set_project_team(db, db_project.id, project.team)
-
-    return schemas.ProjectWithTeam(
-        id=db_project.id,
-        name=db_project.name,
-        shortDescription=db_project.shortDescription,
-        description=db_project.description,
-        fundsRaised=db_project.fundsRaised,
-        socials=schemas.Socials.parse_obj(json.loads(db_project.socials)),
-        bannerImgUrl=db_project.bannerImgUrl,
-        isLaunched=db_project.isLaunched,
-        team=get_project_team(db, db_project.id)
-    )
+    return db_project
