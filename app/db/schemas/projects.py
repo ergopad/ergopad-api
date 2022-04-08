@@ -25,6 +25,9 @@ class Tokenomics(BaseModel):
 
 
 class TokenomicsJSONList(BaseModel):
+    tokenName: t.Optional[str]
+    totalTokens: t.Optional[float]
+    tokenTicker: t.Optional[str]
     tokenomics: t.List[Tokenomics]
 
 
