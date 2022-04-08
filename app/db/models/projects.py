@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, Float
+from sqlalchemy import JSON, Boolean, Column, Integer, String, Float
 
 from db.session import Base
 
@@ -13,16 +13,9 @@ class Project(Base):
     fundsRaised = Column(Float)
     shortDescription = Column(String)
     description = Column(String)
-    socials = Column(String)
     bannerImgUrl = Column(String)
     isLaunched = Column(Boolean)
-
-
-class ProjectTeam(Base):
-    __tablename__ = "projectTeams"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    description = Column(String)
-    profileImgUrl = Column(String)
-    projectId = Column(Integer)
+    socials = Column(JSON)
+    roadmap = Column(JSON)
+    team = Column(JSON)
+    tokenomics = Column(JSON)
