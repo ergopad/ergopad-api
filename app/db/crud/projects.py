@@ -63,7 +63,7 @@ def create_project(db: Session, project: schemas.CreateAndUpdateProject):
 
 
 def delete_project(db: Session, id: int):
-    project = get_project(db, id, model="db")
+    project = get_project(db, id)
     if not project:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             detail="project not found")
