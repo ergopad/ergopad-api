@@ -1,4 +1,6 @@
-import requests 
+import inspect
+import logging
+import requests
 import typing as t
 
 from sqlalchemy import create_engine
@@ -10,15 +12,15 @@ from pydantic import BaseModel
 from sqlalchemy.sql.schema import BLANK_SCHEMA
 from time import time
 from datetime import datetime
-from ergodex.price import getErgodexTokenPrice
-from config import Config, Network # api specific config
+from ergodex.price import getErgodexTokenPrice, getErgodexTokenPriceByTokenId
+from config import Config, Network  # api specific config
 from cache.cache import cache
 
 CFG = Config[Network]
 
 asset_router = r = APIRouter()
 
-#region BLOCKHEADER
+# region BLOCKHEADER
 """
 Asset API
 ---------
@@ -44,16 +46,16 @@ testnet: 3WwjaerfwDqYvFwvPRVJBJx2iUvCjD2jVpsL82Zho1aaV5R95jsG
 mainnet: 9iD7JfYYemJgVz7nTGg9gaHuWg7hBbHo2kxrrJawyz4BD1r9fLS
 
 """
-#endregion BLOCKHEADER
+# endregion BLOCKHEADER
 
-#region INIT
+# region INIT
 DEBUG = CFG.debug
-st = time() # stopwatch
+st = time()  # stopwatch
 
-currency = 'usd' # TODO: store with user
-total_sigrsv = 100000000000.01 # initial amount SigRSV
-default_rsv_price = 1000000 # lower bound/default SigRSV value
-nerg2erg = 1000000000.0 # 1e9 satoshis/kushtis in 1 erg
+currency = 'usd'  # TODO: store with user
+total_sigrsv = 100000000000.01  # initial amount SigRSV
+default_rsv_price = 1000000  # lower bound/default SigRSV value
+nerg2erg = 1000000000.0  # 1e9 satoshis/kushtis in 1 erg
 ergo_watch_api = CFG.ergoWatch
 oracle_pool_url = CFG.oraclePool
 coingecko_url = CFG.coinGecko
@@ -61,27 +63,28 @@ exchange = 'coinex'
 symbol = 'ERG/USDT'
 
 con = create_engine(CFG.connectionString)
-#endregion INIT
+# endregion INIT
 
-#region LOGGING
-import logging
+# region LOGGING
 level = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', level=level)
+logging.basicConfig(
+    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', level=level)
 
-import inspect
-myself = lambda: inspect.stack()[1][3]
-#endregion LOGGING
 
-#region ROUTES
+def myself(): return inspect.stack()[1][3]
+# endregion LOGGING
+
+# region ROUTES
 #
 # Single coin balance and tokens for wallet address
 #
 @r.get("/balance/{address}", name="asset:wallet-balance")
-async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None: 
+async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
     try:
         # get balance from ergo explorer api
         logging.debug(f'find balance for [blockchain], address: {address}...')
-        res = requests.get(f'{CFG.ergoPlatform}/addresses/{address}/balance/total')    
+        res = requests.get(
+            f'{CFG.ergoPlatform}/addresses/{address}/balance/total')
 
         # handle invalid address or other error
         wallet_assets = {}
@@ -91,7 +94,6 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
         # else:
             # raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Something went wrong.")
         logging.info(f'Balance for ergo: {balance}')
-
         ergPrice = (await get_asset_current_price('ERGO'))['price']
 
         # handle SigUSD and SigRSV
@@ -107,30 +109,19 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
                 price = (await get_asset_current_price('SigRSV'))['price']
                 token['price'] = price
             # Ergodex tokens
-            # Lunadog    
-            if token['tokenId'] == '5a34d53ca483924b9a6aa0c771f11888881b516a8d1a9cdc535d063fe26d065e':
-                price = (await get_asset_current_price('LunaDog'))['price']
+            price = (await get_ergodex_asset_price_by_token_id(token['tokenId']))['price']
+            if price:
                 token['price'] = price
-            # Erdoge
-            if token['tokenId'] == '36aba4b4a97b65be491cf9f5ca57b5408b0da8d0194f30ec8330d1e8946161c1':
-                price = (await get_asset_current_price('Erdoge'))['price']
-                token['price'] = price
-            # NETA
-            if token['tokenId'] == '472c3d4ecaa08fb7392ff041ee2e6af75f4a558810a74b28600549d5392810e8':
-                price = (await get_asset_current_price('NETA'))['price']
-                token['price'] = price
-            # ergopad
-            if token['tokenId'] == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413':
-                price = (await get_asset_current_price('ergopad'))['price']
-                token['price'] = price
-            tokens.append(token)
+                tokens.append(token)
 
         # normalize result
         wallet_assets["ERG"] = {
             "blockchain": "ergo",
-            "balance": balance['confirmed']['nanoErgs']/nerg2erg, # satoshis/kushtis
-            "unconfirmed": balance['unconfirmed']['nanoErgs']/nerg2erg, # may not be available for all blockchains
-            "tokens": tokens, # array
+            # satoshis/kushtis
+            "balance": balance['confirmed']['nanoErgs']/nerg2erg,
+            # may not be available for all blockchains
+            "unconfirmed": balance['unconfirmed']['nanoErgs']/nerg2erg,
+            "tokens": tokens,  # array
             "price": ergPrice,
         }
         # unconfirmed?
@@ -143,6 +134,34 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find balance ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find balance ({e})')
+
+#
+# Find price by token_id
+# Base currency is USD for all coins and tokens.
+#
+@r.get("/priceByTokenId/{tokenId}", name="coin:coin-price-by-token-id")
+async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
+    try:
+        cached = cache.get(f"get_api_asset_price_by_token_id_{tokenId}")
+        if cached:
+            return cached
+
+        price = None
+
+        logging.warning('find price from ergodex')
+        ret = getErgodexTokenPriceByTokenId(tokenId)
+        if (ret["status"] == "success"):
+            price = ret["price"]
+
+        ret = {
+            "price": price
+        }
+        cache.set(f"get_api_asset_price_by_token_id_{tokenId}", ret)
+        return ret
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: unable to find price ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price ({e})')
 
 #
 # Find price by coin
@@ -216,7 +235,7 @@ async def get_asset_current_price(coin: str = None) -> None:
                         "btc": "BTC/USDT",
                         "ethereum": "ETH/USDT",
                         "eth": "ETH/USDT",
-                    } 
+                    }
                     sqlFindLatestPrice = f'select close from "{exchange}_{pairMapper[coin]}_1m" order by timestamp_utc desc limit 1'
                     res = con.execute(sqlFindLatestPrice)
                     price = res.fetchone()[0]
@@ -226,9 +245,10 @@ async def get_asset_current_price(coin: str = None) -> None:
             # if not in local database, ask for online value
             if price == None:
                 logging.warning('fallback to price from exchange')
-                res = requests.get(f'{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}')
+                res = requests.get(
+                    f'{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}')
                 try:
-                    price = res.json()[coin][currency] 
+                    price = res.json()[coin][currency]
                 except:
                     pass
 
@@ -344,7 +364,8 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
 async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     pair = pair.lower()
     # check cache
-    cached = cache.get(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
+    cached = cache.get(
+        f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
     if cached:
         return cached
 
@@ -394,14 +415,15 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
                 "price": tokenBase,
             })
 
-        cache.set(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}", tokenData)
+        cache.set(
+            f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}", tokenData)
         return tokenData
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find price chart ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price chart ({e})')
 
-#endregion ROUTES
+# endregion ROUTES
 
 #
 # All coin balances and tokens for wallet addresses
@@ -413,7 +435,7 @@ class Wallets(BaseModel):
 # balance of all wallets
 @r.post("/balance/all", name="asset:all-wallet-balances")
 async def get_all_assets(request: Request) -> None:
-    
+
     wallets = await request.json()
 
     try:
@@ -426,14 +448,17 @@ async def get_all_assets(request: Request) -> None:
             # ergo
             if wallet == 'ergo':
                 for address in wallets[wallet]:
-                    try: assets[wallet].append(await get_asset_balance_from_address(address))
-                    except: assets[wallet].append("invalid response")
+                    try:
+                        assets[wallet].append(await get_asset_balance_from_address(address))
+                    except:
+                        assets[wallet].append("invalid response")
 
             # ethereum
             if wallet == 'ethereum':
                 for address in wallets[wallet]:
                     try:
-                        res = requests.get(f'https://api.ethplorer.io/getAddressInfo/{address}?apiKey=freekey')
+                        res = requests.get(
+                            f'https://api.ethplorer.io/getAddressInfo/{address}?apiKey=freekey')
                         assets[wallet].append({
                             "address": address,
                             "balance": {
@@ -443,14 +468,14 @@ async def get_all_assets(request: Request) -> None:
                                     'unconfirmed': 0,
                                     'tokens': None,
                                     'price': (await get_asset_current_price(wallet))['price']
-                                }                     
+                                }
                             }
                         })
-                    except: assets[wallet].append("invalid response")
+                    except:
+                        assets[wallet].append("invalid response")
 
         return assets
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find all balances ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find all balances ({e})')
-

@@ -90,7 +90,9 @@ class AmmPool:
         decimalY = 10 ** self.y.asset.decimals
         price = ((self.y.amount * decimalX) / (self.x.amount * decimalY))
         return {
+            "assetXId": self.x.asset.id,
             "assetX": self.x.asset.name,
+            "assetYId": self.y.asset.id,
             "assetY": self.y.asset.name,
             "price": round(price, self.y.asset.decimals),
         }
@@ -158,7 +160,25 @@ def getTokenPrice(token, prices):
     return None
 
 
-# main export
+def getTokenId(token, prices):
+    # return id of token from prices
+    for price in prices:
+        if price["assetY"].lower() == token.lower():
+            return price["assetYId"]
+    return None
+
+
+def getTokenName(tokenId, prices):
+    # return name of token from prices
+    for price in prices:
+        if price["assetYId"] == tokenId:
+            return price["assetY"]
+    return None
+
+
+# MAIN EXPORTS
+
+
 def getErgodexTokenPrice(tokenName: str):
     tokenName = tokenName.lower()
     try:
@@ -169,14 +189,42 @@ def getErgodexTokenPrice(tokenName: str):
         SigUSD_ERG = getTokenPrice("SigUSD", prices)
         token_ERG = getTokenPrice(tokenName, prices)
         SigUSD_token = SigUSD_ERG / token_ERG
+        tokenId = getTokenId(tokenName, prices)
         return {
+            "id": tokenId,
             "name": tokenName,
             "price": SigUSD_token,
             "status": "success"
         }
     except:
         return {
+            "id": '0xdead',
             "name": tokenName,
+            "price": 0.0,
+            "status": "error"
+        }
+
+
+def getErgodexTokenPriceByTokenId(tokenId: str):
+    try:
+        res = requests.get(f'{API}/v1/boxes/unspent/byErgoTree/{POOL_SAMPLE}/')
+        boxes = list(map(explorerToErgoBox, res.json()["items"]))
+        pools = parseValidPools(boxes)
+        prices = [pool.getCalculatedPrice() for pool in pools]
+        tokenName = getTokenName(tokenId, prices)
+        SigUSD_ERG = getTokenPrice("SigUSD", prices)
+        token_ERG = getTokenPrice(tokenName, prices)
+        SigUSD_token = SigUSD_ERG / token_ERG
+        return {
+            "id": tokenId,
+            "name": tokenName,
+            "price": SigUSD_token,
+            "status": "success"
+        }
+    except:
+        return {
+            "id": tokenId,
+            "name": '0xdead',
             "price": 0.0,
             "status": "error"
         }
