@@ -1,4 +1,6 @@
 import requests
+from config import Config, Network  # api specific config
+from cache.cache import cache
 
 """
 ========================
@@ -12,7 +14,8 @@ Created Date: Jan 23, 2022
 """
 
 # CONSTANTS
-API = "https://api.ergoplatform.com/api"
+CFG = Config[Network]
+API = CFG.explorer
 POOL_SAMPLE = "1999030f0400040204020404040405feffffffffffffffff0105feffffffffffffffff01050004d00f040004000406050005000580dac409d819d601b2a5730000d602e4c6a70404d603db63087201d604db6308a7d605b27203730100d606b27204730200d607b27203730300d608b27204730400d6099973058c720602d60a999973068c7205027209d60bc17201d60cc1a7d60d99720b720cd60e91720d7307d60f8c720802d6107e720f06d6117e720d06d612998c720702720fd6137e720c06d6147308d6157e721206d6167e720a06d6177e720906d6189c72117217d6199c72157217d1ededededededed93c27201c2a793e4c672010404720293b27203730900b27204730a00938c7205018c720601938c7207018c72080193b17203730b9593720a730c95720e929c9c721072117e7202069c7ef07212069a9c72137e7214067e9c720d7e72020506929c9c721372157e7202069c7ef0720d069a9c72107e7214067e9c72127e7202050695ed720e917212730d907216a19d721872139d72197210ed9272189c721672139272199c7216721091720b730e"
 EMISSION_LP = 9223372036854775807
 
@@ -90,7 +93,9 @@ class AmmPool:
         decimalY = 10 ** self.y.asset.decimals
         price = ((self.y.amount * decimalX) / (self.x.amount * decimalY))
         return {
+            "assetXId": self.x.asset.id,
             "assetX": self.x.asset.name,
+            "assetYId": self.y.asset.id,
             "assetY": self.y.asset.name,
             "price": round(price, self.y.asset.decimals),
         }
@@ -158,32 +163,88 @@ def getTokenPrice(token, prices):
     return None
 
 
-# main export
+def getTokenId(token, prices):
+    # return id of token from prices
+    for price in prices:
+        if price["assetY"].lower() == token.lower():
+            return price["assetYId"]
+    return None
+
+
+def getTokenName(tokenId, prices):
+    # return name of token from prices
+    for price in prices:
+        if price["assetYId"] == tokenId:
+            return price["assetY"]
+    return None
+
+
+def getErgodexPoolBox():
+    cached = cache.get(f"ergodex_pool_{POOL_SAMPLE}")
+    if cached:
+        return cached
+    res = requests.get(
+        f'{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/').json()
+    cache.set(f"ergodex_pool_{POOL_SAMPLE}", res)
+    return res
+
+
+# MAIN EXPORTS
+
+
 def getErgodexTokenPrice(tokenName: str):
     tokenName = tokenName.lower()
     try:
-        res = requests.get(f'{API}/v1/boxes/unspent/byErgoTree/{POOL_SAMPLE}/')
-        boxes = list(map(explorerToErgoBox, res.json()["items"]))
+        res = getErgodexPoolBox()
+        boxes = list(map(explorerToErgoBox, res["items"]))
         pools = parseValidPools(boxes)
         prices = [pool.getCalculatedPrice() for pool in pools]
         SigUSD_ERG = getTokenPrice("SigUSD", prices)
         token_ERG = getTokenPrice(tokenName, prices)
         SigUSD_token = SigUSD_ERG / token_ERG
+        tokenId = getTokenId(tokenName, prices)
         return {
+            "id": tokenId,
             "name": tokenName,
             "price": SigUSD_token,
             "status": "success"
         }
     except:
         return {
+            "id": '0xdead',
             "name": tokenName,
             "price": 0.0,
             "status": "error"
         }
 
 
+def getErgodexTokenPriceByTokenId(tokenId: str):
+    try:
+        res = getErgodexPoolBox()
+        boxes = list(map(explorerToErgoBox, res["items"]))
+        pools = parseValidPools(boxes)
+        prices = [pool.getCalculatedPrice() for pool in pools]
+        tokenName = getTokenName(tokenId, prices)
+        SigUSD_ERG = getTokenPrice("SigUSD", prices)
+        token_ERG = getTokenPrice(tokenName, prices)
+        SigUSD_token = SigUSD_ERG / token_ERG
+        return {
+            "id": tokenId,
+            "name": tokenName,
+            "price": SigUSD_token,
+            "status": "success"
+        }
+    except:
+        return {
+            "id": tokenId,
+            "name": '0xdead',
+            "price": 0.0,
+            "status": "error"
+        }
+
+
 if __name__ == "__main__":
-    res = requests.get(f'{API}/v1/boxes/unspent/byErgoTree/{POOL_SAMPLE}/')
+    res = requests.get(f'{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/')
     boxes = list(map(explorerToErgoBox, res.json()["items"]))
     pools = parseValidPools(boxes)
     for pool in pools:
