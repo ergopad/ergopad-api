@@ -112,7 +112,8 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
             price = (await get_ergodex_asset_price_by_token_id(token['tokenId']))['price']
             if price:
                 token['price'] = price
-                tokens.append(token)
+            
+            tokens.append(token)
 
         # normalize result
         wallet_assets["ERG"] = {
