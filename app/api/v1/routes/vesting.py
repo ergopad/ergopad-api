@@ -639,6 +639,8 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 
     userInputs = [keyBox] + list(otherBoxes)
 
+    userInputs = appKit.cutOffExcessUTXOs(userInputs,int(2e6),tokensToSpend)
+
     outputs = []
     tokens={
             vestingKey: 1, 
