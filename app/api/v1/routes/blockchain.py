@@ -190,6 +190,53 @@ async def ergusdoracle():
     res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
     return json.loads(res.json())
 
+# paideia tokenId: 1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489
+@r.get("/paideiaInCirculation", name="blockchain:paideiaInCirculation")
+def paideiaInCirculation():
+    # check cache
+    cached = cache.get("get_api_blockchain_paideia_in_circulation")
+    if cached:
+        logging.debug(f'CACHED_PAIDEIA_IN_CIRC: {cached}')
+        return cached
+    try:
+        con = create_engine(EXPLORER)
+        supply = totalSupply('1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489')
+        logging.debug(f'TOTAL_SUPPLY_PAIDEIA_IN_CIRC: {supply}')
+
+        stakePool = 0
+
+        vested = 0
+
+        sqlVested = f"""
+			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "vested"
+            from node_outputs o
+                left join node_inputs i on o.box_id = i.box_id
+                	and i.main_chain = true
+                join node_assets a on a.box_id = o.box_id
+				join tokens t on t.token_id = a.token_id
+            where o.main_chain = true
+                and i.box_id is null -- output with no input == unspent
+                and o.address = '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU'
+                and coalesce(o.value, 0) > 0
+        """
+        res = con.execute(sqlVested).fetchone()
+        vested = res['vested']
+
+        reserved = 0
+
+        emitted = 0
+
+        paideiaInCirculation = supply # - stakePool - vested - reserved - emitted
+
+        # set cache
+        cache.set("get_api_blockchain_paideia_in_circulation", paideiaInCirculation) # default 15 min TTL
+        return paideiaInCirculation
+        
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid paideiaInCirculation request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid paideiaInCirculation request ({e})')
+
+
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
 def ergopadInCirculation():
