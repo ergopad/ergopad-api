@@ -1,7 +1,7 @@
 from hashlib import blake2b
 import pytest
 from config import Config, Network
-from ergo.appkit import ErgoAppKit, ErgoValueT
+from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from sigmastate.lang.exceptions import InterpreterException
 from org.ergoplatform.appkit import Address
 

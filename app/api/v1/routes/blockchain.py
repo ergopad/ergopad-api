@@ -4,7 +4,7 @@ from typing import Dict
 from xmlrpc.client import Boolean
 import requests, json
 from core.auth import get_current_active_superuser
-from ergo.appkit import ErgoAppKit
+from ergo_python_appkit.appkit import ErgoAppKit
 from wallet import Wallet
 
 from sqlalchemy import create_engine
