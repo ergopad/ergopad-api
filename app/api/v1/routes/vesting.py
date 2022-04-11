@@ -17,10 +17,10 @@ from base64 import b64encode
 from ergo.util import encodeLong, encodeString
 import uuid
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta, getUnspentBoxesByTokenId
-from ergo.appkit import ErgoAppKit, ErgoValueT
 from hashlib import blake2b
 from cache.cache import cache
 
+from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, InputBox
 from sigmastate.Values import ErgoTree
 
