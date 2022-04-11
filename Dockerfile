@@ -16,7 +16,6 @@ RUN apt-get update \
 # install python dependencies
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
-RUN pip install git+https://github.com/ergo-pad/ergo-python-appkit.git
 
 CMD tail /dev/null -f
  
