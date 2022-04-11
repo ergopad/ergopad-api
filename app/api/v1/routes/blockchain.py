@@ -205,8 +205,6 @@ def paideiaInCirculation():
 
         stakePool = 0
 
-        vested = 0
-
         sqlVested = f"""
 			select coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "vested"
             from node_outputs o
@@ -226,7 +224,7 @@ def paideiaInCirculation():
 
         emitted = 0
 
-        paideiaInCirculation = supply # - stakePool - vested - reserved - emitted
+        paideiaInCirculation = supply - stakePool - vested - reserved - emitted
 
         # set cache
         cache.set("get_api_blockchain_paideia_in_circulation", paideiaInCirculation) # default 15 min TTL
