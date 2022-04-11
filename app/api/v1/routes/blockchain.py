@@ -354,7 +354,7 @@ def totalSupply(tokenId):
                 
             where o.main_chain = true
                 and i.box_id is null -- output with no input == unspent
-                and a.token_id = '{tokenId}'
+                and a.token_id = {tokenId!r}
                 and coalesce(a.value, 0) > 0 -- ignore nulls
         """
         res = con.execute(sqlTotalSupply).fetchone()
@@ -488,7 +488,7 @@ def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
                 where
                     o.main_chain = true
                     and i.box_id is null -- output with no input = unspent
-                    and a.token_id = '{tokenId}'
+                    and a.token_id = {tokenId!r}
             """
             res = con.execute(sql).fetchall()
             boxes = []
@@ -568,9 +568,9 @@ def getUnspentStakeBoxesFromExplorerDB():
                         and a.header_id = o.header_id
                     where
                         o.main_chain = true
-                        and o.address = '{STAKE_ADDRESS}' -- all stake boxes are for this address
+                        and o.address = {STAKE_ADDRESS!r} -- all stake boxes are for this address
                         and i.box_id is null -- output with no input = unspent
-                        and a.token_id = '{STAKE_KEY_ID}' -- stake key token id
+                        and a.token_id = {STAKE_KEY_ID!r} -- stake key token id
                         and coalesce(a.value, 0) > 0
                 );
         """
