@@ -18,7 +18,7 @@ from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 
-from ergo.appkit import ErgoAppKit, ErgoValueT
+from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox
 
 staking_router = r = APIRouter()
