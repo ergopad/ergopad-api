@@ -25,6 +25,6 @@ asgi-lifespan
 ecdsa
 pyblake2
 base58
+jpype1
 python-dotenv
 psycopg2
-git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.1
