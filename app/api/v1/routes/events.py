@@ -78,7 +78,7 @@ def events(eventName):
     # return {'hello': 'world'}
     try:
         if eventName != '_':
-            where = f"where name = '{eventName}'"
+            where = f"where name = {eventName!r}"
         else:
             where = ''
         con = create_engine(DATABASE)

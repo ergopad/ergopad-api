@@ -159,7 +159,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         pd.options.mode.chained_assignment = None  # default='warn'
         df = pd.DataFrame(jsonable_encoder(whitelist), index=[0])
         logging.debug(f'dataframe: {df}')
-        sqlFindWallet = f"select id from wallets where address = '{whitelist.ergoAddress}'"
+        sqlFindWallet = f"select id from wallets where address = {whitelist.ergoAddress!r}"
         logging.debug(sqlFindWallet)
         res = con.execute(sqlFindWallet)
 
@@ -179,7 +179,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         # check this wallet has not already registered for this event
         res = con.execute(sqlFindWallet).fetchone()
         walletId = res['id']
-        sqlAlreadyWhitelisted = f'select id from "whitelist" where "walletId" = {walletId} and "eventId" = {eventId}'
+        sqlAlreadyWhitelisted = f'select id from "whitelist" where "walletId" = {walletId!r} and "eventId" = {eventId!r}'
         res = con.execute(sqlAlreadyWhitelisted)
         if res.rowcount == 0:
             # add whitelist entry
