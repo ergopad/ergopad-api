@@ -10,6 +10,7 @@ from api.v1.routes.util import util_router
 from api.v1.routes.projects import projects_router
 from api.v1.routes.vesting import vesting_router
 from api.v1.routes.whitelist import whitelist_router
+from api.v1.routes.contribution import contribution_router
 from api.v1.routes.events import events_router
 from api.v1.routes.assembler import assembler_router
 from api.v1.routes.purchase import purchase_router
@@ -41,6 +42,7 @@ app.include_router(projects_router,   prefix="/api/projects",   tags=["projects"
 app.include_router(util_router,       prefix="/api/util",       tags=["util"])
 app.include_router(vesting_router,    prefix="/api/vesting",    tags=["vesting"])
 app.include_router(whitelist_router,  prefix="/api/whitelist",  tags=["whitelist"])
+app.include_router(contribution_router, prefix="/api/contribution",  tags=["contribution"])
 app.include_router(events_router,     prefix="/api/events",     tags=["events"])
 app.include_router(purchase_router,   prefix="/api/purchase",   tags=["purchase"])
 app.include_router(assembler_router,  prefix="/api/assembler",  tags=["assembler"])
