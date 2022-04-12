@@ -168,6 +168,13 @@ def edit_whitelist_event(
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content=f'Event not found')
 
     update_data = whitelist_event.dict(exclude_unset=True)
+    # generate name for event
+    event_month = str(whitelist_event.start_dtz.month)
+    if len(event_month) == 1:
+        event_month = '0' + event_month
+    event_name = whitelist_event.projectName+"-"+whitelist_event.roundName+"-" + \
+        str(whitelist_event.start_dtz.year) + event_month + "wl"
+    update_data["name"] = event_name
     for key, value in update_data.items():
         if key in db_whitelist_event.__dict__.keys():
             setattr(db_whitelist_event, key, value)
