@@ -27,4 +27,4 @@ pyblake2
 base58
 python-dotenv
 psycopg2
-git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.1
+git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.2
