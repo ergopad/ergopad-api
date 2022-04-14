@@ -75,9 +75,8 @@ def myself(): return inspect.stack()[1][3]
 # endregion LOGGING
 
 # region ROUTES
-#
+
 # Single coin balance and tokens for wallet address
-#
 @r.get("/balance/{address}", name="asset:wallet-balance")
 async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
     try:
@@ -136,7 +135,7 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
         logging.error(f'ERR:{myself()}: unable to find balance ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find balance ({e})')
 
-#
+
 # Find price by token_id
 # Base currency is USD for all coins and tokens.
 #
@@ -164,12 +163,11 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
         logging.error(f'ERR:{myself()}: unable to find price ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price ({e})')
 
-#
+
 # Find price by coin
 # Base currency is USD for all coins and tokens.
 # - Allow SigUSD/RSV ergo tokens to be listed as coins (TODO: change from ergo.watch api)
 # - Allow multiple coins per blockchain (TODO: change from CoinGecko api)
-#
 @r.get("/price/{coin}", name="coin:coin-price")
 async def get_asset_current_price(coin: str = None) -> None:
     try:
@@ -264,6 +262,27 @@ async def get_asset_current_price(coin: str = None) -> None:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price ({e})')
 
 
+# TokenListRequest
+class TokenListRequest(BaseModel):
+    tokens: t.List[str]
+
+# Token Price Response Model
+class TokenPrice(BaseModel):
+    name: str
+    price: t.Optional[float]
+
+# Find price for a list of tokens/coins
+@r.post("/prices", response_model=t.List[TokenPrice], name="coin:coin-prices")
+async def get_asset_current_prices(tokens: TokenListRequest):
+    prices = []
+    for token in tokens.tokens:
+        prices.append({
+            "name": token,
+            "price": (await get_asset_current_price(token))["price"]
+        })
+    return prices
+
+
 # Coin history response schema
 class CoinHistoryDataPoint(BaseModel):
     timestamp: datetime
@@ -275,7 +294,6 @@ class CoinHistory(BaseModel):
     resolution: int
     history: t.List[CoinHistoryDataPoint]
 
-#
 # Find price by coin (historical)
 # - Allow SigUSD/RSV ergo tokens to be listed as coins (TODO: change from ergo.watch api)
 # - Allow multiple coins per blockchain (TODO: change from CoinGecko api)
@@ -355,7 +373,7 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
         logging.error(f'ERR:{myself()}: unable to find historical price ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find historical price ({e})')
 
-#
+
 # Find price by trading pair (ergodex)
 #
 # - Currently Supports
