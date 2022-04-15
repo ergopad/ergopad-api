@@ -690,9 +690,9 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
     except Exception as e:
         content = f'Unable to redeem with NFT.'
         # found match with "reason"
-        m = re.search('reason: NotEnoughErgsError\(not enough boxes to meet ERG needs (\d+) \(found only (\d+)\),\d+\)\)', e)
+        m = re.search('reason: NotEnoughErgsError\(not enough boxes to meet ERG needs (\d+) \(found only (\d+)\),\d+\)\)', str(e))
         if m is not None:
-             content = f'transaction requires {m.group(0):,.1} ergs, and only {m.group(1):,.1} ergs were found.'
+             content = f'transaction requires {(m.group(0)/10e9):,.3} ergs, and only {(m.group(1)/10e9):,.3} ergs were found.'
         logging.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
@@ -1095,7 +1095,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
     except Exception as e:
         # return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Uncaught error: {e}')
         content = 'Unable to process transaction, please try again.'
-        m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', e)
+        m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', str(e))
         if m is not None:
             content = f'Blockchain is synchronizing, please try again shortly (ref: {m.group(1)})'
         logging.error(f'ERR:{myself()}: {content} ({e})')
