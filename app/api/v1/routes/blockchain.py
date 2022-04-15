@@ -409,52 +409,53 @@ def getInputBoxes(boxes, txFormat: TXFormat):
         return unsignedInputs
     return None
 
-def getNFTBox(tokenId: str, allowCached=False):
+def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
     try:
-        ok = False
-        memResContent = None
-        if allowCached:
-            # allowCached is true for snapshots
-            cached = cache.get("get_explorer_mempool_boxes_unspent")
-            if cached:
-                ok = cached["ok"]
-                memResContent = cached["memResContent"] 
+        if includeMempool:
+            ok = False
+            memResContent = None
+            if allowCached:
+                # allowCached is true for snapshots
+                cached = cache.get("get_explorer_mempool_boxes_unspent")
+                if cached:
+                    ok = cached["ok"]
+                    memResContent = cached["memResContent"] 
+                else:
+                    # same api hit independent of token id
+                    # cache for 5 mins for snapshots only
+                    memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+                    ok = memRes.ok
+                    if ok:
+                        memResContent = memRes.content.decode('utf-8')
+                    content = {
+                        "ok": ok,
+                        "memResContent": memResContent
+                    }
+                    cache.set("get_explorer_mempool_boxes_unspent", content, 600) # 10 mins
             else:
-                # same api hit independent of token id
-                # cache for 5 mins for snapshots only
+                # if cached is not allowed force api call
                 memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
                 ok = memRes.ok
                 if ok:
                     memResContent = memRes.content.decode('utf-8')
-                content = {
-                    "ok": ok,
-                    "memResContent": memResContent
-                }
-                cache.set("get_explorer_mempool_boxes_unspent", content, 600) # 10 mins
-        else:
-            # if cached is not allowed force api call
-            memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
-            ok = memRes.ok
+                
             if ok:
-                memResContent = memRes.content.decode('utf-8')
-            
-        if ok:
-            memResJson = []
-            index = 0
-            offset = 0
-            while index < len(memResContent):
-                index += 1
-                try:
-                    newElement = json.loads(memResContent[offset:index])
-                    memResJson.append(newElement)
-                    offset = index
-                except:
-                    pass
-            for memBox in memResJson:
-                if "assets" in memBox:
-                    for token in memBox["assets"]:
-                        if token["tokenId"]==tokenId:
-                            return memBox
+                memResJson = []
+                index = 0
+                offset = 0
+                while index < len(memResContent):
+                    index += 1
+                    try:
+                        newElement = json.loads(memResContent[offset:index])
+                        memResJson.append(newElement)
+                        offset = index
+                    except:
+                        pass
+                for memBox in memResJson:
+                    if "assets" in memBox:
+                        for token in memBox["assets"]:
+                            if token["tokenId"]==tokenId:
+                                return memBox
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}')
         logging.debug('Explorer api call: return from boxes/unspent/byTokenId')
         if res.ok:

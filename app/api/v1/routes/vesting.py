@@ -22,7 +22,7 @@ from hashlib import blake2b
 from cache.cache import cache
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
-from org.ergoplatform.appkit import Address, InputBox
+from org.ergoplatform.appkit import Address, ErgoClientException, InputBox
 from sigmastate.Values import ErgoTree
 
 vesting_router = r = APIRouter()
@@ -975,12 +975,17 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
 
 class VestFromProxyRequest(RequiredNergTokensRequest):   
     address: str
+    addresses: List[str] = []
     utxos: List[str] = []
     txFormat: TXFormat = TXFormat.EIP_12
 
 @r.post('/vestFromProxy', name="vesting:vestFromProxy")
 async def vestFromProxy(req: VestFromProxyRequest):
     try:
+        oracleInfo = getUnspentBoxesByTokenId(ergUsdOracleNFT)[0]
+        #oracleInfo = getNFTBox(ergUsdOracleNFT,includeMempool=False)
+        if oracleInfo is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle box')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
         proxyBox = getNFTBox(req.proxyNFT)
         if proxyBox is None:
@@ -993,10 +998,6 @@ async def vestFromProxy(req: VestFromProxyRequest):
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
         vestedTokenInfo = getTokenInfo(vestedTokenId)
-        oracleInfo = getUnspentBoxesByTokenId(ergUsdOracleNFT)[0]
-        #oracleInfo = getNFTBox(ergUsdOracleNFT)
-        if oracleInfo is None:
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle box')
         nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
@@ -1008,15 +1009,25 @@ async def vestFromProxy(req: VestFromProxyRequest):
         if req.sigUSDAmount>0:
             tokensToSpend[sigusd] = sigUsdTokens
         if len(req.utxos) == 0:
-            userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
+            if len(req.addresses) == 0:
+                userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
+            else:
+                userInputs = appKit.boxesToSpendFromList(req.addresses,int(20e6+nergRequired),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)
             if not appKit.boxesCovered(userInputs,int(20e6+nergRequired),tokensToSpend):
                 userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
         if userInputs is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
-        inputs = list(appKit.getBoxesById([proxyBox["boxId"]])) + list(userInputs)
-        dataInputs = list(appKit.getBoxesById([oracleInfo["boxId"]]))
+
+        try:
+            inputs = list(appKit.getBoxesById([proxyBox["boxId"]])) + list(userInputs)
+        except ErgoClientException:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Not all input boxes could be found, try again in a few minutes')
+        try:
+            dataInputs = list(appKit.getBoxesById([oracleInfo["boxId"]]))
+        except ErgoClientException:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Oracle box could not be found, try again in a few minutes')
         proxyOutput = appKit.buildOutBox(
             value = inputs[0].getValue(),
             tokens = {
