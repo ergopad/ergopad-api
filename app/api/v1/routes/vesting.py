@@ -1,6 +1,7 @@
 from decimal import Decimal
 import requests, json, os
 import fractions
+import re
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
 from api.v1.routes.staking import AddressList
@@ -687,8 +688,13 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
             return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: Unable to redeem with NFT. ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to redeem with NFT.')
+        content = f'Unable to redeem with NFT.'
+        # found match with "reason"
+        m = re.search('reason: NotEnoughErgsError\(not enough boxes to meet ERG needs (\d+) \(found only (\d+)\),\d+\)\)', e)
+        if m is not None:
+             content = f'transaction requires {m.group(0):,.1} ergs, and only {m.group(1):,.1} ergs were found.'
+        logging.error(f'ERR:{myself()}: {content} ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 
 @r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
@@ -1077,7 +1083,11 @@ async def vestFromProxy(req: VestFromProxyRequest):
 
     except Exception as e:
         # return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Uncaught error: {e}')
-        logging.error(f'ERR:{myself()}: Unable to process transaction, please try again. ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to process transaction, please try again.')
+        content = 'Unable to process transaction, please try again.'
+        m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', e)
+        if m is not None:
+            content = f'Blockchain is synchronizing, please try again shortly (ref: {m.group(1)})'
+        logging.error(f'ERR:{myself()}: {content} ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 
