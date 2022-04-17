@@ -764,7 +764,7 @@ async def airdrop(
     req: AirdropRequest,
     current_user=Depends(get_current_active_superuser)
 ):
-    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/",CFG.ergopadApiKey)
     airdropTokenInfo = getTokenInfo(req.tokenId)
     nErgRequired = 0
     tokensRequired = 0
