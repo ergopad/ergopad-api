@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 import typing as t
+from starlette.responses import JSONResponse
 
-from core.auth import get_current_active_superuser
+from core.auth import get_current_active_user
 
 from db.session import get_db
 from db.crud.announcements import (
@@ -28,8 +29,10 @@ async def announcements_list(
     """
     Get all announcements
     """
-    announcements = get_announcements(db)
-    return announcements
+    try:
+        return get_announcements(db)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.get(
@@ -45,19 +48,25 @@ async def announcement_details(
     """
     Get any announcement details
     """
-    return get_announcement(db, id)
+    try:
+        return get_announcement(db, id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.post("/", response_model=Announcement, response_model_exclude_none=True, name="announcements:create")
 async def announcement_create(
     announcement: CreateAndUpdateAnnouncement,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Create a new announcement
     """
-    return create_announcement(db, announcement)
+    try:
+        return create_announcement(db, announcement)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.put(
@@ -67,12 +76,15 @@ async def announcement_edit(
     announcement_id: int,
     announcement: CreateAndUpdateAnnouncement,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser)
+    current_user=Depends(get_current_active_user)
 ):
     """
     Update existing announcement
     """
-    return edit_announcement(db, announcement_id, announcement)
+    try:
+        return edit_announcement(db, announcement_id, announcement)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.delete(
@@ -81,9 +93,12 @@ async def announcement_edit(
 async def announcement_delete(
     announcement_id: int,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Delete existing announcement
     """
-    return delete_announcement(db, announcement_id)
+    try:
+        return delete_announcement(db, announcement_id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')

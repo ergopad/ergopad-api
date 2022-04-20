@@ -13,7 +13,7 @@ from db.crud.whitelist_events import create_whitelist_event, delete_whitelist_ev
 from db.session import get_db
 from db.schemas.whitelistEvents import CreateWhitelistEvent
 from core.security import get_md5_hash
-from core.auth import get_current_active_superuser
+from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
 
 CFG = Config[Network]
@@ -292,7 +292,7 @@ async def whitelistInfo(eventName):
 
 
 @r.get("/summary/{eventName}", name="whitelist:summary")
-async def whitelistInfo(eventName,  current_user=Depends(get_current_active_superuser)):
+async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
     try:
         logging.debug(DATABASE)
         con = create_engine(DATABASE)
@@ -366,7 +366,7 @@ async def whitelist_event(projectName: str, roundName: str,
 async def whitelist_event_create(
     whitelist_event: CreateWhitelistEvent,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Create a new event
@@ -384,13 +384,15 @@ async def whitelist_event_edit(
     id: int,
     whitelist_event: CreateWhitelistEvent,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser)
+    current_user=Depends(get_current_active_user)
 ):
     """
     Update existing event
     """
-    return edit_whitelist_event(db, id, whitelist_event)
-
+    try:
+        return edit_whitelist_event(db, id, whitelist_event)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 @r.delete(
     "/events/{id}", response_model_exclude_none=True, name="whitelist:delete-event"
@@ -398,7 +400,7 @@ async def whitelist_event_edit(
 async def whitelist_event_delete(
     id: int,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Delete event
