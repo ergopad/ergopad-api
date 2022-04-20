@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status
 from db.schemas.contributionEvents import CreateContributionEvent
 from db.crud.contribution_events import create_contribution_event, delete_contribution_event, edit_contribution_event, get_contribution_event_by_name, get_contribution_events
 from db.session import get_db
-from core.auth import get_current_active_superuser
+from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
 
 CFG = Config[Network]
@@ -60,7 +60,7 @@ async def contribution_event(projectName: str, roundName: str,
 async def contribution_event_create(
     contribution_event: CreateContributionEvent,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Create a new event
@@ -78,12 +78,15 @@ async def contribution_event_edit(
     id: int,
     contribution_event: CreateContributionEvent,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser)
+    current_user=Depends(get_current_active_user)
 ):
     """
     Update existing event
     """
-    return edit_contribution_event(db, id, contribution_event)
+    try:
+        return edit_contribution_event(db, id, contribution_event)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.delete(
@@ -92,7 +95,7 @@ async def contribution_event_edit(
 async def contribution_event_delete(
     id: int,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Delete event
