@@ -196,8 +196,4 @@ websockets==8.1
     # via uvicorn
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
-<<<<<<< HEAD
 git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.3
-=======
-# git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.1
->>>>>>> b1b1930956d0ca427bafbf88c131562e0552ed9a
