@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Request, Depends, Response, encoders
+from fastapi import APIRouter, Depends, status
 from fastapi.datastructures import UploadFile
 from fastapi.exceptions import HTTPException
 from fastapi.param_functions import File
+from starlette.responses import JSONResponse
 
 import typing as t
 import datetime
 import os
 
-from core.auth import get_current_active_superuser
+from core.auth import get_current_active_user
 
 from db.session import get_db
 from db.crud.projects import (
@@ -36,8 +37,11 @@ async def projects_list(
     """
     Get all projects
     """
-    projects = get_projects(db)
-    return projects
+    try:
+        projects = get_projects(db)
+        return projects
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.get(
@@ -53,19 +57,25 @@ async def project_details(
     """
     Get any project details
     """
-    return get_project(db, id)
+    try:
+        return get_project(db, id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.post("/", response_model=Project, response_model_exclude_none=True, name="projects:create")
 async def project_create(
     project: CreateAndUpdateProject,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Create a new project
     """
-    return create_project(db, project)
+    try:
+        return create_project(db, project)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.put(
@@ -75,12 +85,15 @@ async def project_edit(
     project_id: int,
     project: CreateAndUpdateProject,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser)
+    current_user=Depends(get_current_active_user)
 ):
     """
     Update existing project
     """
-    return edit_project(db, project_id, project)
+    try:
+        return edit_project(db, project_id, project)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.delete(
@@ -89,16 +102,19 @@ async def project_edit(
 async def project_delete(
     project_id: int,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Delete existing project
     """
-    return delete_project(db, project_id)
+    try:
+        return delete_project(db, project_id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.post("/upload_image", name="projects:upload-image-to-S3")
-async def upload(fileobject: UploadFile = File(...), current_user=Depends(get_current_active_superuser)):
+async def upload(fileobject: UploadFile = File(...), current_user=Depends(get_current_active_user)):
     """
     Upload files to s3 bucket
     """
