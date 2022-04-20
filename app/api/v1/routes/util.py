@@ -1,3 +1,5 @@
+import inspect
+import logging
 import requests
 import ssl
 
@@ -6,7 +8,7 @@ from fastapi import APIRouter, Request, Depends, status
 from typing import Optional
 from pydantic import BaseModel
 from smtplib import SMTP
-from config import Config, Network # api specific config
+from config import Config, Network  # api specific config
 from core.auth import get_current_active_superuser
 
 from cache.cache import cache
@@ -15,7 +17,7 @@ CFG = Config[Network]
 
 util_router = r = APIRouter()
 
-#region BLOCKHEADER
+# region BLOCKHEADER
 """
 Utilities
 ---------
@@ -25,14 +27,16 @@ Purpose: Common support requests
 
 Notes:
 """
-#endregion BLOCKHEADER
+# endregion BLOCKHEADER
 
-#region INIT
-DEBUG   = CFG.debug
+# region INIT
+DEBUG = CFG.debug
 headers = {'Content-Type': 'application/json'}
-#endregion INIT
+# endregion INIT
 
-#region CLASSES
+# region CLASSES
+
+
 class Email(BaseModel):
     to: str
     # sender: str
@@ -46,8 +50,9 @@ class Email(BaseModel):
             'body': 'this is a message.'
         }
 
+
 class Ergoscript(BaseModel):
-    script: str # wallet
+    script: str  # wallet
 
     class Config:
         schema_extra = {
@@ -55,66 +60,69 @@ class Ergoscript(BaseModel):
                 'script': '{ 1 == 1 }',
             }
         }
-#endregion CLASSES
+# endregion CLASSES
 
-#region LOGGING
-import logging
+
+# region LOGGING
 levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
+logging.basicConfig(
+    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
 
-import inspect
-myself = lambda: inspect.stack()[1][3]
-#endregion LOGGING
 
-@r.post("/email")
-async def email(email: Email, request: Request):
-    try:
-        # validate referer
-        logging.debug(request.headers)
-        validEmailApply = CFG.validEmailApply
-        referer = request.headers.get('referer') or ''
-        validateMe = request.headers.get('validate_me') or ''
-        isValidReferer = False
-        if referer in validEmailApply: isValidReferer = True
-        if '54.214.59.165' in referer: isValidReferer = True
-        if validateMe == CFG.validateMe: isValidReferer = True
-        if not isValidReferer:
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
+def myself(): return inspect.stack()[1][3]
+# endregion LOGGING
 
-        usr = CFG.emailUsername
-        pwd = CFG.emailPassword
-        svr = CFG.emailSMTP
-        frm = CFG.emailFrom
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-        
-        # create connection
-        logging.info(f'creating connection for: {svr} as {usr}')
-        con = SMTP(svr, 587)
-        res = con.ehlo()
-        res = con.starttls(context=ctx)
-        if res[0] == 220: logging.info('starttls success')
-        else: logging.error(res)
-        res = con.ehlo()
-        res = con.login(usr, pwd)
-        if res[0] == 235: logging.info('login success')
-        else: logging.error(res)
-        
-        msg = f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}"""
-        res = con.sendmail(frm, email.to, msg) # con.sendmail(frm, 'erickson.winter@gmail.com', msg)
-        if res == {}: logging.info('message sent')
-        else: logging.error(res)
-        
-        return {'status': 'success', 'detail': f'email sent to {email.to}'}
+# @r.post("/email")
+# async def email(email: Email, request: Request):
+#     try:
+#         # validate referer
+#         logging.debug(request.headers)
+#         validEmailApply = CFG.validEmailApply
+#         referer = request.headers.get('referer') or ''
+#         validateMe = request.headers.get('validate_me') or ''
+#         isValidReferer = False
+#         if referer in validEmailApply: isValidReferer = True
+#         if '54.214.59.165' in referer: isValidReferer = True
+#         if validateMe == CFG.validateMe: isValidReferer = True
+#         if not isValidReferer:
+#             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
 
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+#         usr = CFG.emailUsername
+#         pwd = CFG.emailPassword
+#         svr = CFG.emailSMTP
+#         frm = CFG.emailFrom
+#         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+
+#         # create connection
+#         logging.info(f'creating connection for: {svr} as {usr}')
+#         con = SMTP(svr, 587)
+#         res = con.ehlo()
+#         res = con.starttls(context=ctx)
+#         if res[0] == 220: logging.info('starttls success')
+#         else: logging.error(res)
+#         res = con.ehlo()
+#         res = con.login(usr, pwd)
+#         if res[0] == 235: logging.info('login success')
+#         else: logging.error(res)
+
+#         msg = f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}"""
+#         res = con.sendmail(frm, email.to, msg) # con.sendmail(frm, 'erickson.winter@gmail.com', msg)
+#         if res == {}: logging.info('message sent')
+#         else: logging.error(res)
+
+#         return {'status': 'success', 'detail': f'email sent to {email.to}'}
+
+#     except Exception as e:
+#         logging.error(f'ERR:{myself()}: ({e})')
+#         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+
 
 @r.post("/compileErgoscript", name="blockchain:sendPayment")
 def compileErgoscript(ergoscript: Ergoscript):
     try:
         script = {'source': ergoscript.script}
-        p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), timeout=2, json=script)
+        p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=dict(
+            headers, **{'api_key': CFG.ergopadApiKey}), timeout=2, json=script)
         if p2s.ok:
             return p2s.json()['address']
         else:
@@ -124,11 +132,12 @@ def compileErgoscript(ergoscript: Ergoscript):
         logging.error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to compile ergoscript ({e})')
 
+
 # TEST - send payment from test wallet
 @r.get("/sendPayment/{address}/{nergs}/{tokens}", name="blockchain:sendPayment")
 def sendPayment(
-    address, 
-    nergs, 
+    address,
+    nergs,
     tokens,
     request: Request,
     current_user=Depends(get_current_active_superuser)
@@ -143,35 +152,43 @@ def sendPayment(
         isWalletLocked = False
 
         # !! add in check for wallet lock, and unlock/relock if needed
-        lck = requests.get(f'http://ergonode2:9052/wallet/status', headers={'Content-Type': 'application/json', 'api_key': 'goalspentchillyamber'})
+        lck = requests.get(f'http://ergonode2:9052/wallet/status', headers={
+                           'Content-Type': 'application/json', 'api_key': 'goalspentchillyamber'})
         logging.info(lck.content)
         if lck.ok:
-                if lck.json()['isUnlocked'] == False:
-                        ulk = requests.post(f'http://ergonode2:9052/wallet/unlock', headers={'Content-Type': 'application/json', 'api_key': 'goalspentchillyamber'}, json={'pass': 'crowdvacationancientamber'})
-                        logging.info(ulk.content)
-                        if ulk.ok: isWalletLocked = False
-                        else: isWalletLocked = True
-                else: isWalletLocked = True
-        else: isWalletLocked = True
+            if lck.json()['isUnlocked'] == False:
+                ulk = requests.post(f'http://ergonode2:9052/wallet/unlock', headers={
+                                    'Content-Type': 'application/json', 'api_key': 'goalspentchillyamber'}, json={'pass': 'crowdvacationancientamber'})
+                logging.info(ulk.content)
+                if ulk.ok:
+                    isWalletLocked = False
+                else:
+                    isWalletLocked = True
+            else:
+                isWalletLocked = True
+        else:
+            isWalletLocked = True
 
         # unlock wallet
         if isWalletLocked:
-                logging.info('unlock wallet')
+            logging.info('unlock wallet')
 
         # send nergs to address/smartContract from the buyer wallet
         # for testing, address/smartContract is 1==1, which anyone could fulfill
         sendMe = [{
-                'address': address,
-                'value': int(nergs),
-                'assets': [{"tokenId": validCurrencies['seedsale'], "amount": tokens}],
-                # 'assets': [],
+            'address': address,
+            'value': int(nergs),
+            # validCurrencies ??
+            'assets': [{"tokenId": validCurrencies['seedsale'], "amount": tokens}],
+            # 'assets': [],
 
         }]
-        pay = requests.post(f'http://ergonode2:9052/wallet/payment/send', headers={'Content-Type': 'application/json', 'api_key': 'goalspentchillyamber'}, json=sendMe)
+        pay = requests.post(f'http://ergonode2:9052/wallet/payment/send', headers={
+                            'Content-Type': 'application/json', 'api_key': 'goalspentchillyamber'}, json=sendMe)
 
         # relock wallet
         if not isWalletLocked:
-                logging.info('relock wallet')
+            logging.info('relock wallet')
 
         return {'status': 'success', 'detail': f'payment: {pay.json()}'}
 
@@ -179,10 +196,11 @@ def sendPayment(
         logging.error(f'ERR:{myself()}: unable to send payment ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to send payment ({e})')
 
-# Utilities
+
 class InvalidateCacheRequest(BaseModel):
     key: str
 
+
 @r.post("/forceInvalidateCache", name="cache:invalidate")
 def forceInvalidateCache(req: InvalidateCacheRequest, current_user=Depends(get_current_active_superuser)):
-    return {'status': 'success', 'detail': cache.invalidate(req.key) }
+    return {'status': 'success', 'detail': cache.invalidate(req.key)}
