@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, status, Depends
 import typing as t
+from starlette.responses import JSONResponse
 
 from db.session import get_db
 from db.crud.jobs import (
@@ -10,7 +11,7 @@ from db.crud.jobs import (
     edit_job,
 )
 from db.schemas.jobs import CreateAndUpdateJob, Job
-from core.auth import get_current_active_superuser
+from core.auth import get_current_active_user
 
 jobs_router = r = APIRouter()
 
@@ -27,7 +28,10 @@ async def jobs_list(
     """
     Get all jobs
     """
-    return get_jobs(db)
+    try:
+        return get_jobs(db)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.get(
@@ -43,19 +47,25 @@ async def job_details(
     """
     Get any job details
     """
-    return get_job(db, job_id)
+    try:
+        return get_job(db, job_id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.post("/", response_model=Job, response_model_exclude_none=True, name="jobs:create")
 async def job_create(
     job: CreateAndUpdateJob,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Create a new job
     """
-    return create_job(db, job)
+    try:
+        return create_job(db, job)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.put(
@@ -65,12 +75,15 @@ async def job_edit(
     job_id: int,
     job: CreateAndUpdateJob,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Update existing job
     """
-    return edit_job(db, job_id, job)
+    try:
+        return edit_job(db, job_id, job)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.delete(
@@ -79,7 +92,7 @@ async def job_edit(
 async def job_delete(
     job_id: int,
     db=Depends(get_db),
-    current_user=Depends(get_current_active_superuser),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Delete existing job

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, Depends, Response, encoders
 import typing as t
-
+from fastapi import APIRouter, Request, Depends, Response, status
+from starlette.responses import JSONResponse
 from db.session import get_db
 from db.crud.users import (
     get_users,
@@ -29,10 +29,13 @@ async def users_list(
     """
     Get all users
     """
-    users = get_users(db)
-    # This is necessary for react-admin to work
-    response.headers["Content-Range"] = f"0-9/{len(users)}"
-    return users
+    try:
+        users = get_users(db)
+        # This is necessary for react-admin to work
+        response.headers["Content-Range"] = f"0-9/{len(users)}"
+        return users
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.get("/me", response_model=User, response_model_exclude_none=True, name="users:me")
@@ -58,11 +61,10 @@ async def user_details(
     """
     Get any user details
     """
-    user = get_user(db, user_id)
-    return user
-    # return encoders.jsonable_encoder(
-    #     user, skip_defaults=True, exclude_none=True,
-    # )
+    try:
+        return get_user(db, user_id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.post("/", response_model=User, response_model_exclude_none=True, name="users:create")
@@ -75,7 +77,10 @@ async def user_create(
     """
     Create a new user
     """
-    return create_user(db, user)
+    try:
+        return create_user(db, user)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.put(
@@ -91,7 +96,32 @@ async def user_edit(
     """
     Update existing user
     """
-    return edit_user(db, user_id, user)
+    try:
+        return edit_user(db, user_id, user)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
+
+@r.put(
+    "/{user_id}/password", response_model=User, response_model_exclude_none=True, name="users:change-password"
+)
+async def user_edit(
+    request: Request,
+    user_id: int,
+    user: UserEdit,
+    db=Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Update user password
+    """
+    try:
+        if (user_id == current_user.id and user.is_active == current_user.is_active and user.is_superuser == current_user.is_superuser):
+            return edit_user(db, user_id, user)
+        else:
+            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f'Not authorized to change other user data fields')
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 
 @r.delete(
@@ -106,4 +136,7 @@ async def user_delete(
     """
     Delete existing user
     """
-    return delete_user(db, user_id)
+    try:
+        return delete_user(db, user_id)
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
