@@ -3,7 +3,8 @@ import pytest
 from config import Config, Network
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from sigmastate.lang.exceptions import InterpreterException
-from org.ergoplatform.appkit import Address
+from org.ergoplatform.appkit import Address, CoveringBoxes, ErgoToken
+import java
 
 CFG = Config[Network]
 DEBUG = True # CFG.DEBUG
@@ -30,9 +31,9 @@ class TestProxyNFTLockedVesting:
     proxyNftLockedVestingTree = appKit.compileErgoScript(
         script,
         {
-            "_NFTLockedVestingContract": appKit.ergoValue(blake2b(bytes.fromhex(nftLockedVestingContractTree.bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
-            "_ErgUSDOracleNFT": appKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue(),
-            "_SigUSDTokenId": appKit.ergoValue(sigusd, ErgoValueT.ByteArrayFromHex).getValue()     
+            "_NFTLockedVestingContract": ErgoAppKit.ergoValue(blake2b(bytes.fromhex(nftLockedVestingContractTree.bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
+            "_ErgUSDOracleNFT": ErgoAppKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue(),
+            "_SigUSDTokenId": ErgoAppKit.ergoValue(sigusd, ErgoValueT.ByteArrayFromHex).getValue()     
         }
     )
 
@@ -40,23 +41,23 @@ class TestProxyNFTLockedVesting:
         value=int(1e6),
         tokens={proxyNFT: 1, vestedTokenId: 1000000},
         registers = [
-            appKit.ergoValue([
+            ErgoAppKit.ergoValue([
                 int(1000*60*60*24),     #redeemPeriod
                 int(365),               #numberOfPeriods
                 int(1648771200000),     #vestingStart
                 int(1),                 #priceNum
                 int(1000)                 #priceDenom
             ],ErgoValueT.LongArray),
-            appKit.ergoValue(vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-            appKit.ergoValue(sellerProp.bytes(),ErgoValueT.ByteArray),      #Seller address
-            appKit.ergoValue(whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+            ErgoAppKit.ergoValue(vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+            ErgoAppKit.ergoValue(sellerProp.bytes(),ErgoValueT.ByteArray),      #Seller address
+            ErgoAppKit.ergoValue(whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
         ],
         contract = appKit.contractFromTree(proxyNftLockedVestingTree))
 
     oracleBox = appKit.buildInputBox(
         value=int(1e6),
         tokens={ergusdoracle: 1},
-        registers = [appKit.ergoValue(313479623,ErgoValueT.Long)],
+        registers = [ErgoAppKit.ergoValue(313479623,ErgoValueT.Long)],
         contract = Address.create("NTkuk55NdwCXkF1e2nCABxq7bHjtinX3wH13zYPZ6qYT71dCoZBe1gZkh9FAr7GeHo2EpFoibzpNQmoi89atUjKRrhZEYrTapdtXrWU4kq319oY7BEWmtmRU9cMohX69XMuxJjJP5hRM8WQLfFnffbjshhEP3ck9CKVEkFRw1JDYkqVke2JVqoMED5yxLVkScbBUiJJLWq9BSbE1JJmmreNVskmWNxWE6V7ksKPxFMoqh1SVePh3UWAaBgGQRZ7TWf4dTBF5KMVHmRXzmQqEu2Fz2yeSLy23sM3pfqa78VuvoFHnTFXYFFxn3DNttxwq3EU3Zv25SmgrWjLKiZjFcEcqGgH6DJ9FZ1DfucVtTXwyDJutY3ksUBaEStRxoUQyRu4EhDobixL3PUWRcxaRJ8JKA9b64ALErGepRHkAoVmS8DaE6VbroskyMuhkTo7LbrzhTyJbqKurEzoEfhYxus7bMpLTePgKcktgRRyB7MjVxjSpxWzZedvzbjzZaHLZLkWZESk1WtdM25My33wtVLNXiTvficEUbjA23sNd24pv1YQ72nY1aqUHa2").toErgoContract())
 
     def test_vesting_pure_erg(self):
@@ -71,16 +72,16 @@ class TestProxyNFTLockedVesting:
             value=int(1e6),
             tokens={self.proxyNFT: 1, self.vestedTokenId: 900000},
             registers = [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24),     #redeemPeriod
                     int(365),               #numberOfPeriods
                     int(1648771200000),     #vestingStart
                     int(1),                 #priceNum
                     int(1000)                 #priceDenom
                 ],ErgoValueT.LongArray),
-                self.appKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-                self.appKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
-                self.appKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+                ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                ErgoAppKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
             ],
             contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
         )
@@ -89,14 +90,14 @@ class TestProxyNFTLockedVesting:
             value=int(1e6), 
             tokens={self.vestedTokenId: 100000}, 
             registers=[       
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
                     int(365),           #Number of periods
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
+                ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
             ], 
             contract=self.appKit.contractFromTree(self.nftLockedVestingContractTree)
         )
@@ -153,16 +154,16 @@ class TestProxyNFTLockedVesting:
             value=int(1e6),
             tokens={self.proxyNFT: 1, self.vestedTokenId: 900000},
             registers = [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24),     #redeemPeriod
                     int(365),               #numberOfPeriods
                     int(1648771200000),     #vestingStart
                     int(1),                 #priceNum
                     int(1000)                 #priceDenom
                 ],ErgoValueT.LongArray),
-                self.appKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-                self.appKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
-                self.appKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+                ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                ErgoAppKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
             ],
             contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
         )
@@ -171,14 +172,14 @@ class TestProxyNFTLockedVesting:
             value=int(1e6), 
             tokens={self.vestedTokenId: 100000}, 
             registers=[       
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
+                ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
             ], 
             contract=self.appKit.contractFromTree(self.nftLockedVestingContractTree)
         )
@@ -232,16 +233,16 @@ class TestProxyNFTLockedVesting:
             value=int(1e6),
             tokens={self.proxyNFT: 1, self.vestedTokenId: 900000},
             registers = [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24),     #redeemPeriod
                     int(365),               #numberOfPeriods
                     int(1648771200000),     #vestingStart
                     int(1),                 #priceNum
                     int(1000)                 #priceDenom
                 ],ErgoValueT.LongArray),
-                self.appKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-                self.appKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
-                self.appKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+                ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                ErgoAppKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
             ],
             contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
         )
@@ -250,14 +251,14 @@ class TestProxyNFTLockedVesting:
             value=int(1e6), 
             tokens={self.vestedTokenId: 100000}, 
             registers=[       
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
+                ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
             ], 
             contract=self.appKit.contractFromTree(self.nftLockedVestingContractTree)
         )
@@ -322,38 +323,51 @@ class TestProxyNFTLockedVestingV2:
     proxyNftLockedVestingTree = appKit.compileErgoScript(
         script,
         {
-            "_NFTLockedVestingContract": appKit.ergoValue(blake2b(bytes.fromhex(nftLockedVestingContractTree.bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
-            "_ErgUSDOracleNFT": appKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue(),
-            "_SigUSDTokenId": appKit.ergoValue(sigusd, ErgoValueT.ByteArrayFromHex).getValue()     
+            "_NFTLockedVestingContract": ErgoAppKit.ergoValue(blake2b(bytes.fromhex(nftLockedVestingContractTree.bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
+            "_ErgUSDOracleNFT": ErgoAppKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue(),
+            "_SigUSDTokenId": ErgoAppKit.ergoValue(sigusd, ErgoValueT.ByteArrayFromHex).getValue()     
         }
     )
 
     with open(f'contracts/userProxyNFTLockedVesting.es') as f:
         script = f.read()
-    userProxyNftLockedVestingContractTree = appKit.compileErgoScript(script,{"_ErgUSDOracleNFT": appKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue()})
+    userProxyNftLockedVestingContractTree = appKit.compileErgoScript(script,{"_ErgUSDOracleNFT": ErgoAppKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue()})
 
     proxyVestingBox = appKit.buildInputBox(
         value=int(1e6),
         tokens={proxyNFT: 1, vestedTokenId: 1000000},
         registers = [
-            appKit.ergoValue([
+            ErgoAppKit.ergoValue([
                 int(1000*60*60*24),     #redeemPeriod
                 int(365),               #numberOfPeriods
                 int(1648771200000),     #vestingStart
                 int(1),                 #priceNum
                 int(1000)                 #priceDenom
             ],ErgoValueT.LongArray),
-            appKit.ergoValue(vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-            appKit.ergoValue(sellerProp.bytes(),ErgoValueT.ByteArray),      #Seller address
-            appKit.ergoValue(whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+            ErgoAppKit.ergoValue(vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+            ErgoAppKit.ergoValue(sellerProp.bytes(),ErgoValueT.ByteArray),      #Seller address
+            ErgoAppKit.ergoValue(whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
         ],
         contract = appKit.contractFromTree(proxyNftLockedVestingTree))
 
     oracleBox = appKit.buildInputBox(
         value=int(1e6),
         tokens={ergusdoracle: 1},
-        registers = [appKit.ergoValue(313479623,ErgoValueT.Long)],
+        registers = [ErgoAppKit.ergoValue(313479623,ErgoValueT.Long)],
         contract = Address.create("NTkuk55NdwCXkF1e2nCABxq7bHjtinX3wH13zYPZ6qYT71dCoZBe1gZkh9FAr7GeHo2EpFoibzpNQmoi89atUjKRrhZEYrTapdtXrWU4kq319oY7BEWmtmRU9cMohX69XMuxJjJP5hRM8WQLfFnffbjshhEP3ck9CKVEkFRw1JDYkqVke2JVqoMED5yxLVkScbBUiJJLWq9BSbE1JJmmreNVskmWNxWE6V7ksKPxFMoqh1SVePh3UWAaBgGQRZ7TWf4dTBF5KMVHmRXzmQqEu2Fz2yeSLy23sM3pfqa78VuvoFHnTFXYFFxn3DNttxwq3EU3Zv25SmgrWjLKiZjFcEcqGgH6DJ9FZ1DfucVtTXwyDJutY3ksUBaEStRxoUQyRu4EhDobixL3PUWRcxaRJ8JKA9b64ALErGepRHkAoVmS8DaE6VbroskyMuhkTo7LbrzhTyJbqKurEzoEfhYxus7bMpLTePgKcktgRRyB7MjVxjSpxWzZedvzbjzZaHLZLkWZESk1WtdM25My33wtVLNXiTvficEUbjA23sNd24pv1YQ72nY1aqUHa2").toErgoContract())
+
+    def test_covering_boxes(self):
+        covBoxes: CoveringBoxes = CoveringBoxes(int(1e6),java.util.ArrayList([self.proxyVestingBox]),java.util.ArrayList([ErgoToken(self.vestedTokenId,10000)]),False)
+
+        assert covBoxes.isCovered()
+
+    def test_covering_boxes_notEnoughErg(self):
+        covBoxes: CoveringBoxes = CoveringBoxes(int(2e6),java.util.ArrayList([self.proxyVestingBox]),java.util.ArrayList([ErgoToken(self.vestedTokenId,10000)]),False)
+
+        assert not covBoxes.isCovered()
+
+    def test_covering_boxes_notEnoughTokens(self):
+        assert not ErgoAppKit.boxesCovered([self.proxyVestingBox],int(1e6),{self.vestedTokenId:100000000})
 
     def test_vesting_pure_erg(self):
         nergAmount = int(100000*self.vestedTokenPrice/self.nErgPrice+1) 
@@ -362,9 +376,9 @@ class TestProxyNFTLockedVestingV2:
             value=int(22e6)+nergAmount,
             tokens={self.whitelistTokenId: 100000},
             registers=[
-                self.appKit.ergoValue(int(313479623),ErgoValueT.Long),
-                self.appKit.ergoValue(self.appKit.dummyContract().getErgoTree().bytes(), ErgoValueT.ByteArray),
-                self.appKit.ergoValue(self.proxyNFT,ErgoValueT.ByteArrayFromHex)
+                ErgoAppKit.ergoValue(int(313479623),ErgoValueT.Long),
+                ErgoAppKit.ergoValue(self.appKit.dummyContract().getErgoTree().bytes(), ErgoValueT.ByteArray),
+                ErgoAppKit.ergoValue(self.proxyNFT,ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromTree(self.userProxyNftLockedVestingContractTree)
         )
@@ -373,16 +387,16 @@ class TestProxyNFTLockedVestingV2:
             value=int(1e6),
             tokens={self.proxyNFT: 1, self.vestedTokenId: 900000},
             registers = [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24),     #redeemPeriod
                     int(365),               #numberOfPeriods
                     int(1648771200000),     #vestingStart
                     int(1),                 #priceNum
                     int(1000)                 #priceDenom
                 ],ErgoValueT.LongArray),
-                self.appKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-                self.appKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
-                self.appKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+                ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                ErgoAppKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
             ],
             contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
         )
@@ -391,14 +405,14 @@ class TestProxyNFTLockedVestingV2:
             value=int(1e6), 
             tokens={self.vestedTokenId: 100000}, 
             registers=[       
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
                     int(365),           #Number of periods
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
+                ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
             ], 
             contract=self.appKit.contractFromTree(self.nftLockedVestingContractTree)
         )
@@ -454,9 +468,9 @@ class TestProxyNFTLockedVestingV2:
             value=int(22e6)+nergAmount,
             tokens={self.whitelistTokenId: 100000, self.sigusd: 100},
             registers=[
-                self.appKit.ergoValue(int(313479623),ErgoValueT.Long),
-                self.appKit.ergoValue(self.appKit.dummyContract().getErgoTree().bytes(), ErgoValueT.ByteArray),
-                self.appKit.ergoValue(self.proxyNFT,ErgoValueT.ByteArrayFromHex)
+                ErgoAppKit.ergoValue(int(313479623),ErgoValueT.Long),
+                ErgoAppKit.ergoValue(self.appKit.dummyContract().getErgoTree().bytes(), ErgoValueT.ByteArray),
+                ErgoAppKit.ergoValue(self.proxyNFT,ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromTree(self.userProxyNftLockedVestingContractTree)
         )
@@ -465,16 +479,16 @@ class TestProxyNFTLockedVestingV2:
             value=int(1e6),
             tokens={self.proxyNFT: 1, self.vestedTokenId: 900000},
             registers = [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24),     #redeemPeriod
                     int(365),               #numberOfPeriods
                     int(1648771200000),     #vestingStart
                     int(1),                 #priceNum
                     int(1000)                 #priceDenom
                 ],ErgoValueT.LongArray),
-                self.appKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-                self.appKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
-                self.appKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+                ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                ErgoAppKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
             ],
             contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
         )
@@ -483,14 +497,14 @@ class TestProxyNFTLockedVestingV2:
             value=int(1e6), 
             tokens={self.vestedTokenId: 100000}, 
             registers=[       
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
+                ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
             ], 
             contract=self.appKit.contractFromTree(self.nftLockedVestingContractTree)
         )
@@ -546,9 +560,9 @@ class TestProxyNFTLockedVestingV2:
             value=int(22e6)+nergAmount,
             tokens={self.whitelistTokenId: 100000, self.sigusd: 50},
             registers=[
-                self.appKit.ergoValue(int(313479623),ErgoValueT.Long),
-                self.appKit.ergoValue(self.appKit.dummyContract().getErgoTree().bytes(), ErgoValueT.ByteArray),
-                self.appKit.ergoValue(self.proxyNFT,ErgoValueT.ByteArrayFromHex)
+                ErgoAppKit.ergoValue(int(313479623),ErgoValueT.Long),
+                ErgoAppKit.ergoValue(self.appKit.dummyContract().getErgoTree().bytes(), ErgoValueT.ByteArray),
+                ErgoAppKit.ergoValue(self.proxyNFT,ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromTree(self.userProxyNftLockedVestingContractTree)
         )
@@ -557,16 +571,16 @@ class TestProxyNFTLockedVestingV2:
             value=int(1e6),
             tokens={self.proxyNFT: 1, self.vestedTokenId: 900000},
             registers = [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24),     #redeemPeriod
                     int(365),               #numberOfPeriods
                     int(1648771200000),     #vestingStart
                     int(1),                 #priceNum
                     int(1000)                 #priceDenom
                 ],ErgoValueT.LongArray),
-                self.appKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
-                self.appKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
-                self.appKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+                ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                ErgoAppKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
             ],
             contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
         )
@@ -575,14 +589,14 @@ class TestProxyNFTLockedVestingV2:
             value=int(1e6), 
             tokens={self.vestedTokenId: 100000}, 
             registers=[       
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(1000*60*60*24), #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(100000)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
+                ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
             ], 
             contract=self.appKit.contractFromTree(self.nftLockedVestingContractTree)
         )
@@ -653,14 +667,14 @@ class TestNFTLockedVesting:
                 vestedTokenId: 999999
             }, 
             [       
-                appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     duration,           #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                appKit.ergoValue(vestingKey, ErgoValueT.ByteArrayFromHex)                        
+                ErgoAppKit.ergoValue(vestingKey, ErgoValueT.ByteArrayFromHex)                        
             ], 
             contract)
 
@@ -678,14 +692,14 @@ class TestNFTLockedVesting:
                 self.vestedTokenId: int(999999-int(2*999999/365))
             },
             [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     self.duration,      #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
+                ErgoAppKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
             ], self.contract)
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
@@ -756,14 +770,14 @@ class TestNFTLockedVesting:
                 self.vestedTokenId: int(999999-int(3*999999/365))
             },
             [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     self.duration,      #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
+                ErgoAppKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
             ], self.contract)
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
@@ -778,7 +792,6 @@ class TestNFTLockedVesting:
             sendChangeTo = self.appKit.dummyContract().toAddress().getErgoAddress(),
             preHeader = preHeader
         )
-
         with pytest.raises(InterpreterException):
             self.appKit.signTransaction(unsignedTx)
 
@@ -796,14 +809,14 @@ class TestNFTLockedVesting:
                 self.vestedTokenId: int(999999-int(2*999999/365))
             },
             [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     self.duration,      #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
+                ErgoAppKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
             ], self.contract)
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
@@ -835,14 +848,14 @@ class TestNFTLockedVesting:
                 self.vestedTokenId: int(999999-int(999999/365))
             },
             [
-                self.appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     self.duration,      #Redeem period
                     int(365),    #Redeem amount per period  
                     int(1648771200000), #Start vesting april 1st
                     int(999999)         #Initial vesting amount
                 ], ErgoValueT.LongArray),            
                 #Vesting key
-                self.appKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
+                ErgoAppKit.ergoValue(self.vestingKey, ErgoValueT.ByteArrayFromHex)                         
             ], self.contract)
 
         newUserBox = self.appKit.buildOutBox(int(1e6), {
