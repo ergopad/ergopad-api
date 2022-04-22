@@ -194,7 +194,6 @@ wcwidth==0.2.5
     # via prompt-toolkit
 websockets==8.1
     # via uvicorn
-git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.3
+git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.4
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
-# git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.1
