@@ -399,6 +399,8 @@ async def compound(
         # emission box R4[2] contains current remaining stakers
         if emissionR4[2] <= 0: 
             return {'remainingStakers': 0}
+        else:
+            logging.debug(f'remaining stakers: {emissionR4[2]}')
 
         # iterate over all staking boxes
         checkBoxes = getUnspentStakeBoxes()
@@ -426,6 +428,7 @@ async def compound(
                     ))
 
             # every <numBoxes>, go ahead and submit tx
+            txId = None
             if len(stakeBoxes)>=req.numBoxes:
                 retriesLeft = 10
                 while retriesLeft > 0:
@@ -435,6 +438,7 @@ async def compound(
                         txId = appKit.sendTransaction(signedTX)
                         retriesLeft = 0
                     except Exception:
+                        utx = unsignedTx or '[NOPE]'
                         retriesLeft -= 1
                         await asyncio.sleep(3)
                 if txId is None:
