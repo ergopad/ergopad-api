@@ -8,9 +8,12 @@ This contract locks the tokens that need to be vested after the user has contrib
 - R4: Coll[Long]
   - 0: redeemPeriod
   - 1: numberOfPeriods
-  - 2: vestingStart
+  - 2: vesting start timestamp
   - 3: priceNum
   - 4: priceDenom
+  - 5: round end timestamp
+  - 6: tge amount numerator
+  - 7: tge amount denominator
 - R5: Coll[Byte]: vestedTokenId
 - R6: Coll[Byte]: Seller address
 - R7: Coll[Byte]: Whitelist tokenid
@@ -20,7 +23,7 @@ This contract locks the tokens that need to be vested after the user has contrib
 1. Tokens to be vested
 
 ### Hardcoded values
-- NFTLockedVestingContract: blake2b256 hash of NFTLockedVesting ergotree bytes
+- NFTLockedVestingContract: blake2b256 hash of NFTLockedVestingV2 ergotree bytes
 - ErgUSDOracleNFT: Token id of ergusd oracle NFT
 - SigUSDTokenId: SigUSD token id
 
@@ -49,7 +52,7 @@ This is a simple proxy contract that the user will send funds to, to allow for a
 - [Refund - Round sold out](#action-refund---round-sold-out)
 - [Refund - Erg price slipped](#action-refund---erg-price-slipped)
 
-## NFTLockedVesting
+## NFTLockedVestingV2
 This is the long term contract the tokens the user received for contributing will be locked in. The tokens will be made available according to the vesting schedule configured in the registers.
 
 ### Registers
@@ -58,6 +61,8 @@ This is the long term contract the tokens the user received for contributing wil
   - 1: numberOfPeriods
   - 2: vestingStart
   - 3: totalVested
+  - 4: tge amount numerator
+  - 5: tge amount denominator
 - R5: Coll[Byte]: vestingKeyId
 
 ### Assets
@@ -96,8 +101,8 @@ This is the transaction where the users' funds are transferred to the token sell
 1. [userProxyNFTLockedVesting](#userproxynftlockedvesting)
 
 ### Outputs
-0. [proxyNFTLockedVestingV2](<## proxyNFTLockedVestingV2>)
-1. [NFTLockedVesting](#nftlockedvesting)
+0. [proxyNFTLockedVestingV2](#proxynftlockedvestingv2)
+1. [NFTLockedVestingV2](#nftlockedvestingv2)
 2. A box on the users' address holding the minted NFT, vesting key
 3. A box holding the funds contributed by the user at the sellers' address
 4. A box on the bot operators address holding the reward
@@ -132,9 +137,9 @@ If for some reason the users funds have been waiting in a proxy contract for a l
 This action allows the user holding the vesting key NFT to redeem the tokens that are available.
 
 ### Inputs
-0. [NFTLockedVesting](#nftlockedvesting)
+0. [NFTLockedVestingv2](#nftlockedvestingv2)
 1. User box holding the vesting key NFT
 
 ### Ouputs
-0. [NFTLockedVesting](#nftlockedvesting)
+0. [NFTLockedVestingv2](#nftlockedvestingv2)
 1. User box holding the redeemed tokens and vesting key NFT
