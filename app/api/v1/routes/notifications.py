@@ -27,10 +27,29 @@ async def notifications_list(
     db=Depends(get_db),
 ):
     """
+    Get all notifications for a single address
+    """
+    try:
+        return get_notifications(db, [walletAddress])
+    except Exception as e:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
+
+@r.post(
+    "/getNotifications",
+    response_model=t.List[Notification],
+    response_model_exclude_none=True,
+    name="notifications:all-notifications"
+)
+async def notifications_list(
+    walletAddresses: t.List[str],
+    db=Depends(get_db),
+):
+    """
     Get all notifications
     """
     try:
-        return get_notifications(db, walletAddress)
+        return get_notifications(db, walletAddresses)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 

@@ -15,10 +15,10 @@ from db.schemas import notifications as schemas
 
 
 def get_notifications(
-    db: Session, walletAddress: str, skip: int = 0, limit: int = 10
+    db: Session, walletAddresses: t.List[str], skip: int = 0, limit: int = 10
 ) -> t.List[schemas.Notification]:
     return db.query(models.Notification).filter(
-        models.Notification.walletAddress == walletAddress).order_by(
+        models.Notification.walletAddress.in_(walletAddresses)).order_by(
             models.Notification.createdTimestamp).offset(skip).limit(limit).all()
 
 
