@@ -1,8 +1,6 @@
 import datetime
-from operator import mod
 from fastapi import status
 from starlette.responses import JSONResponse
-from sqlalchemy import delete
 from sqlalchemy.orm import Session
 import typing as t
 
@@ -19,7 +17,7 @@ def get_notifications(
 ) -> t.List[schemas.Notification]:
     return db.query(models.Notification).filter(
         models.Notification.walletAddress.in_(walletAddresses)).order_by(
-            models.Notification.createdTimestamp).offset(skip).limit(limit).all()
+            models.Notification.createdTimestamp.desc()).offset(skip).limit(limit).all()
 
 
 def create_notification(db: Session, walletAddress: str, notification: schemas.CreateAndUpdateNotification):
