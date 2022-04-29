@@ -18,7 +18,6 @@ from api.v1.routes.jobs import jobs_router
 from api.v1.routes.staking import staking_router
 from api.v1.routes.announcements import announcement_router
 from api.v1.routes.faq import faq_router
-from api.v1.routes.notifications import notification_router
 # from api.v1.routes.wallets import wallets_router
 # from api.v1.routes.tokens import tokens_router
 
@@ -51,7 +50,6 @@ app.include_router(jobs_router,       prefix="/api/jobs",       tags=["jobs"])
 app.include_router(staking_router,    prefix="/api/staking",    tags=["staking"])
 app.include_router(announcement_router, prefix="/api/announcements", tags=["announcements"])
 app.include_router(faq_router,        prefix="/api/faq",        tags=["faq"])
-app.include_router(notification_router, prefix="/api/notifications", tags=["notifications"])
 #endregion Routers
 
 # init database?
