@@ -803,7 +803,7 @@ async def airdrop(
     if req.submit:
         return appKit.sendTransaction(signedTx)
     
-    return ErgoAppKit.unsignedTxToJson(unsignedTx)
+    return appKit.unsignedTxToJson(unsignedTx)
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
 async def tvl(tokenId: str):
