@@ -612,7 +612,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         vestingBox = appKit.getBoxesById([req.boxId])[0]
         vestingBoxJson = json.loads(vestingBox.toJson(False))
         vestingKey = vestingBoxJson["additionalRegisters"]["R5"][4:]
-        parameters = appKit.deserializeLongArray(vestingBoxJson["additionalRegisters"]["R4"])
+        parameters = ErgoAppKit.deserializeLongArray(vestingBoxJson["additionalRegisters"]["R4"])
         blockTime           = int(time()*1000)
         redeemPeriod        = parameters[0]
         numberOfPeriods     = parameters[1]
@@ -645,7 +645,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 
         userInputs = [keyBox] + list(otherBoxes)
 
-        userInputs = appKit.cutOffExcessUTXOs(userInputs,int(2e6),tokensToSpend)
+        userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(2e6),tokensToSpend)
 
         outputs = []
         tokens={
@@ -676,11 +676,11 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         )
 
         if req.txFormat == TXFormat.EIP_12:
-            return appKit.unsignedTxToJson(unsignedTx)
+            return ErgoAppKit.unsignedTxToJson(unsignedTx)
 
         if req.txFormat == TXFormat.ERGO_PAY:
             reducedTx = appKit.reducedTx(unsignedTx)
-            ergoPaySigningRequest = appKit.formErgoPaySigningRequest(
+            ergoPaySigningRequest = ErgoAppKit.formErgoPaySigningRequest(
                 reducedTx,
                 address=req.address
             )
@@ -742,7 +742,7 @@ async def vested(req: AddressList):
             cache.set(f"get_vesting_vested_token_boxes", checkBoxes, CACHE_TTL)
         for box in checkBoxes:
             if box["additionalRegisters"]["R5"][4:] in vestingKeys.keys():
-                parameters = appKit.deserializeLongArray(box["additionalRegisters"]["R4"])
+                parameters = ErgoAppKit.deserializeLongArray(box["additionalRegisters"]["R4"])
                 blockTime           = int(time()*1000)
 
                 redeemPeriod        = parameters[0]
@@ -850,9 +850,9 @@ async def bootstrapRound(
         proxyNftLockedVestingTree = appKit.compileErgoScript(
             script,
             {
-                "_NFTLockedVestingContract": appKit.ergoValue(blake2b(bytes.fromhex(nftLockedVestingContractTree.bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
-                "_ErgUSDOracleNFT": appKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue(),
-                "_SigUSDTokenId": appKit.ergoValue(sigusd, ErgoValueT.ByteArrayFromHex).getValue()     
+                "_NFTLockedVestingContract": ErgoAppKit.ergoValue(blake2b(bytes.fromhex(nftLockedVestingContractTree.bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
+                "_ErgUSDOracleNFT": ErgoAppKit.ergoValue(ergusdoracle, ErgoValueT.ByteArrayFromHex).getValue(),
+                "_SigUSDTokenId": ErgoAppKit.ergoValue(sigusd, ErgoValueT.ByteArrayFromHex).getValue()     
             }
         )
 
@@ -864,7 +864,7 @@ async def bootstrapRound(
                 req.tokenId: vestedTokenAmount
             },
             registers=[
-                appKit.ergoValue(
+                ErgoAppKit.ergoValue(
                     [
                         req.vestingPeriodDuration_ms,   #redeemPeriod
                         req.vestingPeriods,             #numberOfPeriods
@@ -872,9 +872,9 @@ async def bootstrapRound(
                         price.numerator,                #priceNum
                         price.denominator               #priceDenom
                     ], ErgoValueT.LongArray),
-                appKit.ergoValue(req.tokenId, ErgoValueT.ByteArrayFromHex),                  #vestedTokenId
-                appKit.ergoValue(sellerContract.getErgoTree().bytes(), ErgoValueT.ByteArray), #Seller address
-                appKit.ergoValue(whitelistTokenId, ErgoValueT.ByteArrayFromHex)              #Whitelist tokenid
+                ErgoAppKit.ergoValue(req.tokenId, ErgoValueT.ByteArrayFromHex),                  #vestedTokenId
+                ErgoAppKit.ergoValue(sellerContract.getErgoTree().bytes(), ErgoValueT.ByteArray), #Seller address
+                ErgoAppKit.ergoValue(whitelistTokenId, ErgoValueT.ByteArrayFromHex)              #Whitelist tokenid
             ],
             contract=appKit.contractFromTree(proxyNftLockedVestingTree)
         )
@@ -1015,7 +1015,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
                 userInputs = appKit.boxesToSpendFromList(req.addresses,int(20e6+nergRequired),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)
-            if not appKit.boxesCovered(userInputs,int(20e6+nergRequired),tokensToSpend):
+            if not ErgoAppKit.boxesCovered(userInputs,int(20e6+nergRequired),tokensToSpend):
                 userInputs = appKit.boxesToSpend(req.address,int(20e6+nergRequired),tokensToSpend)
         if userInputs is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
@@ -1046,13 +1046,13 @@ async def vestFromProxy(req: VestFromProxyRequest):
                 vestedTokenId: whitelistTokens
             },
             registers=[
-                appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     roundParameters[0],
                     roundParameters[1],
                     roundParameters[2],
                     whitelistTokens
                 ],ErgoValueT.LongArray),
-                appKit.ergoValue(proxyBox["boxId"],ErgoValueT.ByteArrayFromHex)
+                ErgoAppKit.ergoValue(proxyBox["boxId"],ErgoValueT.ByteArrayFromHex)
             ],
             contract=appKit.contractFromTree(nftLockedVestingContractTree)
         )
@@ -1081,11 +1081,11 @@ async def vestFromProxy(req: VestFromProxyRequest):
         )
 
         if req.txFormat == TXFormat.EIP_12:
-            return appKit.unsignedTxToJson(unsignedTx)
+            return ErgoAppKit.unsignedTxToJson(unsignedTx)
 
         if req.txFormat == TXFormat.ERGO_PAY:
             reducedTx = appKit.reducedTx(unsignedTx)
-            ergoPaySigningRequest = appKit.formErgoPaySigningRequest(
+            ergoPaySigningRequest = ErgoAppKit.formErgoPaySigningRequest(
                 reducedTx,
                 address=req.address
             )
