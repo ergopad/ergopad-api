@@ -28,9 +28,9 @@ class TestStakingIncentive:
     stakingIncentiveTree = appKit.compileErgoScript(
         script,
         {
-            "_emissionContractHash": ErgoAppKit.ergoValue(blake2b(bytes.fromhex(appKit.contractFromAddress(emissionAddress).getErgoTree().bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
-            "_stakeStateContractHash": ErgoAppKit.ergoValue(blake2b(bytes.fromhex(appKit.contractFromAddress(stakeStateAddress).getErgoTree().bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
-            "_stakeTokenID": ErgoAppKit.ergoValue(stakeTokenID, ErgoValueT.ByteArrayFromHex).getValue()     
+            "_emissionContractHash": appKit.ergoValue(blake2b(bytes.fromhex(appKit.contractFromAddress(emissionAddress).getErgoTree().bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
+            "_stakeStateContractHash": appKit.ergoValue(blake2b(bytes.fromhex(appKit.contractFromAddress(stakeStateAddress).getErgoTree().bytesHex()), digest_size=32).digest(), ErgoValueT.ByteArray).getValue(),
+            "_stakeTokenID": appKit.ergoValue(stakeTokenID, ErgoValueT.ByteArrayFromHex).getValue()     
         }
     )
 
@@ -40,7 +40,7 @@ class TestStakingIncentive:
         value=int(1e6),
         tokens={stakeStateNFT: 1, stakeTokenID: 1000000},
         registers = [
-            ErgoAppKit.ergoValue([
+            appKit.ergoValue([
                 int(1000000),     #Total amount Staked
                 int(42),               #Checkpoint
                 int(4),     #Stakers
@@ -54,7 +54,7 @@ class TestStakingIncentive:
         value=int(1e6),
         tokens={stakePoolNFT: 1, stakedTokenID: 1000000000},
         registers = [
-            ErgoAppKit.ergoValue([
+            appKit.ergoValue([
                 int(293000)     #emission per cycle
             ],ErgoValueT.LongArray)
         ],
@@ -64,7 +64,7 @@ class TestStakingIncentive:
         value=int(1e6),
         tokens={emissionNFT: 1, stakedTokenID: 1},
         registers = [
-            ErgoAppKit.ergoValue([
+            appKit.ergoValue([
                 int(1000000),     #Total amount Staked
                 int(41),               #Checkpoint
                 int(0),     #Stakers
@@ -85,7 +85,7 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeStateNFT: 1, self.stakeTokenID: 1000000},
             registers = [
-                ErgoAppKit.ergoValue([
+                self.appKit.ergoValue([
                     int(1292999),     #Total amount Staked
                     int(43),               #Checkpoint
                     int(4),     #Stakers
@@ -99,7 +99,7 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakePoolNFT: 1, self.stakedTokenID: 999707001},
             registers = [
-                ErgoAppKit.ergoValue([
+                self.appKit.ergoValue([
                     int(293000)     #emission per cycle
                 ],ErgoValueT.LongArray)
             ],
@@ -109,7 +109,7 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.emissionNFT: 1, self.stakedTokenID: 293000},
             registers = [
-                ErgoAppKit.ergoValue([
+                self.appKit.ergoValue([
                     int(1000000),     #Total amount Staked
                     int(42),               #Checkpoint
                     int(4),     #Stakers
@@ -157,7 +157,7 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.emissionNFT: 1, self.stakedTokenID: 293000},
             registers = [
-                ErgoAppKit.ergoValue([
+                self.appKit.ergoValue([
                     int(1000000),     #Total amount Staked
                     int(42),               #Checkpoint
                     int(4),     #Stakers
@@ -170,7 +170,7 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.emissionNFT: 1},
             registers = [
-                ErgoAppKit.ergoValue([
+                self.appKit.ergoValue([
                     int(1000000),     #Total amount Staked
                     int(42),               #Checkpoint
                     int(0),     #Stakers
@@ -183,8 +183,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 250000},
             registers=[
-                ErgoAppKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.emissionNFT, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.emissionNFT, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )
@@ -192,8 +192,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 323250},
             registers=[
-                ErgoAppKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.emissionNFT, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.emissionNFT, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )
@@ -201,8 +201,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 250000},
             registers=[
-                ErgoAppKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.stakedTokenID, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.stakedTokenID, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )
@@ -210,8 +210,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 323250},
             registers=[
-                ErgoAppKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.stakedTokenID, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.stakedTokenID, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )
@@ -219,8 +219,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 250000},
             registers=[
-                ErgoAppKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.stakePoolNFT, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.stakePoolNFT, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )
@@ -228,8 +228,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 323250},
             registers=[
-                ErgoAppKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.stakePoolNFT, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.stakePoolNFT, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )
@@ -237,8 +237,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 250000},
             registers=[
-                ErgoAppKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.stakeTokenID, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(42),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.stakeTokenID, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )
@@ -246,8 +246,8 @@ class TestStakingIncentive:
             value=int(1e6),
             tokens={self.stakeTokenID: 1, self.stakedTokenID: 323250},
             registers=[
-                ErgoAppKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
-                ErgoAppKit.ergoValue(self.stakeTokenID, ErgoValueT.ByteArrayFromHex)
+                self.appKit.ergoValue([int(43),int(0)],ErgoValueT.LongArray),
+                self.appKit.ergoValue(self.stakeTokenID, ErgoValueT.ByteArrayFromHex)
             ],
             contract=self.appKit.contractFromAddress(self.stakeAddress)
         )

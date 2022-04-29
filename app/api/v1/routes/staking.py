@@ -209,7 +209,7 @@ async def unstake(req: UnstakeRequest):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unexpected error unstaking, please try again shortly.')
 
 @r.get("/snapshot/", name="staking:snapshot")
 def snapshot(
