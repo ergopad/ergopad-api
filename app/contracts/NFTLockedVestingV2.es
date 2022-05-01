@@ -9,11 +9,12 @@
     val totalVested         = SELF.R4[Coll[Long]].get(3)
     val tgeNum              = SELF.R4[Coll[Long]].get(4)
     val tgeDenom            = SELF.R4[Coll[Long]].get(5)
+    val tgeTime             = SELF.R4[Coll[Long]].get(6)
     val vestingKeyId        = SELF.R5[Coll[Byte]].get
 
     val timeVested          = blockTime - vestingStart
     val periods             = timeVested/redeemPeriod
-    val tgeAmount           = if (periods > 0) totalVested * tgeNum / tgeDenom else 0L
+    val tgeAmount           = if (blockTime > tgeTime) totalVested * tgeNum / tgeDenom else 0L
     val redeemed            = totalVested - SELF.tokens(0)._2
     val totalRedeemable     = periods * (totalVested-tgeAmount) / numberOfPeriods + tgeAmount
 

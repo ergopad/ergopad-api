@@ -622,7 +622,14 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         timeVested          = blockTime - vestingStart
         periods             = max(0,int(timeVested/redeemPeriod))
         redeemed            = totalVested - int(vestingBoxJson["assets"][0]["amount"])
-        totalRedeemable     = int(periods * totalVested / numberOfPeriods)
+        if vestingBoxJson["ergoTree"] == "new ergotree":
+            tgeNum              = parameters[4]
+            tgeDenom            = parameters[5]
+            tgeTime             = parameters[6]
+            tgeAmount           = int(totalVested * tgeNum / tgeDenom) if (blockTime > tgeTime) else 0
+            totalRedeemable     = int(periods * (totalVested-tgeAmount) / numberOfPeriods) + tgeAmount
+        else:
+            totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
         redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
         tokensToSpend = {vestingKey: 1}
@@ -700,7 +707,9 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 @r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
 async def vested(req: AddressList):
     CACHE_TTL = 600 # 10 mins
-    vestingAddress = '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU'
+    vestingAddresses = [
+        '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU',
+        'new address']
     try:
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
         vestingKeys = {}
@@ -736,9 +745,10 @@ async def vested(req: AddressList):
         if cached:
             checkBoxes = cached
         else:
-            appKitBoxes = appKit.getUnspentBoxes(vestingAddress)
-            for appKitBox in appKitBoxes:
-                checkBoxes.append(json.loads(appKitBox.toJson(False)))
+            for vestingAddress in vestingAddresses:
+                appKitBoxes = appKit.getUnspentBoxes(vestingAddress)
+                for appKitBox in appKitBoxes:
+                    checkBoxes.append(json.loads(appKitBox.toJson(False)))
             cache.set(f"get_vesting_vested_token_boxes", checkBoxes, CACHE_TTL)
         for box in checkBoxes:
             if box["additionalRegisters"]["R5"][4:] in vestingKeys.keys():
@@ -753,7 +763,14 @@ async def vested(req: AddressList):
                 timeVested          = blockTime - vestingStart
                 periods             = max(0,int(timeVested/redeemPeriod))
                 redeemed            = totalVested - int(box["assets"][0]["amount"])
-                totalRedeemable     = int(periods * totalVested / numberOfPeriods)
+                if box["ergoTree"] == "new ergotree":
+                    tgeNum              = parameters[4]
+                    tgeDenom            = parameters[5]
+                    tgeTime             = parameters[6]
+                    tgeAmount           = int(totalVested * tgeNum / tgeDenom) if (blockTime > tgeTime) else 0
+                    totalRedeemable     = int(periods * (totalVested-tgeAmount) / numberOfPeriods) + tgeAmount
+                else:
+                    totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
                 redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
                 vestedTokenInfo = getTokenInfo(box["assets"][0]["tokenId"])
@@ -779,21 +796,24 @@ class BootstrapRoundRequest(BaseModel):
     roundAllocation: Decimal
     vestingPeriods: int
     vestingPeriodDuration_ms: int
-    vestingStart_ms: int
+    cliff_ms: int
     tokenSigUSDPrice: Decimal
     whitelistTokenMultiplier: Decimal
     sellerAddress: str
+    tgeTime_ms: int
+    tgePct: int
+    roundEnd_ms: int
 
 @r.post('/bootstrapRound', name="vesting:bootstrapRound")
 async def bootstrapRound(
     req: BootstrapRoundRequest, 
-    current_user=Depends(get_current_active_superuser)
+    #current_user=Depends(get_current_active_superuser)
 ):
     try:
         vestedToken = getTokenInfo(req.tokenId)
         vestedTokenAmount = int(req.roundAllocation*10**vestedToken["decimals"])
 
-        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/",CFG.ergopadApiKey)
 
         ergoPadContract = appKit.contractFromAddress(CFG.ergopadWallet)
         sellerContract = appKit.contractFromAddress(req.sellerAddress)
@@ -841,11 +861,11 @@ async def bootstrapRound(
         sigusd = "03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04"
         ergusdoracle = "011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
 
-        with open(f'contracts/NFTLockedVesting.es') as f:
+        with open(f'contracts/NFTLockedVestingV2.es') as f:
             script = f.read()
         nftLockedVestingContractTree = appKit.compileErgoScript(script)
 
-        with open(f'contracts/proxyNFTLockedVesting.es') as f:
+        with open(f'contracts/proxyNFTLockedVestingV2.es') as f:
             script = f.read()
         proxyNftLockedVestingTree = appKit.compileErgoScript(
             script,
@@ -868,9 +888,13 @@ async def bootstrapRound(
                     [
                         req.vestingPeriodDuration_ms,   #redeemPeriod
                         req.vestingPeriods,             #numberOfPeriods
-                        req.vestingStart_ms,            #vestingStart
+                        req.tgeTime_ms + req.cliff_ms,  #vestingStart
                         price.numerator,                #priceNum
-                        price.denominator               #priceDenom
+                        price.denominator,              #priceDenom
+                        req.roundEnd_ms,                #Timestamp where token extraction is possible
+                        req.tgePct,                     #tge percentage numerator
+                        int(100),                       #tge percentage denominator
+                        req.tgeTime_ms                  #timestamp for tge/ido
                     ], ErgoValueT.LongArray),
                 ErgoAppKit.ergoValue(req.tokenId, ErgoValueT.ByteArrayFromHex),                  #vestedTokenId
                 ErgoAppKit.ergoValue(sellerContract.getErgoTree().bytes(), ErgoValueT.ByteArray), #Seller address
@@ -906,25 +930,32 @@ async def bootstrapRound(
 @r.get('/activeRounds', name='vesting:activeRounds')
 async def activeRounds():
     try:
-        proxyAddress = 'Jf7SDZuaVDGiCwCxC7N2y8cuptH3cgNT1nteJK469effW2gNarYn1AxsYjNcP7zYtvzmVjNPMmE3PYJRMC2E7m3yTDBrHvv8voJM35a9ktLb3bNeQ4qEJSyFse3pQeqcTxvPATNAv7RHc3fnAkBf3PsNBGFoRq2nwnciNwUaNcunyfWz2JDbwrBzMT7gMfs8U9YKAKGU1V754PUa1WRccaUfWxDAj5zVVkzkvVNNeQPH2g9GAu539Kc5792XLRwfv5MqaBkQ6KqHw8tgck2e55G4sY6n9ZQ4vboeuVC9JzsuiYraAuc6Lbj1NbPdDRaHXBUAQioDuzRBFxDFwLdmsZXykdvDfJZDytxPoCkzdfMmr8Zchga8vELSydrJ8smXbjWnrySGTZWqcQbJLB1YwPDiGVQvDvvQhRSezJcGMXUXea9zX6cCaeAsrqCULonZKVoeVgCNGte6VFk7PTKJ5W5LrRW1cgkJNRHYrpqPujPN8SoMgLjt1zvCKww5eSuu2RXqyZNVPRxMU3uQd3F2hRjGAmJA6M8Mz5QdZmoXj1LRWnrz1C1E6z6mL1Unry2GYWbxfTsVFRbZVZEv78yn9TUN7cuA163BSoxLVeKwUbGC2uiWeWSm1FzTPNCHHpVtBRfTACKoNbxag9SGgxpsepyxaF7snbXhKtBnqFvyg2ZEiiHXUDjY1Qy8kjf9JrdLmifU6WaZ7VdhNEdHGpf72ivo5sVPNEeUKoKfHAY6WWokivYjeSpKCSLjougKwaNoR79tUWdfN8CEudwUSebWXD92cbnMZxS7QBvGqcUSGRQuuD1uXgeWF8m76xgVH4sQfTuMMvYVWeH8e8bHHqtQMzw2FUajFo2F1mxxwVqvkUQJgmRQXYBndDGiquVCvTqNdZ25eo32gf'
+        proxyAddresses = [
+            'Jf7SDZuaVDGiCwCxC7N2y8cuptH3cgNT1nteJK469effW2gNarYn1AxsYjNcP7zYtvzmVjNPMmE3PYJRMC2E7m3yTDBrHvv8voJM35a9ktLb3bNeQ4qEJSyFse3pQeqcTxvPATNAv7RHc3fnAkBf3PsNBGFoRq2nwnciNwUaNcunyfWz2JDbwrBzMT7gMfs8U9YKAKGU1V754PUa1WRccaUfWxDAj5zVVkzkvVNNeQPH2g9GAu539Kc5792XLRwfv5MqaBkQ6KqHw8tgck2e55G4sY6n9ZQ4vboeuVC9JzsuiYraAuc6Lbj1NbPdDRaHXBUAQioDuzRBFxDFwLdmsZXykdvDfJZDytxPoCkzdfMmr8Zchga8vELSydrJ8smXbjWnrySGTZWqcQbJLB1YwPDiGVQvDvvQhRSezJcGMXUXea9zX6cCaeAsrqCULonZKVoeVgCNGte6VFk7PTKJ5W5LrRW1cgkJNRHYrpqPujPN8SoMgLjt1zvCKww5eSuu2RXqyZNVPRxMU3uQd3F2hRjGAmJA6M8Mz5QdZmoXj1LRWnrz1C1E6z6mL1Unry2GYWbxfTsVFRbZVZEv78yn9TUN7cuA163BSoxLVeKwUbGC2uiWeWSm1FzTPNCHHpVtBRfTACKoNbxag9SGgxpsepyxaF7snbXhKtBnqFvyg2ZEiiHXUDjY1Qy8kjf9JrdLmifU6WaZ7VdhNEdHGpf72ivo5sVPNEeUKoKfHAY6WWokivYjeSpKCSLjougKwaNoR79tUWdfN8CEudwUSebWXD92cbnMZxS7QBvGqcUSGRQuuD1uXgeWF8m76xgVH4sQfTuMMvYVWeH8e8bHHqtQMzw2FUajFo2F1mxxwVqvkUQJgmRQXYBndDGiquVCvTqNdZ25eo32gf',
+            'SA7vqpDWt8BYmP6PJxRe3TgV89iu6dhKr1sk622mW8PfxZ5WrcBZ4En3LwTmKJMvb2Cfzg4HPeK6wJ61aYKnqcFwkNh1bqPkk74KhespAF4Ga7YM3TNi33H8CtDLZXC69F8EyrMcsSex5taUYad9rBZm2kXZc1aLFEh9795wBsvXzoxPpALq82bBeVBij89gkaQ6Ny4c7QfAguqRzE8BkefSh75aGmcq7ZYtcRCuy5BMzVnWJBT4mrAwbDJBYxYdaSQ8zAvA7PA65zQvEVquLqamZg1PmApFL3aqbhjoF5Ppr2NHJeBdtgb9vMc9XDZy4Aag3V6EqujRoZ29WUQRTDp32iBNhEBTdE8PdSfpw5pZMzmSCGtCQ5eh5dXC4ahG8QL2D4NvXP78Qyu2FG6xyxo823G93Q2BqpcSesQvnz3bYrthVDMdBiiLqgwfsiXoTNg4KYk3HBftEzbfPnhTXxgrm8CcRWodKhS9tiA75WotZZcTACcrRZny7ZYETfwwSYTVasg7DxnSpZN4VPDExPigm69j8D8tp3hrP9BBESLWJF6EspxfWd4Nbx14eou4dQ4TRsxJUG5noCoXCeWEB4iyzuG9RyNTGD4h3gsAnnt8bR7FV6uWopmqHZ85Nyra5Zqh1aR6VQsbStaFL3WhSMS5pFBC5mhmuF7hdu3ZmsXsNgVEinGwM9jnukKghMBRNSpQbwqi4TZjja6fy93tUS9ggUShvRV7wE7YTKxq1RnnVQZTb6CCRvmycZFUuWehqXu7XekDUkWYPGC4KaagVbJRsXmKnqt36Re6V8NgHiTr4SjGzrj6gtbah1CfAVjVVA3Ggb1LnnXs4MFZpfmLnAGSm6PCb4Y3M53KygQ4pY7opZ1yxBAhB4tnJLa4KQj9uLy1V8mrK6xm8envCM92zhtPdAaxMZZmccQvSmMitSrVgWu419pT2yFTE6QpApZqysXtry3jRsmnEwLh72FfpE3xrfz4TBjM41tZm7RAEL8CwKfzs3qNsXCqvdLiBSdr6XTo9kTW6azMsGHLigqzg34FrkUGQW3S4aSnrapt1r7HmU9pGHukuuMcvgV4KrhPwV3chVetMLFEk4SoPavKueY4kX7KcAwEFsJcLtcXZq1kKBFS7kogsPNCnmxPj']
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
-        proxyBoxes = appKit.getUnspentBoxes(proxyAddress)
+        with open(f'contracts/NFTLockedVestingV2.es') as f:
+            script = f.read()
+        nftLockedVestingContractTree = appKit.compileErgoScript(script)
+        logging.info(appKit.contractFromTree(nftLockedVestingContractTree).getErgoTree().bytesHex())
         result = {'activeRounds': [], 'soldOutRounds': []}
-        for proxyBox in proxyBoxes:
-            logging.info(proxyBox)
-            tokens = list(proxyBox.getTokens())
-            roundInfo = getTokenInfo(tokens[0].getId().toString())
-            if len(tokens) > 1:
-                vestedInfo = getTokenInfo(tokens[1].getId().toString())
-                whitelistTokenId = list(proxyBox.getRegisters())[3].toHex()[4:]
-                result['activeRounds'].append({
-                    'roundName': roundInfo["name"], 
-                    'proxyNFT': tokens[0].getId().toString(), 
-                    'remaining': tokens[1].getValue()*10**(-1*vestedInfo["decimals"]),
-                    'Whitelist tokenId': whitelistTokenId
-                    })
-            else:
-                result['soldOutRounds'].append({'roundName': roundInfo["name"], 'proxyNFT': tokens[0].getId().toString()})
+        for proxyAddress in proxyAddresses:
+            proxyBoxes = appKit.getUnspentBoxes(proxyAddress)
+            for proxyBox in proxyBoxes:
+                logging.info(proxyBox)
+                tokens = list(proxyBox.getTokens())
+                roundInfo = getTokenInfo(tokens[0].getId().toString())
+                if len(tokens) > 1:
+                    vestedInfo = getTokenInfo(tokens[1].getId().toString())
+                    whitelistTokenId = list(proxyBox.getRegisters())[3].toHex()[4:]
+                    result['activeRounds'].append({
+                        'roundName': roundInfo["name"], 
+                        'proxyNFT': tokens[0].getId().toString(), 
+                        'remaining': tokens[1].getValue()*10**(-1*vestedInfo["decimals"]),
+                        'Whitelist tokenId': whitelistTokenId
+                        })
+                else:
+                    result['soldOutRounds'].append({'roundName': roundInfo["name"], 'proxyNFT': tokens[0].getId().toString()})
         return result
 
     except Exception as e:
@@ -978,6 +1009,92 @@ class VestFromProxyRequest(RequiredNergTokensRequest):
     addresses: List[str] = []
     utxos: List[str] = []
     txFormat: TXFormat = TXFormat.EIP_12
+
+@r.post('/contribute', name="vesting:contribute")
+async def contribute(req: VestFromProxyRequest):
+    try:
+        oracleInfo = await ergusdoracle()
+        if oracleInfo is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle info')
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
+        proxyBox = getNFTBox(req.proxyNFT)
+        if proxyBox is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
+        #roundInfo = getTokenInfo(req.proxyNFT)
+        whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
+        vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
+        roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
+        priceNum = roundParameters[3]
+        priceDenom = roundParameters[4]
+        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
+        sigUsdDecimals = int(2)
+        sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
+        whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
+        requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
+        nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
+        userInputs = List[InputBox]
+        tokensToSpend = {whitelistTokenId: whitelistTokens}
+        if req.sigUSDAmount>0:
+            tokensToSpend[sigusd] = sigUsdTokens
+        if len(req.utxos) == 0:
+            if len(req.addresses) == 0:
+                userInputs = appKit.boxesToSpend(req.address,int(22e6+nergRequired),tokensToSpend)
+            else:
+                userInputs = appKit.boxesToSpendFromList(req.addresses,int(22e6+nergRequired),tokensToSpend)
+        else:
+            userInputs = appKit.getBoxesById(req.utxos)
+            if not ErgoAppKit.boxesCovered(userInputs,int(22e6+nergRequired),tokensToSpend):
+                userInputs = appKit.boxesToSpend(req.address,int(22e6+nergRequired),tokensToSpend)
+        logging.info("0")
+        if userInputs is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
+
+        with open(f'contracts/userProxyNFTLockedVesting.es') as f:
+            script = f.read()
+        userProxyNFTLockedVestingContractTree = appKit.compileErgoScript(script,
+            {
+                "_ErgUSDOracleNFT": ErgoAppKit.ergoValue(ergUsdOracleNFT, ErgoValueT.ByteArrayFromHex).getValue()    
+            })
+        logging.info("1")
+        proxyOutput = appKit.buildOutBox(
+            value=int(22e6)+nergRequired,
+            tokens=tokensToSpend,
+            registers=[
+                ErgoAppKit.ergoValue(nErgPerUSD,ErgoValueT.Long),
+                ErgoAppKit.ergoValue(Address.create(req.address).toErgoContract().getErgoTree().bytes(),ErgoValueT.ByteArray),
+                ErgoAppKit.ergoValue(req.proxyNFT, ErgoValueT.ByteArrayFromHex)
+            ],
+            contract=appKit.contractFromTree(userProxyNFTLockedVestingContractTree)
+        )
+        logging.info("2")
+        unsignedTx = appKit.buildUnsignedTransaction(
+            inputs=userInputs,
+            outputs=[proxyOutput],
+            fee=int(1e6),
+            sendChangeTo=Address.create(req.address).getErgoAddress()
+        )
+
+        if req.txFormat == TXFormat.EIP_12:
+            return ErgoAppKit.unsignedTxToJson(unsignedTx)
+
+        if req.txFormat == TXFormat.ERGO_PAY:
+            reducedTx = appKit.reducedTx(unsignedTx)
+            ergoPaySigningRequest = ErgoAppKit.formErgoPaySigningRequest(
+                reducedTx,
+                address=req.address
+            )
+            cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
+            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
+
+    except Exception as e:
+        # return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Uncaught error: {e}')
+        content = 'Unable to process transaction, please try again.'
+        m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', str(e))
+        if m is not None:
+            content = f'Blockchain is synchronizing, please try again shortly (ref: {m.group(1)})'
+        logging.error(f'ERR:{myself()}: {content} ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 @r.post('/vestFromProxy', name="vesting:vestFromProxy")
 async def vestFromProxy(req: VestFromProxyRequest):

@@ -7,6 +7,9 @@
     //   3: priceNum
     //   4: priceDenom
     //   5: round end timestamp
+    //   6: tge percentage numerator
+    //   7: tge percentage denominator
+    //   8: tge timestamp
     // R5: Coll[Byte]: vestedTokenId
     // R6: Coll[Byte]: Seller address
     // R7: Coll[Byte]: Whitelist tokenid
@@ -38,10 +41,11 @@
         val priceDenom                  = SELF.R4[Coll[Long]].get(4)
         val tgeNum                      = SELF.R4[Coll[Long]].get(6)
         val tgeDenom                    = SELF.R4[Coll[Long]].get(7)
+        val tgeTime                     = SELF.R4[Coll[Long]].get(8)
         val vestedTokenId               = SELF.R5[Coll[Byte]].get
         val whitelistTokenId            = SELF.R7[Coll[Byte]].get
 
-        val vestedTokens                = SELF.tokens(1)._2 - proxyVestingOutputBox.tokens(1)._2
+        val vestedTokens                = vestingOutputBox.tokens(0)._2
         val sigUSDNeeded                = vestedTokens * priceNum / priceDenom
 
         // If the amount of vested tokens is low and the price per token is less than 1 sigusd 
@@ -66,12 +70,17 @@
         val ergValueInSigUSD            = sellerOutputBox.value * 100 / nergPerUSD 
         val enoughSigUSD                = (sellerSigUSD + ergValueInSigUSD) >= requiredSigUSD
 
+        val remainingInProxy            = if (proxyVestingOutputBox.tokens.size == 1)
+                                            SELF.tokens(1)._2 == vestedTokens
+                                          else
+                                            proxyVestingOutputBox.tokens(1)._2 == SELF.tokens(1)._2 - vestedTokens
+
         val selfOutput                  = allOf(Coll(
                                             SELF.id                 == INPUTS(0).id,
                                             SELF.value              == proxyVestingOutputBox.value,
                                             SELF.propositionBytes   == proxyVestingOutputBox.propositionBytes,
                                             SELF.tokens(0)          == proxyVestingOutputBox.tokens(0),
-                                            SELF.tokens(1)._1       == proxyVestingOutputBox.tokens(1)._1,
+                                            remainingInProxy,
                                             SELF.R4[Coll[Long]].get == proxyVestingOutputBox.R4[Coll[Long]].get,
                                             SELF.R5[Coll[Byte]].get == proxyVestingOutputBox.R5[Coll[Byte]].get,
                                             SELF.R6[Coll[Byte]].get == proxyVestingOutputBox.R6[Coll[Byte]].get,
@@ -92,6 +101,7 @@
                                             vestingOutputBox.R4[Coll[Long]].get(3)          == vestedTokens,
                                             vestingOutputBox.R4[Coll[Long]].get(4)          == tgeNum,
                                             vestingOutputBox.R4[Coll[Long]].get(5)          == tgeDenom,
+                                            vestingOutputBox.R4[Coll[Long]].get(6)          == tgeTime,
                                             vestingOutputBox.R5[Coll[Byte]].get             == SELF.id
                                         ))
 
@@ -122,10 +132,12 @@
         val roundEnd                    = SELF.R4[Coll[Long]].get(5)
 
         sigmaProp(allOf(Coll(
-            OUTPUTS(0).propositionBytes == sellerPropositionBytes,
-            OUTPUTS(0).value            == SELF.value,
-            OUTPUTS(0).tokens           == SELF.tokens,
-            CONTEXT.preHeader.timestamp >= roundEnd
+            OUTPUTS(1).propositionBytes == sellerPropositionBytes,
+            OUTPUTS(1).value            == SELF.value,
+            OUTPUTS(1).tokens(0)        == SELF.tokens(1),
+            CONTEXT.preHeader.timestamp >= roundEnd,
+            OUTPUTS(0).propositionBytes == SELF.propositionBytes,
+            OUTPUTS(0).tokens(0)        == SELF.tokens(0)
         )))
     }
 }

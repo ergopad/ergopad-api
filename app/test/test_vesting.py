@@ -113,7 +113,6 @@ class TestProxyNFTLockedVesting:
         )
 
         nergamount = int(100000*self.vestedTokenPrice/self.nErgPrice)
-        print(nergamount)
 
         sellerOutput = self.appKit.buildOutBox(
             value=int(100000*self.vestedTokenPrice/self.nErgPrice+1),
@@ -345,7 +344,8 @@ class TestProxyNFTLockedVestingV2:
                 int(1000),              #priceDenom,
                 int(0),
                 int(0),
-                int(100)
+                int(100),
+                int(0)
             ],ErgoValueT.LongArray),
             ErgoAppKit.ergoValue(vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
             ErgoAppKit.ergoValue(sellerProp.bytes(),ErgoValueT.ByteArray),      #Seller address
@@ -398,7 +398,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1000),                 #priceDenom
                     int(0),
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ],ErgoValueT.LongArray),
                 ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
                 ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
@@ -417,7 +418,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1648771200000), #Start vesting april 1st
                     int(100000),         #Initial vesting amount
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ], ErgoValueT.LongArray),            
                 #Vesting key
                 ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
@@ -495,7 +497,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1000),                 #priceDenom
                     int(0),
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ],ErgoValueT.LongArray),
                 ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
                 ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
@@ -514,7 +517,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1648771200000), #Start vesting april 1st
                     int(100000),         #Initial vesting amount
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ], ErgoValueT.LongArray),            
                 #Vesting key
                 ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
@@ -592,7 +596,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1000),                 #priceDenom
                     int(0),
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ],ErgoValueT.LongArray),
                 ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
                 ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
@@ -611,7 +616,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1648771200000), #Start vesting april 1st
                     int(100000),         #Initial vesting amount
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ], ErgoValueT.LongArray),            
                 #Vesting key
                 ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
@@ -785,7 +791,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1000),                 #priceDenom
                     int(0),
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ],ErgoValueT.LongArray),
                 ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
                 ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
@@ -804,7 +811,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1648771200000), #Start vesting april 1st
                     int(100000),         #Initial vesting amount
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ], ErgoValueT.LongArray),            
                 #Vesting key
                 ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
@@ -873,7 +881,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1),                 #priceNum
                     int(1000),                 #priceDenom
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ],ErgoValueT.LongArray),
                 ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
                 ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
@@ -892,7 +901,8 @@ class TestProxyNFTLockedVestingV2:
                     int(1648771200000), #Start vesting april 1st
                     int(100000),         #Initial vesting amount
                     int(0),
-                    int(100)
+                    int(100),
+                    int(0)
                 ], ErgoValueT.LongArray),            
                 #Vesting key
                 ErgoAppKit.ergoValue(self.proxyVestingBox.getId().toString(), ErgoValueT.ByteArrayFromHex)                        
