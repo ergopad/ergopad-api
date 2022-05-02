@@ -36,7 +36,10 @@
     } else {
 
     if (CONTEXT.dataInputs(0).tokens(0)._1 == SELF.R6[Coll[Byte]].get) {
-        val proxySoldOut        = CONTEXT.dataInputs(0).tokens(1)._2 < SELF.tokens(0)._2
+        val proxySoldOut        = if (CONTEXT.dataInputs(0).tokens.size == 1)
+                                    true
+                                  else
+                                    CONTEXT.dataInputs(0).tokens(1)._2 < SELF.tokens(0)._2
 
         sigmaProp(allOf(Coll(
             proxySoldOut,
