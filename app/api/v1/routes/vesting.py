@@ -888,7 +888,7 @@ async def bootstrapRound(
                     [
                         req.vestingPeriodDuration_ms,   #redeemPeriod
                         req.vestingPeriods,             #numberOfPeriods
-                        req.tgeTime_ms + req.cliff_ms,  #vestingStart
+                        req.tgeTime_ms + req.cliff_ms - req.vestingPeriodDuration_ms,  #vestingStart
                         price.numerator,                #priceNum
                         price.denominator,              #priceDenom
                         req.roundEnd_ms,                #Timestamp where token extraction is possible
