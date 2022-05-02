@@ -4,10 +4,10 @@ import typing as t
 
 
 class CreateAndUpdateNotification(BaseModel):
-    transactionId: str
-    transactionStatus: str
-    context: str
-    additionalText: str
+    transactionId: t.Optional[str]
+    transactionStatus: t.Optional[str]
+    context: t.Optional[str]
+    additionalText: t.Optional[str]
 
 
 class Notification(CreateAndUpdateNotification):
