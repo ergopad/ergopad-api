@@ -821,7 +821,7 @@ class BootstrapRoundRequest(BaseModel):
 @r.post('/bootstrapRound', name="vesting:bootstrapRound")
 async def bootstrapRound(
     req: BootstrapRoundRequest, 
-    #current_user=Depends(get_current_active_superuser)
+    current_user=Depends(get_current_active_superuser)
 ):
     try:
         vestedToken = getTokenInfo(req.tokenId)
