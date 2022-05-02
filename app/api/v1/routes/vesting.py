@@ -188,7 +188,7 @@ async def vestToken(vestment: Vestment):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to vest.')
 
     # handle token params
     currencyDecimals = None
@@ -211,7 +211,7 @@ async def vestToken(vestment: Vestment):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: {e}')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Invalid token decimals ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Invalid token decimals.')
 
     logging.info(f'decimals for currency: {currencyDecimals}, vestedToken: {vestedTokenDecimals}')
     vestedTokenDecimals = 10**vestedTokenDecimals
@@ -378,7 +378,7 @@ async def vestToken(vestment: Vestment):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: building request ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: building request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build request.')
 
 def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
     try:
@@ -408,7 +408,7 @@ def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to redeem transaction ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to redeem transaction ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem transaction')
 
 # redeem/disburse tokens after lock
 @r.get("/redeem/{address}", name="vesting:redeem")
@@ -486,7 +486,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem.')
 
     # redeem
     result = ""
@@ -502,7 +502,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
     
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to redeem token ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to redeem token.')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem token.')
 
 # find vesting/vested tokens
 @r.get("/vested/{wallet}", name="vesting:findVestedTokens")
@@ -567,7 +567,7 @@ def findVestingTokens(wallet:str):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to build vesting request ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to build vesting request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
 @r.get('/unspent', name="vesting:unspent")
 def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
@@ -595,7 +595,7 @@ def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find tokens for exchange ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find tokens for exchange ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find tokens for exchange.')
 
     return ergopadTokenBoxes
 

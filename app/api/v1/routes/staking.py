@@ -209,7 +209,7 @@ async def unstake(req: UnstakeRequest):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
 @r.get("/snapshot/", name="staking:snapshot")
 def snapshot(
@@ -240,7 +240,7 @@ def snapshot(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to snapshot, try again shortly or contact support if error continues.')
 
 def validPenalty(startTime: int):
     currentTime = int(time()*1000)
@@ -312,7 +312,7 @@ async def staked(req: AddressList):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
 
 @r.get("/status/", name="staking:status")
 def stakingStatus():
@@ -342,7 +342,7 @@ def stakingStatus():
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[OutBox],totalReward: int,emissionBox, emissionR4):
     try:
@@ -378,7 +378,7 @@ def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to compound, try again shortly or contact support if error continues.')
 
 @r.post("/compound/", name="staking:compound")
 async def compound(
@@ -437,7 +437,7 @@ async def compound(
                         signedTX = appKit.signTransactionWithNode(unsignedTx)
                         txId = appKit.sendTransaction(signedTX)
                         retriesLeft = 0
-                    except Exception:
+                    except Exception as e:
                         utx = unsignedTx or '[NOPE]'
                         retriesLeft -= 1
                         await asyncio.sleep(3)
@@ -462,7 +462,7 @@ async def compound(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to compound, try again shortly or contact support if error continues.')
 
 @r.post("/emit/", name="staking:emit")
 async def emit(
@@ -588,7 +588,7 @@ async def emit(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to emit, try again shortly or contact support if error continues.')
 
 @r.post("/stake/", name="staking:stake")
 async def stake(req: StakeRequest):
@@ -685,7 +685,7 @@ async def stake(req: StakeRequest):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to stake, try again shortly or contact support if error continues.')
 
 # bootstrap staking setup
 @r.post("/bootstrap/", name="staking:bootstrap")
@@ -794,4 +794,4 @@ async def bootstrapStaking(req: BootstrapRequest):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
