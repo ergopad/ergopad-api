@@ -604,6 +604,7 @@ class RedeemWithNFTRequest(BaseModel):
     address: str
     utxos: List[str] = []
     txFormat: TXFormat = TXFormat.EIP_12
+    addresses: List[str] = []
 
 @r.post("/redeemWithNFT", name="vesting:redeemWithNFT")
 async def redeemWithNFT(req: RedeemWithNFTRequest):
@@ -622,7 +623,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         timeVested          = blockTime - vestingStart
         periods             = max(0,int(timeVested/redeemPeriod))
         redeemed            = totalVested - int(vestingBoxJson["assets"][0]["amount"])
-        if vestingBoxJson["ergoTree"] == "new ergotree":
+        if vestingBoxJson["ergoTree"] == "1012040204000404040004020406040c0408040a050004000402040204000400040404000400d812d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605db6903db6503fed606e4c6a70411d6079d997205b27206730200b27206730300d608b27206730400d609b27206730500d60a9972097204d60b95917205b272067306009d9c7209b27206730700b272067308007309d60c959272077208997209720a999a9d9c7207997209720b7208720b720ad60d937204720cd60e95720db2a5730a00b2a5730b00d60fdb6308720ed610b2720f730c00d6118c720301d612b2a5730d00d1eded96830201aedb63087201d901134d0e938c721301720293c5b2a4730e00c5a79683050193c2720ec2720193b1720f730f938cb2720f731000017202938c7210017211938c721002720cec720dd801d613b2db630872127311009683060193c17212c1a793c27212c2a7938c7213017211938c721302997204720c93e4c67212050e720293e4c6721204117206":
             tgeNum              = parameters[4]
             tgeDenom            = parameters[5]
             tgeTime             = parameters[6]
@@ -637,6 +638,19 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
             userInputs = appKit.boxesToSpend(req.address,int(2e6),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)
+
+        if len(req.utxos) == 0:
+            if len(req.addresses) == 0:
+                userInputs = appKit.boxesToSpend(req.address,int(2e6),tokensToSpend)
+            else:
+                userInputs = appKit.boxesToSpendFromList(req.addresses,int(2e6),tokensToSpend)
+        else:
+            userInputs = appKit.getBoxesById(req.utxos)
+            if not ErgoAppKit.boxesCovered(userInputs,int(2e6),tokensToSpend):
+                userInputs = appKit.boxesToSpend(req.address,int(2e6),tokensToSpend)
+
+        if userInputs is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
 
         keyBox = None
         otherBoxes = []
@@ -709,7 +723,7 @@ async def vested(req: AddressList):
     CACHE_TTL = 600 # 10 mins
     vestingAddresses = [
         '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU',
-        'new address']
+        'HNLdwoHRsUSevguzRajzvy1DLAvUJ9YgQezQq6GGZiY4TmU9VDs2ae8mRpQkfEnLmuUKyJibZD2bXR2yoo1p8T5WCRKPn4rJVJ2VR2LvRBk8ViCmhcume5ubWaySXTUqpftEaaURTM6KSFxe4QbRFbToyPzZ3JJmjoDn4WzHh5ioXZMj7AX6xTwJvFmzPuko9BqDk5z1RJtD1wP4kd8sSsLN9P2YNQxmUGDEBYHaDCoAhY7Pg5oKit6ZyqMynoiycWqctfg1EHhMUKCTJsZNnidU961ri98RaYP4CfEwYQ3d9dRVuC6S1n7J1wPPHYqmUBgJCGWbTULayXUowSSmRuZUkQYGo9vvNaEpB7ManiLsX1n8cBYwN4XoVsY24mCfptBP86P4rZ5fgcr9mYtQ9nG934DMDZBbjs81VzCupB6KVrGCe1WtYSr6c1DwkNAinBMwqcqxTznXZUvfBsjDSCtJzCut44xcc7Zsy9mWz2B2pqhdKsX83BVzMDDM5hnjXTShYfauJGs81']
     try:
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
         vestingKeys = {}
@@ -763,7 +777,7 @@ async def vested(req: AddressList):
                 timeVested          = blockTime - vestingStart
                 periods             = max(0,int(timeVested/redeemPeriod))
                 redeemed            = totalVested - int(box["assets"][0]["amount"])
-                if box["ergoTree"] == "new ergotree":
+                if box["ergoTree"] == "1012040204000404040004020406040c0408040a050004000402040204000400040404000400d812d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605db6903db6503fed606e4c6a70411d6079d997205b27206730200b27206730300d608b27206730400d609b27206730500d60a9972097204d60b95917205b272067306009d9c7209b27206730700b272067308007309d60c959272077208997209720a999a9d9c7207997209720b7208720b720ad60d937204720cd60e95720db2a5730a00b2a5730b00d60fdb6308720ed610b2720f730c00d6118c720301d612b2a5730d00d1eded96830201aedb63087201d901134d0e938c721301720293c5b2a4730e00c5a79683050193c2720ec2720193b1720f730f938cb2720f731000017202938c7210017211938c721002720cec720dd801d613b2db630872127311009683060193c17212c1a793c27212c2a7938c7213017211938c721302997204720c93e4c67212050e720293e4c6721204117206":
                     tgeNum              = parameters[4]
                     tgeDenom            = parameters[5]
                     tgeTime             = parameters[6]
