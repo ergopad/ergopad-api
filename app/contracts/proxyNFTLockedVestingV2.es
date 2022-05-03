@@ -23,7 +23,7 @@
 
     val sellerPropositionBytes      = SELF.R6[Coll[Byte]].get
 
-    if (OUTPUTS(0).propositionBytes == SELF.propositionBytes)
+    if (blake2b256(OUTPUTS(1).propositionBytes) == NFTLockedVestingContract)
     {
 
         val correctOracle               = CONTEXT.dataInputs(0).tokens(0)._1 == ErgUSDOracleNFT 
