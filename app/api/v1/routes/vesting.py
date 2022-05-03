@@ -129,6 +129,9 @@ def getScenario(scenarioName: str):
 @r.post("/vest/", name="vesting:vestToken")
 async def vestToken(vestment: Vestment): 
     try:
+        # deprecated May 2022; shutting down beta
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Invalid endpoint, please contact support.')
+
         st = int(time())
         vs = getScenario(vestment.vestingScenario)
         if vs is None:
