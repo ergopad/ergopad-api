@@ -1045,7 +1045,7 @@ async def contribute(req: VestFromProxyRequest):
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
         whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
         requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
-        nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
+        nergRequired = max(int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals))),int(0))
         userInputs = List[InputBox]
         tokensToSpend = {whitelistTokenId: whitelistTokens}
         if req.sigUSDAmount>0:
