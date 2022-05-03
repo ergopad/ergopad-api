@@ -81,7 +81,7 @@ def get_whitelist_event_by_event_id(db: Session, event_id: int):
         )
 
 
-def get_whitelist_events(db: Session, skip: int = 0, limit: int = 100):
+def get_whitelist_events(db: Session, skip: int = 0, limit: int = 500):
     return db.query(whitelistEvents.WhitelistEvent).offset(skip).limit(limit).all()
 
 
