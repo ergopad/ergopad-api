@@ -48,7 +48,7 @@ def delete_notification(db: Session, id: int):
 def cleanup_notifications(db: Session):
     date = datetime.datetime.utcnow() - datetime.timedelta(30)
     ret = {
-        "deleted_rows": db.query(models.Notification).filter(models.Notification.createdTimestamp > date).delete()
+        "deleted_rows": db.query(models.Notification).filter(models.Notification.createdTimestamp <= date).delete()
     }
     db.commit()
     return ret

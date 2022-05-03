@@ -121,7 +121,7 @@ async def unstake(req: UnstakeRequest):
                     CFG.stakeTokenID: (stakeStateBox["assets"][1]["amount"] if (partial) else stakeStateBox["assets"][1]["amount"]+1)
                 },
                 registers=[
-                    appKit.ergoValue([
+                    ErgoAppKit.ergoValue([
                         int(stakeStateR4[0]-amountToUnstake),
                         int(stakeStateR4[1]),
                         int(stakeStateR4[2] - (0 if (partial) else 1)),
@@ -181,7 +181,7 @@ async def unstake(req: UnstakeRequest):
 
             userInputs = [keyBox] + list(otherBoxes)
 
-            userInputs = appKit.cutOffExcessUTXOs(userInputs,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
+            userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
             
             inputs = appKit.getBoxesById([stakeStateBox["boxId"],req.stakeBox])
 
@@ -191,14 +191,14 @@ async def unstake(req: UnstakeRequest):
 
                 result = {
                     'penalty': (penalty/100),
-                    'unsignedTX': appKit.unsignedTxToJson(unsignedTx)
+                    'unsignedTX': ErgoAppKit.unsignedTxToJson(unsignedTx)
                 }
 
                 return result
 
             if req.txFormat == TXFormat.ERGO_PAY:
                 reducedTx = appKit.reducedTx(unsignedTx)
-                ergoPaySigningRequest = appKit.formErgoPaySigningRequest(
+                ergoPaySigningRequest = ErgoAppKit.formErgoPaySigningRequest(
                     reducedTx,
                     address=changeAddress
                 )
@@ -209,7 +209,7 @@ async def unstake(req: UnstakeRequest):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unexpected error unstaking, please try again shortly.')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
 @r.get("/snapshot/", name="staking:snapshot")
 def snapshot(
@@ -240,7 +240,7 @@ def snapshot(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to snapshot, try again shortly or contact support if error continues.')
 
 def validPenalty(startTime: int):
     currentTime = int(time()*1000)
@@ -312,7 +312,7 @@ async def staked(req: AddressList):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
 
 @r.get("/status/", name="staking:status")
 def stakingStatus():
@@ -342,7 +342,7 @@ def stakingStatus():
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[OutBox],totalReward: int,emissionBox, emissionR4):
     try:
@@ -355,7 +355,7 @@ def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[
         emissionOutput = appKit.buildOutBox(
             value=emissionBox["value"],
             tokens=emissionAssets,
-            registers=[appKit.ergoValue([
+            registers=[ErgoAppKit.ergoValue([
                 emissionR4[0],
                 emissionR4[1],
                 emissionR4[2]-len(stakeBoxes),
@@ -378,7 +378,7 @@ def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to compound, try again shortly or contact support if error continues.')
 
 @r.post("/compound/", name="staking:compound")
 async def compound(
@@ -421,8 +421,8 @@ async def compound(
                             CFG.stakedTokenID: box["assets"][1]["amount"] + stakeReward
                         },
                         registers=[
-                            appKit.ergoValue([boxR4[0]+1,boxR4[1]],ErgoValueT.LongArray),
-                            appKit.ergoValue(box["additionalRegisters"]["R5"]["renderedValue"],ErgoValueT.ByteArrayFromHex)
+                            ErgoAppKit.ergoValue([boxR4[0]+1,boxR4[1]],ErgoValueT.LongArray),
+                            ErgoAppKit.ergoValue(box["additionalRegisters"]["R5"]["renderedValue"],ErgoValueT.ByteArrayFromHex)
                         ],
                         contract=appKit.contractFromAddress(box["address"])
                     ))
@@ -437,7 +437,7 @@ async def compound(
                         signedTX = appKit.signTransactionWithNode(unsignedTx)
                         txId = appKit.sendTransaction(signedTX)
                         retriesLeft = 0
-                    except Exception:
+                    except Exception as e:
                         utx = unsignedTx or '[NOPE]'
                         retriesLeft -= 1
                         await asyncio.sleep(3)
@@ -462,7 +462,7 @@ async def compound(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to compound, try again shortly or contact support if error continues.')
 
 @r.post("/emit/", name="staking:emit")
 async def emit(
@@ -588,7 +588,7 @@ async def emit(
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to emit, try again shortly or contact support if error continues.')
 
 @r.post("/stake/", name="staking:stake")
 async def stake(req: StakeRequest):
@@ -601,8 +601,8 @@ async def stake(req: StakeRequest):
         stakeTree = appKit.compileErgoScript(
         script,
             {
-                "_stakeStateNFT": appKit.ergoValue(CFG.stakeStateNFT, ErgoValueT.ByteArrayFromHex).getValue(),
-                "_emissionNFT": appKit.ergoValue(CFG.emissionNFT, ErgoValueT.ByteArrayFromHex).getValue()    
+                "_stakeStateNFT": ErgoAppKit.ergoValue(CFG.stakeStateNFT, ErgoValueT.ByteArrayFromHex).getValue(),
+                "_emissionNFT": ErgoAppKit.ergoValue(CFG.emissionNFT, ErgoValueT.ByteArrayFromHex).getValue()    
             }
         )
 
@@ -617,7 +617,7 @@ async def stake(req: StakeRequest):
                 stakeStateBox["assets"][0]["tokenId"]: stakeStateBox["assets"][0]["amount"],
                 stakeStateBox["assets"][1]["tokenId"]: stakeStateBox["assets"][1]["amount"]-1
             },
-            registers=[appKit.ergoValue([int(r4[0])+tokenAmount,
+            registers=[ErgoAppKit.ergoValue([int(r4[0])+tokenAmount,
                         int(r4[1]),
                         int(r4[2])+1,
                         int(r4[3]),
@@ -632,10 +632,10 @@ async def stake(req: StakeRequest):
                 CFG.stakedTokenID: tokenAmount
             },
             registers=[
-                appKit.ergoValue([
+                ErgoAppKit.ergoValue([
                     int(r4[1]),
                     int(time()*1000)],ErgoValueT.LongArray),
-                appKit.ergoValue(stakeStateBox["boxId"],ErgoValueT.ByteArrayFromHex)
+                ErgoAppKit.ergoValue(stakeStateBox["boxId"],ErgoValueT.ByteArrayFromHex)
             ],
             contract=appKit.contractFromTree(stakeTree)
         )
@@ -672,11 +672,11 @@ async def stake(req: StakeRequest):
         )
 
         if req.txFormat == TXFormat.EIP_12:
-            return appKit.unsignedTxToJson(unsignedTx)
+            return ErgoAppKit.unsignedTxToJson(unsignedTx)
         
         if req.txFormat == TXFormat.ERGO_PAY:
             reducedTx = appKit.reducedTx(unsignedTx)
-            ergoPaySigningRequest = appKit.formErgoPaySigningRequest(
+            ergoPaySigningRequest = ErgoAppKit.formErgoPaySigningRequest(
                 reducedTx,
                 address=req.wallet
             )
@@ -685,7 +685,7 @@ async def stake(req: StakeRequest):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to stake, try again shortly or contact support if error continues.')
 
 # bootstrap staking setup
 @r.post("/bootstrap/", name="staking:bootstrap")
@@ -794,4 +794,4 @@ async def bootstrapStaking(req: BootstrapRequest):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
