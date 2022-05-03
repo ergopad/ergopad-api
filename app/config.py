@@ -104,8 +104,8 @@ Config = {
   }),
   'mainnet': dotdict({
     'node'              : os.getenv('ERGONODE_HOST'),
-    'explorer'          : 'http://ergonode:9090/api/v1',
-    'ergoPlatform'      : 'http://ergonode:9090/api/v1',
+    'explorer'          : 'http://172.31.8.85:9090/api/v1',
+    'ergoPlatform'      : 'http://172.31.8.85:9090/api/v1',
     'vestmentWalletAddress': '9gibNzudNny7MtB725qGM3Pqftho1SMpQJ2GYLYRDDAftMaC285',
     # 'assembler'         : 'http://ergonode:8080', # patch for alpha
     'ergopadNode'       : 'http://ergonode:9053',
