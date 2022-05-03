@@ -1,4 +1,5 @@
 from hashlib import blake2b
+import logging
 import pytest
 from config import Config, Network
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
@@ -945,6 +946,63 @@ class TestProxyNFTLockedVestingV2:
 
         with pytest.raises(InterpreterException):
             self.appKit.signTransaction(unsignedTx)
+
+    def test_vesting_remove_funds(self):
+        sellerInput = self.appKit.buildInputBox(
+            value=int(3e6),
+            tokens=None,
+            registers=None,
+            contract=self.appKit.dummyContract()
+        )
+
+        proxyVestingOutput = self.appKit.buildOutBox(
+            value=int(1e6),
+            tokens={self.proxyNFT: 1},
+            registers = [
+                ErgoAppKit.ergoValue([
+                    int(1000*60*60*24),     #redeemPeriod
+                    int(365),               #numberOfPeriods
+                    int(1648771200000),     #vestingStart
+                    int(1),                 #priceNum
+                    int(1000),                 #priceDenom
+                    int(0),
+                    int(100),
+                    int(0)
+                ],ErgoValueT.LongArray),
+                ErgoAppKit.ergoValue(self.vestedTokenId,ErgoValueT.ByteArrayFromHex),    #vestedTokenId
+                ErgoAppKit.ergoValue(self.sellerProp.bytes(),ErgoValueT.ByteArray),              #Seller address
+                ErgoAppKit.ergoValue(self.whitelistTokenId, ErgoValueT.ByteArrayFromHex) #Whitelist tokenid
+            ],
+            contract = self.appKit.contractFromTree(self.proxyNftLockedVestingTree)
+        )
+
+        sellerOutput = self.appKit.buildOutBox(
+            value=int(1e6),
+            tokens={self.vestedTokenId: 1000000},
+            registers=None,
+            contract=self.sellerAddress.toErgoContract()
+        )
+
+        unsignedTx = self.appKit.buildUnsignedTransaction(
+            inputs = [self.proxyVestingBox, sellerInput],
+            #dataInputs= [self.oracleBox],
+            outputs = [proxyVestingOutput,sellerOutput],
+            fee = int(1e6),
+            sendChangeTo = self.sellerAddress.toErgoContract().toAddress().getErgoAddress(),
+            preHeader = self.appKit.preHeader()
+        )
+
+        signed = False
+
+        try:
+            self.appKit.signTransaction(unsignedTx)
+            signed = True
+        except Exception as e:
+            print(f"Error: {e}")
+            signed = False
+    
+        assert signed
+
 
 class TestNFTLockedVesting:
 
