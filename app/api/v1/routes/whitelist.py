@@ -91,7 +91,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
     NOW = time()
     try:
         eventName = whitelist.event
-        logging.debug(DATABASE)
+        # logging.debug(DATABASE)
         con = create_engine(DATABASE)
         logging.debug('sql')
         sql = f"""
@@ -153,7 +153,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"Invalid SigUSD value.")
 
         # find wallet
-        logging.debug(f'connecting to: {CFG.connectionString}')
+        # logging.debug(f'connecting to: {CFG.connectionString}')
         con = create_engine(DATABASE)
         logging.debug('connected to database...')
         pd.options.mode.chained_assignment = None  # default='warn'

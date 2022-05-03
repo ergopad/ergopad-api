@@ -30,7 +30,7 @@ jobs:
 
       - name: Install Dependencies
         working-directory: .
-        run: pip3 install -r requirements.in
+        run: pip3 install -r app/requirements.txt
 
       - name: Run Unit Tests
         working-directory: app

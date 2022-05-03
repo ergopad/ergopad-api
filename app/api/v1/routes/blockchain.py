@@ -18,68 +18,9 @@ from pydantic import BaseModel
 from cache.cache import cache
 
 CFG = Config[Network]
+DEBUG = CFG.debug
 
 blockchain_router = r = APIRouter()
-
-#region BLOCKHEADER
-"""
-Blockchain API
----------
-Created: vikingphoenixconsulting@gmail.com
-On: 20211009
-Purpose: allow purchase/redeem tokens locked by ergopad scripts
-Contributor(s): https://github.com/Luivatra
-
-Notes:
-- /utils/ergoTreeToAddress/{ergoTreeHex} can convert from ergotree (in R4)
-
-** PREPARE FOR PROD
-!! figure out proper payment amounts to send !!
-
-Later
-- build route that tells someone how much they have locked
-?? log to database?
-.. common events
-.. purchase/token data
-- add route to show value assigned to wallet?
-- build route that tells someone how much they have locked
-- set vestingBegin_ms to proper timestamp (current setting is for testing)
-.. set the periods correctly (30 days apart?)
-
-Complete
-- restart with PROD; move CFG back to docker .env
-.. verify wallet address
-- disable /payment route (only for testing)
-.. set debug flag?
-- log to database?
-.. common events
-.. purchase/token data
-- add route to show value assigned to wallet?
-- /utils/ergoTreeToAddress/{ergoTreeHex} can convert from ergotree (in R4)
-- push changes
-.. remove keys
-.. merge to main
-- set vestingBegin_ms to proper timestamp (current setting is for testing)
-.. set the periods correctly (30 days apart?)
-"""
-#endregion BLOCKHEADER
-
-#region INIT
-DEBUG = CFG.debug
-DATABASE = CFG.connectionString
-EXPLORER = CFG.csExplorer
-STAKE_ADDRESS = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
-STAKE_KEY_ID = '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee'
-
-try:
-    headers            = {'Content-Type': 'application/json'}
-    tokenInfo          = requests.get(f'{CFG.explorer}/tokens/{CFG.ergopadTokenId}')
-    nodeWallet         = Wallet('9gibNzudNny7MtB725qGM3Pqftho1SMpQJ2GYLYRDDAftMaC285') # contains ergopad tokens (xerg10M)
-    buyerWallet        = Wallet('9iLSsvi2zobapQmi7tXVK4mnrbQwpK3oTfPcCpF9n7J2DQVpxq2') # simulate buyer / seed tokens
-
-except Exception as e:
-    logging.error(f'Init {e}')
-#endregion INIT
 
 #region LOGGING
 import logging
@@ -89,6 +30,22 @@ logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', st
 import inspect
 myself = lambda: inspect.stack()[1][3]
 #endregion LOGGING
+
+#region INIT
+DATABASE = CFG.connectionString
+EXPLORER = CFG.csExplorer
+STAKE_ADDRESS = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
+STAKE_KEY_ID = '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee'
+
+try:
+    headers            = {'Content-Type': 'application/json'}
+    tokenInfo          = requests.get(f'{CFG.explorer}/tokens/{CFG.ergopadTokenId}')
+
+    buyerWallet        = Wallet('9iLSsvi2zobapQmi7tXVK4mnrbQwpK3oTfPcCpF9n7J2DQVpxq2') # simulate buyer / seed tokens
+
+except Exception as e:
+    logging.error(f'Init {e}')
+#endregion INIT
 
 class TXFormat(str, Enum):
     EIP_12 = "eip-12"
@@ -130,7 +87,6 @@ async def getInfo():
         nodeInfo['ergopadTokenId'] = CFG.ergopadTokenId
         if DEBUG:
             nodeInfo['buyer'] = buyerWallet.address
-        nodeInfo['seller'] = nodeWallet.address
 
         # nodeInfo['vestingBegin_ms'] = f'{ctime(1643245200)} UTC'
         nodeInfo['sigUSD'] = await get_asset_current_price('sigusd')
@@ -665,7 +621,8 @@ def getBoxesWithUnspentTokens_beta(nErgAmount=-1, tokenId=CFG.ergopadTokenId, to
         foundNErgAmount = 0
         ergopadTokenBoxes = {}
 
-        res = requests.get(f'http://52.12.102.149:9053/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': '49eCcDzqLzL5Gams'}))
+        # res = requests.get(f'http://52.12.102.149:9053/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': '49eCcDzqLzL5Gams'}))
+        res = requests.get(f'{ergopadNode}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': '49eCcDzqLzL5Gams'}))
         if res.ok:
             assets = res.json()
             for ast in assets:
@@ -721,23 +678,6 @@ def getErgoscript(name, params={}):
 
         if name == 'neverTrue':
             script = "{ 1 == 0 }"
-
-        # params = {'buyerWallet': '3WwjaerfwDqYvFwvPRVJBJx2iUvCjD2jVpsL82Zho1aaV5R95jsG'}
-        if name == 'ergopad':
-            script = f"""{{
-                val buyer = PK("{params['buyerWallet']}").propBytes
-                val seller = PK("{params['nodeWallet']}").propBytes // ergopad.io
-                val isValid = {{
-                        //
-                        val voucher = OUTPUTS(0).R4[Long].getOrElse(0L)
-
-                        // voucher == voucher // && // TODO: match token
-                        buyer == INPUTS(0).propositionBytes
-                }}
-
-                sigmaProp(1==1)
-            }}"""
-
 
         if script is None:
             with open(f'contracts/{name}.es') as f:
