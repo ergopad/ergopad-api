@@ -86,7 +86,7 @@ def get_contribution_event_by_event_id(db: Session, event_id: int):
         )
 
 
-def get_contribution_events(db: Session, skip: int = 0, limit: int = 100):
+def get_contribution_events(db: Session, skip: int = 0, limit: int = 500):
     return db.query(contributionEvents.ContributionEvent).offset(skip).limit(limit).all()
 
 
