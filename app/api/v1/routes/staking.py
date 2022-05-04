@@ -19,7 +19,7 @@ from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
-from org.ergoplatform.appkit import Address, ErgoValue, OutBox
+from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
 
 staking_router = r = APIRouter()
 
@@ -62,6 +62,7 @@ class UnstakeRequest(BaseModel):
     address: str = ""
     utxos: List[str]
     txFormat: TXFormat
+    addresses: List[str]
 
 class AddressList(BaseModel):
     addresses: List[str]
@@ -75,6 +76,7 @@ class StakeRequest(BaseModel):
     amount: float
     utxos: List[str]
     txFormat: TXFormat
+    addresses: List[str]
 
 class BootstrapRequest(BaseModel):
     stakeStateNFT: str
@@ -162,10 +164,20 @@ async def unstake(req: UnstakeRequest):
             else:
                 changeAddress = req.address
 
+            userInputs = List[InputBox]
+            tokensToSpend = {stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1}
+
             if len(req.utxos) == 0:
-                userInputs = list(appKit.boxesToSpend(changeAddress,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1}))
+                if len(req.addresses) == 0:
+                    userInputs = appKit.boxesToSpend(req.address,int(2e7),tokensToSpend)
+                else:
+                    userInputs = appKit.boxesToSpendFromList(req.addresses,int(2e7),tokensToSpend)
             else:
                 userInputs = appKit.getBoxesById(req.utxos)
+                if not ErgoAppKit.boxesCovered(userInputs,int(2e7),tokensToSpend):
+                    userInputs = appKit.boxesToSpend(req.address,int(2e7),tokensToSpend)
+            if userInputs is None:
+                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
 
             keyBox = None
             otherBoxes = []
@@ -181,7 +193,7 @@ async def unstake(req: UnstakeRequest):
 
             userInputs = [keyBox] + list(otherBoxes)
 
-            userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
+            userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(2e7),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
             
             inputs = appKit.getBoxesById([stakeStateBox["boxId"],req.stakeBox])
 
@@ -639,10 +651,21 @@ async def stake(req: StakeRequest):
             ],
             contract=appKit.contractFromTree(stakeTree)
         )
+        userInputs = List[InputBox]
+        tokensToSpend = {CFG.stakedTokenID: tokenAmount}
+
         if len(req.utxos) == 0:
-            userInputs = list(appKit.boxesToSpend(req.wallet,int(28e7),{CFG.stakedTokenID: tokenAmount}))
+            if len(req.addresses) == 0:
+                userInputs = appKit.boxesToSpend(req.wallet,int(28e7),tokensToSpend)
+            else:
+                userInputs = appKit.boxesToSpendFromList(req.addresses,int(28e7),tokensToSpend)
         else:
             userInputs = appKit.getBoxesById(req.utxos)
+            if not ErgoAppKit.boxesCovered(userInputs,int(28e7),tokensToSpend):
+                userInputs = appKit.boxesToSpend(req.wallet,int(28e7),tokensToSpend)
+        if userInputs is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
+
 
         userOutput = appKit.mintToken(
             value=int(0.01*nergsPerErg),

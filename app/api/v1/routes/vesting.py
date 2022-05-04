@@ -637,10 +637,6 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 
         redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
         tokensToSpend = {vestingKey: 1}
-        if len(req.utxos) == 0:
-            userInputs = appKit.boxesToSpend(req.address,int(2e6),tokensToSpend)
-        else:
-            userInputs = appKit.getBoxesById(req.utxos)
 
         if len(req.utxos) == 0:
             if len(req.addresses) == 0:
@@ -991,7 +987,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
         priceDenom = roundParameters[4]
         vestedTokenInfo = getTokenInfo(vestedTokenId)
         oracleInfo = await ergusdoracle()
-        nErgPerUSD = oracleInfo["latest_datapoint"]
+        nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
         whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
@@ -1045,7 +1041,7 @@ async def contribute(req: VestFromProxyRequest):
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
         whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
         requiredSigUSDTokens = int(whitelistTokens*priceNum/priceDenom)
-        nergRequired = int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals)))
+        nergRequired = max(int((requiredSigUSDTokens-sigUsdTokens)*(nErgPerUSD*10**(-1*sigUsdDecimals))),int(0))
         userInputs = List[InputBox]
         tokensToSpend = {whitelistTokenId: whitelistTokens}
         if req.sigUSDAmount>0:
