@@ -637,10 +637,6 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 
         redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
         tokensToSpend = {vestingKey: 1}
-        if len(req.utxos) == 0:
-            userInputs = appKit.boxesToSpend(req.address,int(2e6),tokensToSpend)
-        else:
-            userInputs = appKit.getBoxesById(req.utxos)
 
         if len(req.utxos) == 0:
             if len(req.addresses) == 0:
