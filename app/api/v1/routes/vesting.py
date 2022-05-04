@@ -987,7 +987,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
         priceDenom = roundParameters[4]
         vestedTokenInfo = getTokenInfo(vestedTokenId)
         oracleInfo = await ergusdoracle()
-        nErgPerUSD = oracleInfo["latest_datapoint"]
+        nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
         whitelistTokens = int(req.vestingAmount*10**vestedTokenInfo["decimals"])
