@@ -62,6 +62,7 @@ class UnstakeRequest(BaseModel):
     address: str = ""
     utxos: List[str]
     txFormat: TXFormat
+    addresses: List[str]
 
 class AddressList(BaseModel):
     addresses: List[str]
@@ -163,10 +164,20 @@ async def unstake(req: UnstakeRequest):
             else:
                 changeAddress = req.address
 
+            userInputs = List[InputBox]
+            tokensToSpend = {stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1}
+
             if len(req.utxos) == 0:
-                userInputs = list(appKit.boxesToSpend(changeAddress,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1}))
+                if len(req.addresses) == 0:
+                    userInputs = appKit.boxesToSpend(req.address,int(2e7),tokensToSpend)
+                else:
+                    userInputs = appKit.boxesToSpendFromList(req.addresses,int(2e7),tokensToSpend)
             else:
                 userInputs = appKit.getBoxesById(req.utxos)
+                if not ErgoAppKit.boxesCovered(userInputs,int(2e7),tokensToSpend):
+                    userInputs = appKit.boxesToSpend(req.address,int(2e7),tokensToSpend)
+            if userInputs is None:
+                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
 
             keyBox = None
             otherBoxes = []
@@ -182,7 +193,7 @@ async def unstake(req: UnstakeRequest):
 
             userInputs = [keyBox] + list(otherBoxes)
 
-            userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(20000000),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
+            userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(2e7),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
             
             inputs = appKit.getBoxesById([stakeStateBox["boxId"],req.stakeBox])
 
