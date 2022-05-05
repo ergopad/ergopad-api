@@ -62,7 +62,7 @@ class UnstakeRequest(BaseModel):
     address: str = ""
     utxos: List[str]
     txFormat: TXFormat
-    addresses: List[str]
+    addresses: List[str] = []
 
 class AddressList(BaseModel):
     addresses: List[str]
@@ -76,7 +76,7 @@ class StakeRequest(BaseModel):
     amount: float
     utxos: List[str]
     txFormat: TXFormat
-    addresses: List[str]
+    addresses: List[str] = []
 
 class BootstrapRequest(BaseModel):
     stakeStateNFT: str
