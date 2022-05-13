@@ -222,6 +222,8 @@ async def get_asset_current_price(coin: str = None) -> None:
             ret = getErgodexTokenPrice(coin)
             if (ret["status"] == "success"):
                 price = ret["price"]
+            else:
+                logging.warning(f'invalid ergodex price: {ret}')
 
             # check local database storage for price
             if price == None:
@@ -235,25 +237,36 @@ async def get_asset_current_price(coin: str = None) -> None:
                         "ethereum": "ETH/USDT",
                         "eth": "ETH/USDT",
                     }
-                    sqlFindLatestPrice = f'select close from "{exchange}_{pairMapper[coin]}_1m" order by timestamp_utc desc limit 1'
+                    sqlFindLatestPrice = f'''
+                        select close 
+                        from "{exchange}_{pairMapper[coin]}_1m" 
+                        where timestamp_utc > (now() - INTERVAL '5 minutes')
+                        order by timestamp_utc 
+                        desc limit 1
+                    '''
                     res = con.execute(sqlFindLatestPrice)
                     price = res.fetchone()[0]
                 except:
+                    logging.warning(f'invalid price scraper price: {sqlFindLatestPrice}')
                     pass
 
             # if not in local database, ask for online value
             if price == None:
                 logging.warning('fallback to price from exchange')
-                res = requests.get(
-                    f'{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}')
                 try:
+                    res = requests.get(f'{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}')
                     price = res.json()[coin][currency]
                 except:
+                    logging.warning(f'invalid coingecko price: {res.text}')
                     pass
 
-        ret = {
-            "price": price
-        }
+        # make sure price is valid
+        if not str(price).replace('.', '').isnumeric():
+            logging.error(f'ERR:{myself()}: unable to find price ({e})')
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price ({e})')
+        
+        # all good
+        ret = {"price": price}
 
         # do not cache if the api call failed
         if price:
