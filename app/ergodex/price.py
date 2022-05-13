@@ -1,4 +1,5 @@
 import requests
+import logging
 from config import Config, Network  # api specific config
 from cache.cache import cache
 
@@ -20,8 +21,8 @@ POOL_SAMPLE = "1999030f0400040204020404040405feffffffffffffffff0105fefffffffffff
 EMISSION_LP = 9223372036854775807
 
 # ERGO DETAILS
-NATIVE_ASSET_ID = '0000000000000000000000000000000000000000000000000000000000000000'
-NATIVE_ASSET_TICKER = 'ERG'
+NATIVE_ASSET_ID = "0000000000000000000000000000000000000000000000000000000000000000"
+NATIVE_ASSET_TICKER = "ERG"
 NATIVE_ASSET_DECIMALS = 9
 NATIVE_ASSET_INFO = {
     "id": NATIVE_ASSET_ID,
@@ -48,11 +49,20 @@ class AssetAmount:
 
     @staticmethod
     def fromToken(token: dict):
-        return AssetAmount(Asset(token["tokenId"], token["name"], token["decimals"]), token["amount"])
+        return AssetAmount(
+            Asset(token["tokenId"], token["name"], token["decimals"]), token["amount"]
+        )
 
     @staticmethod
     def native(amount: int):
-        return AssetAmount(Asset(NATIVE_ASSET_INFO["id"], NATIVE_ASSET_INFO["name"], NATIVE_ASSET_INFO["decimals"]), amount)
+        return AssetAmount(
+            Asset(
+                NATIVE_ASSET_INFO["id"],
+                NATIVE_ASSET_INFO["name"],
+                NATIVE_ASSET_INFO["decimals"],
+            ),
+            amount,
+        )
 
 
 class Price:
@@ -89,9 +99,9 @@ class AmmPool:
     def getCalculatedPrice(self) -> dict:
         # return calculated price
         # tokens / erg
-        decimalX = 10 ** self.x.asset.decimals
-        decimalY = 10 ** self.y.asset.decimals
-        price = ((self.y.amount * decimalX) / (self.x.amount * decimalY))
+        decimalX = 10**self.x.asset.decimals
+        decimalY = 10**self.y.asset.decimals
+        price = (self.y.amount * decimalX) / (self.x.amount * decimalY)
         return {
             "assetXId": self.x.asset.id,
             "assetX": self.x.asset.name,
@@ -102,7 +112,7 @@ class AmmPool:
 
 
 def parseRegisterId(key):
-    if key in ('R4', 'R5', 'R6', 'R7', 'R8', 'R9'):
+    if key in ("R4", "R5", "R6", "R7", "R8", "R9"):
         return key
     return None
 
@@ -111,7 +121,7 @@ def explorerToErgoBox(box):
     registers = {}
     for key in box["additionalRegisters"]:
         regId = parseRegisterId(key)
-        if (regId):
+        if regId:
             registers[regId] = box["additionalRegisters"][key]["serializedValue"]
 
     return {
@@ -119,7 +129,7 @@ def explorerToErgoBox(box):
         "index": box["index"],
         "value": box["value"],
         "assets": box["assets"],
-        "additionalRegisters": registers
+        "additionalRegisters": registers,
     }
 
 
@@ -183,15 +193,17 @@ def getErgodexPoolBox():
     cached = cache.get(f"ergodex_pool_{POOL_SAMPLE}")
     if cached:
         return cached
-    res = requests.get(
-        f'{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/').json()
-    cache.set(f"ergodex_pool_{POOL_SAMPLE}", res)
+    res = {"items": []}
+    try:
+        res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
+        cache.set(f"ergodex_pool_{POOL_SAMPLE}", res)
+    except:
+        logging.error(f"ERR:getErgodexPoolBox: unable to find box")
+
     return res
 
 
 # MAIN EXPORTS
-
-
 def getErgodexTokenPrice(tokenName: str):
     tokenName = tokenName.lower()
     try:
@@ -207,15 +219,10 @@ def getErgodexTokenPrice(tokenName: str):
             "id": tokenId,
             "name": tokenName,
             "price": SigUSD_token,
-            "status": "success"
+            "status": "success",
         }
     except:
-        return {
-            "id": '0xdead',
-            "name": tokenName,
-            "price": 0.0,
-            "status": "error"
-        }
+        return {"id": "0xdead", "name": tokenName, "price": 0.0, "status": "error"}
 
 
 def getErgodexTokenPriceByTokenId(tokenId: str):
@@ -232,19 +239,14 @@ def getErgodexTokenPriceByTokenId(tokenId: str):
             "id": tokenId,
             "name": tokenName,
             "price": SigUSD_token,
-            "status": "success"
+            "status": "success",
         }
     except:
-        return {
-            "id": tokenId,
-            "name": '0xdead',
-            "price": 0.0,
-            "status": "error"
-        }
+        return {"id": tokenId, "name": "0xdead", "price": 0.0, "status": "error"}
 
 
 if __name__ == "__main__":
-    res = requests.get(f'{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/')
+    res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/")
     boxes = list(map(explorerToErgoBox, res.json()["items"]))
     pools = parseValidPools(boxes)
     for pool in pools:

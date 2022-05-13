@@ -254,7 +254,11 @@ async def get_asset_current_price(coin: str = None) -> None:
         ret = {
             "price": price
         }
-        cache.set(f"get_api_asset_price_{coin}", ret)
+
+        # do not cache if the api call failed
+        if price:
+            cache.set(f"get_api_asset_price_{coin}", ret)
+        
         return ret
 
     except Exception as e:
