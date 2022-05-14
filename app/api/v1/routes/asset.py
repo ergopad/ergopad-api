@@ -138,7 +138,6 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
 
 # Find price by token_id
 # Base currency is USD for all coins and tokens.
-#
 @r.get("/priceByTokenId/{tokenId}", name="coin:coin-price-by-token-id")
 async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
     try:
@@ -154,9 +153,16 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
             price = ret["price"]
 
         ret = {
+            "status": "unavailable",
+            "tokenId": tokenId,
             "price": price
         }
-        cache.set(f"get_api_asset_price_by_token_id_{tokenId}", ret)
+
+        # set cache only on success
+        if price:
+            ret["status"] = "ok"
+            cache.set(f"get_api_asset_price_by_token_id_{tokenId}", ret)
+        
         return ret
 
     except Exception as e:
@@ -169,7 +175,7 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
 # - Allow SigUSD/RSV ergo tokens to be listed as coins (TODO: change from ergo.watch api)
 # - Allow multiple coins per blockchain (TODO: change from CoinGecko api)
 @r.get("/price/{coin}", name="coin:coin-price")
-async def get_asset_current_price(coin: str = None) -> None:
+async def get_asset_current_price(coin: str = None):
     try:
         coin = coin.lower()
         # check cache
@@ -177,30 +183,30 @@ async def get_asset_current_price(coin: str = None) -> None:
         if cached:
             return cached
 
-        price = 0.0  # init/default
+        # init/default
+        price = None
 
         # SigUSD/SigRSV
-        if coin in ('sigusd', 'sigrsv'):
+        if coin in ("sigusd", "sigrsv"):
             res = requests.get(ergo_watch_api).json()
             if res:
-                if coin == 'sigusd':
+                if coin == "sigusd":
                     try:
                         # peg_rate_nano: current USD/ERG price [nanoERG]
                         # ERG/USD
                         ergo_price = (await get_asset_current_price("ergo"))["price"]
-                        price = (res['peg_rate_nano'] / nerg2erg) * \
-                            ergo_price  # SIGUSD
+                        price = (res["peg_rate_nano"] / nerg2erg) * ergo_price  # SIGUSD
                     except:
                         # if get_asset_current_price("ergo") fails
                         price = 1.0
                 else:
                     # calc for sigrsv
                     # circ_sigusd: circulating SigUSD tokens in cents
-                    circ_sigusd = res['circ_sigusd']/100.0
+                    circ_sigusd = res["circ_sigusd"] / 100.0
                     # peg_rate_nano: current USD/ERG price [nanoERG]
-                    peg_rate_nano = res['peg_rate_nano']
+                    peg_rate_nano = res["peg_rate_nano"]
                     # reserves: total amt in reserves [nanoERG]
-                    reserves = res['reserves']
+                    reserves = res["reserves"]
                     # liabilities in nanoERG's to cover stable coins in circulation
                     # lower of reserves or SigUSD * SigUSD_in_circulation
                     liabilities = min(circ_sigusd * peg_rate_nano, reserves)
@@ -208,26 +214,25 @@ async def get_asset_current_price(coin: str = None) -> None:
                     equity = reserves - liabilities
                     if equity < 0:
                         equity = 0
-                    if res['circ_sigrsv'] <= 1:
+                    if res["circ_sigrsv"] <= 1:
                         price = 0
                     else:
-                        price = (equity / res['circ_sigrsv']) / \
-                            peg_rate_nano  # SigRSV/USD
+                        price = (
+                            equity / res["circ_sigrsv"]
+                        ) / peg_rate_nano  # SigRSV/USD
         # ...all other prices
         else:
-            price = None
-
             # first check ergodex
-            logging.warning('find price from ergodex')
+            logging.warning("find price from ergodex")
             ret = getErgodexTokenPrice(coin)
-            if (ret["status"] == "success"):
+            if ret["status"] == "success":
                 price = ret["price"]
             else:
-                logging.warning(f'invalid ergodex price: {ret}')
+                logging.warning(f"invalid ergodex price: {ret}")
 
             # check local database storage for price
             if price == None:
-                logging.warning('find price from aggregator...')
+                logging.warning("find price from aggregator...")
                 try:
                     pairMapper = {
                         "ergo": "ERG/USDT",
@@ -237,46 +242,47 @@ async def get_asset_current_price(coin: str = None) -> None:
                         "ethereum": "ETH/USDT",
                         "eth": "ETH/USDT",
                     }
-                    sqlFindLatestPrice = f'''
+                    sqlFindLatestPrice = f"""
                         select close 
                         from "{exchange}_{pairMapper[coin]}_1m" 
                         where timestamp_utc > (now() - INTERVAL '5 minutes')
                         order by timestamp_utc 
                         desc limit 1
-                    '''
+                    """
                     res = con.execute(sqlFindLatestPrice)
                     price = res.fetchone()[0]
-                except:
-                    logging.warning(f'invalid price scraper price: {sqlFindLatestPrice}')
-                    pass
+                except Exception as e:
+                    logging.warning(
+                        f"invalid price scraper price: {str(e)}"
+                    )
 
             # if not in local database, ask for online value
             if price == None:
-                logging.warning('fallback to price from exchange')
+                logging.warning("fallback to price from exchange")
                 try:
-                    res = requests.get(f'{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}')
+                    res = requests.get(
+                        f"{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}"
+                    )
                     price = res.json()[coin][currency]
-                except:
-                    logging.warning(f'invalid coingecko price: {res.text}')
-                    pass
+                except Exception as e:
+                    logging.warning(f"invalid coingecko price: {str(e)}")
 
-        # make sure price is valid
-        if not str(price).replace('.', '').isnumeric():
-            logging.error(f'ERR:{myself()}: unable to find price ({e})')
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price ({e})')
-        
-        # all good
-        ret = {"price": price}
+        # return value
+        ret = {"status": "unavailable", "name": coin, "price": price}
 
         # do not cache if the api call failed
         if price:
+            ret["status"] = "ok"
             cache.set(f"get_api_asset_price_{coin}", ret)
-        
+
         return ret
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find price ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price ({e})')
+        logging.error(f"ERR:{myself()}: unable to find price ({e})")
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=f"ERR:{myself()}: unable to find price ({e})",
+        )
 
 
 # TokenListRequest
