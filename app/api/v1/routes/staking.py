@@ -24,7 +24,7 @@ from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
 from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaTestConfig
 
 stakingConfigs = {
-    'PaideiaTest': PaideiaTestConfig
+    'paideiatest': PaideiaTestConfig
 }
 
 staking_router = r = APIRouter()
