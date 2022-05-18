@@ -453,7 +453,7 @@ def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
 
 # GET unspent stake boxes
 # Note: Run with useExplorerApi = True in case local explorer service failure
-def getUnspentStakeBoxes(useExplorerApi=False):
+def getUnspentStakeBoxes(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS, useExplorerApi=False):
     if useExplorerApi:
         # slow, makes 10+ api calls each taking 1 to 1.5 seconds on average
         boxes = []
@@ -461,7 +461,7 @@ def getUnspentStakeBoxes(useExplorerApi=False):
         limit = 100
         done = False
         while not done:
-            res = getTokenBoxes(STAKE_KEY_ID, offset, limit)
+            res = getTokenBoxes(stakeTokenId, offset, limit)
             boxes.extend(res)
             offset += limit
             if len(res) < limit:
@@ -469,10 +469,10 @@ def getUnspentStakeBoxes(useExplorerApi=False):
         return boxes
     else:
         # fast, average response time around 3 seconds
-        return getUnspentStakeBoxesFromExplorerDB()
+        return getUnspentStakeBoxesFromExplorerDB(stakeTokenId, stakeAddress)
 
 # GET unspent boxes by token id direct from explorer db
-def getUnspentStakeBoxesFromExplorerDB():
+def getUnspentStakeBoxesFromExplorerDB(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS):
     try:
         con = create_engine(EXPLORER)
         sql = f"""
@@ -511,9 +511,9 @@ def getUnspentStakeBoxesFromExplorerDB():
                         and a.header_id = o.header_id
                     where
                         o.main_chain = true
-                        and o.address = {STAKE_ADDRESS!r} -- all stake boxes are for this address
+                        and o.address = {stakeAddress!r} -- all stake boxes are for this address
                         and i.box_id is null -- output with no input = unspent
-                        and a.token_id = {STAKE_KEY_ID!r} -- stake key token id
+                        and a.token_id = {stakeTokenId!r} -- stake key token id
                         and coalesce(a.value, 0) > 0
                 );
         """
