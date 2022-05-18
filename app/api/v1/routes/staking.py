@@ -21,6 +21,12 @@ from cache.staking import AsyncSnapshotEngine
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
 
+from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaTestConfig
+
+stakingConfigs = {
+    'paideiatest': PaideiaTestConfig
+}
+
 staking_router = r = APIRouter()
 
 #region INIT
@@ -818,3 +824,163 @@ async def bootstrapStaking(req: BootstrapRequest):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
+
+@r.post("/{project}/stake/", name="staking:stakev2")
+async def stakeV2(project: str, req: StakeRequest):
+    if project not in stakingConfigs:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+    config = stakingConfigs[project](appKit)
+    assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals))
+    userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
+    stakeProxyTx = CreateStakeProxyTransaction(userInputs,config,int(req.amount*10**config.stakedTokenDecimals),req.wallet)
+
+    if req.txFormat == TXFormat.EIP_12:
+        return stakeProxyTx.eip12
+        
+    if req.txFormat == TXFormat.ERGO_PAY:
+        cache.set(f'ergopay_signing_request_{stakeProxyTx.unsignedTx.getId()}',stakeProxyTx.ergoPaySigningRequest)
+        return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
+
+@r.post("/{project}/unstake/", name="staking:unstakev2")
+async def unstakev2(project: str, req: UnstakeRequest):
+    if project not in stakingConfigs:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+    config = stakingConfigs[project](appKit)
+    stakeInput = appKit.getBoxesById([req.stakeBox])[0]
+    assetsRequired = CreateUnstakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
+    userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
+    unstakeProxyTx = CreateUnstakeProxyTransaction(userInputs,stakeInput,config,req.amount*10**config.stakedTokenDecimals,req.address)
+
+    if req.txFormat == TXFormat.EIP_12:
+        return unstakeProxyTx.eip12
+        
+    if req.txFormat == TXFormat.ERGO_PAY:
+        cache.set(f'ergopay_signing_request_{unstakeProxyTx.unsignedTx.getId()}',unstakeProxyTx.ergoPaySigningRequest)
+        return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
+
+@r.post("/{project}/addstake/", name="staking:addstakev2")
+async def addstake(project: str, req: UnstakeRequest):
+    if project not in stakingConfigs:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+    config = stakingConfigs[project](appKit)
+    stakeInput = appKit.getBoxesById([req.stakeBox])[0]
+    assetsRequired = CreateAddStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
+    userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
+    addStakeProxyTx = CreateAddStakeProxyTransaction(userInputs,stakeInput,config,int(req.amount*10**config.stakedTokenDecimals),req.address)
+
+    if req.txFormat == TXFormat.EIP_12:
+        return addStakeProxyTx.eip12
+        
+    if req.txFormat == TXFormat.ERGO_PAY:
+        cache.set(f'ergopay_signing_request_{addStakeProxyTx.unsignedTx.getId()}',addStakeProxyTx.ergoPaySigningRequest)
+        return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
+
+@r.get("/{project}/status/", name="staking:statusv2")
+def stakingStatus(project: str):
+    try:
+        if project not in stakingConfigs:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+        # check cache
+        cached = cache.get(f"get_api_staking_status_{project}")
+        if cached:
+            return cached
+
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+        config = stakingConfigs[project](appKit)
+
+        stakeStateBox = getNFTBox(config.stakeStateNFT)
+        stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
+        stakePoolBox = getNFTBox(config.stakePoolNFT)
+        stakePoolR4 = eval(stakePoolBox["additionalRegisters"]["R4"]["renderedValue"])
+
+        totalStaked = stakeStateR4[0]
+        cycleEmission = stakePoolR4[0]
+        dailyEmission = cycleEmission*86400000/stakeStateR4[4]
+
+        apy = round(dailyEmission*36500/totalStaked,2)
+
+        ret = {
+            'Total amount staked': totalStaked/10**config.stakedTokenDecimals,
+            'Staking boxes': stakeStateR4[2],
+            'Cycle start': stakeStateR4[3],
+            'APY': apy
+        }
+
+        # cache and return
+        cache.set(f"get_api_staking_status_{project}", ret, timeout=300)
+        return ret
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
+
+@r.post("/{project}/staked/", name="staking:stakedv2")
+async def stakedv2(project: str, req: AddressList):
+    if project not in stakingConfigs:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+    CACHE_TTL = 600 # 10 mins
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+    config = stakingConfigs[project](appKit)
+    try:
+        stakeKeys = {}
+        for address in req.addresses:
+            # cache balance confirmed
+            ok = False
+            data = None
+            cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
+            if cached:
+                ok = True
+                data = cached
+            else:
+                res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                ok = res.ok
+                if ok:
+                    data = res.json()
+                    cache.set(f"get_staking_staked_addresses_{address}_balance_confirmed", data, CACHE_TTL)
+            if ok:
+                if 'tokens' in data:
+                    for token in data["tokens"]:
+                        if 'name' in token and 'tokenId' in token:
+                            if token["name"] is not None:
+                                if "Stake Key" in token["name"]:
+                                    stakeKeys[token["tokenId"]] = address
+            else:
+                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failure to fetch balance for {address}')
+        
+        totalStaked = 0
+        stakePerAddress = {}
+        
+        # getTokenBoxes from cache
+        checkBoxes = []
+        cached = cache.get(f"get_staking_staked_token_boxes_{config.stakeTokenId}")
+        if cached:
+            checkBoxes = cached
+        else:
+            checkBoxes = getUnspentStakeBoxes(config.stakeTokenId,config.stakeContract.contract.toAddress().toString(),True)
+            cache.set(f"get_staking_staked_token_boxes_{config.stakeTokenId}", checkBoxes, CACHE_TTL)
+        for box in checkBoxes:
+            if box["assets"][0]["tokenId"]==config.stakeTokenId:
+                if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
+                    if stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]] not in stakePerAddress:
+                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
+                    stakeBoxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
+                    cleanedBox = {
+                        'boxId': box["boxId"],
+                        'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
+                        'stakeAmount': round(box["assets"][1]["amount"]/10**config.stakedTokenDecimals,config.stakedTokenDecimals)
+                    }
+                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
+                    totalStaked += round(box["assets"][1]["amount"]/10**config.stakedTokenDecimals,config.stakedTokenDecimals)
+                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += round(box["assets"][1]["amount"]/10**config.stakedTokenDecimals,config.stakedTokenDecimals)
+
+        return {
+            'totalStaked': totalStaked,
+            'addresses': stakePerAddress
+        }
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')

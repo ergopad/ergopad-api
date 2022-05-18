@@ -144,7 +144,7 @@ pytz==2021.3
     #   pandas
 redis==3.5.3
     # via -r requirements.in
-requests==2.26.0
+requests==2.27.1
     # via -r requirements.in
 rfc3986[idna2008]==1.5.0
     # via httpx
@@ -196,4 +196,4 @@ websockets==8.1
     # via uvicorn
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
-git+https://github.com/ergo-pad/ergo-python-appkit.git@v0.0.7
+ergo-python-appkit==0.1.0
