@@ -83,7 +83,7 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
         # get balance from ergo explorer api
         logging.debug(f'find balance for [blockchain], address: {address}...')
         res = requests.get(
-            f'{CFG.ergoPlatform}/addresses/{address}/balance/total')
+            f'{CFG.explorer}/addresses/{address}/balance/total')
 
         # handle invalid address or other error
         wallet_assets = {}
@@ -233,6 +233,7 @@ async def get_asset_current_price(coin: str = None):
             # check local database storage for price
             if price == None:
                 logging.warning("find price from aggregator...")
+                sqlFindLatestPrice = ''
                 try:
                     pairMapper = {
                         "ergo": "ERG/USDT",

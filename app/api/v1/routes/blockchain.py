@@ -41,8 +41,6 @@ try:
     headers            = {'Content-Type': 'application/json'}
     tokenInfo          = requests.get(f'{CFG.explorer}/tokens/{CFG.ergopadTokenId}')
 
-    buyerWallet        = Wallet('9iLSsvi2zobapQmi7tXVK4mnrbQwpK3oTfPcCpF9n7J2DQVpxq2') # simulate buyer / seed tokens
-
 except Exception as e:
     logging.error(f'Init {e}')
 #endregion INIT
@@ -85,8 +83,6 @@ async def getInfo():
         # CAREFULL!!! XXX nodeInfo['apikey'] = CFG.ergopadApiKey XXX
         nodeInfo['network'] = Network
         nodeInfo['ergopadTokenId'] = CFG.ergopadTokenId
-        if DEBUG:
-            nodeInfo['buyer'] = buyerWallet.address
 
         # nodeInfo['vestingBegin_ms'] = f'{ctime(1643245200)} UTC'
         nodeInfo['sigUSD'] = await get_asset_current_price('sigusd')
@@ -254,7 +250,8 @@ def ergopadInCirculation():
         staked  = sqlTokenValue(address, token_id, con)
         logging.debug(f'ergopad staked: {staked}')
 
-        reserved = 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
+        # reserved amount moved to staking on 5/17/2022
+        reserved = 0 # 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
         ergopadInCirculation = supply - stakePool - vested - reserved - emitted
 
         # set cache
@@ -594,55 +591,6 @@ def getBoxesWithUnspentTokens(nErgAmount=-1, tokenId=CFG.ergopadTokenId, tokenAm
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find unspent tokens ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find unspent tokens ({e})')
-
-# find unspent boxes with tokens
-def getBoxesWithUnspentTokens_beta(nErgAmount=-1, tokenId=CFG.ergopadTokenId, tokenAmount=-1, allowMempool=True, emptyRegisters=False):
-    try:
-        foundTokenAmount = 0
-        foundNErgAmount = 0
-        ergopadTokenBoxes = {}
-
-        # res = requests.get(f'http://52.12.102.149:9053/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': '49eCcDzqLzL5Gams'}))
-        res = requests.get(f'{ergopadNode}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': '49eCcDzqLzL5Gams'}))
-        if res.ok:
-            assets = res.json()
-            for ast in assets:
-                if 'box' in ast:
-                    if not emptyRegisters or len(ast['box']['additionalRegisters']) == 0:
-
-                        # find enough boxes to handle nergs requested
-                        if foundNErgAmount < nErgAmount:
-                            foundNErgAmount += ast['box']['value']
-                            ergopadTokenBoxes[ast['box']['boxId']] = []
-
-                        # find enough boxes with tokens to handle request
-                        if ast['box']['assets'] != [] and (foundTokenAmount < tokenAmount or tokenAmount == -1):
-                            for tkn in ast['box']['assets']:
-                                if 'tokenId' in tkn and 'amount' in tkn:
-                                    #logging.info(tokenId)
-                                    if tkn['tokenId'] == tokenId:
-                                        foundTokenAmount += tkn['amount']
-                                        if ast['box']['boxId'] in ergopadTokenBoxes:
-                                            ergopadTokenBoxes[ast['box']['boxId']].append(tkn)
-                                        else:
-                                            ergopadTokenBoxes[ast['box']['boxId']] = [tkn]
-                                            foundNErgAmount += ast['box']['value']
-                                        # logging.debug(tkn)
-
-            logging.info(f'found {foundTokenAmount} ergopad tokens and {foundNErgAmount} nErg in wallet')
-
-        # invalid wallet, no unspent boxes, etc..
-        else:
-            logging.error('unable to find unspent boxes')
-
-        # return CFG.node
-        # return f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}, apikey={CFG.ergopadApiKey}'
-        return ergopadTokenBoxes
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: BETA/unable to find unspent tokens ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: BETA/unable to find unspent tokens ({e})')
-
 
 # ergoscripts
 @r.get("/script/{name}", name="blockchain:getErgoscript")
