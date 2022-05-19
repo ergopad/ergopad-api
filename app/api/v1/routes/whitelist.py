@@ -297,25 +297,25 @@ async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user
         logging.debug(DATABASE)
         con = create_engine(DATABASE)
         sql = f"""
-select
-    evt.name,
-    wal.address,
-    wal.email,
-    wal."socialHandle" as social_handle,
-    wal."socialPlatform" as social_platform,
-    allowance_sigusd,
-    eip."ipHash" as ip_hash,
-    wht.created_dtz
-from
-    whitelist wht
-    join wallets wal on wal.id = wht."walletId"
-    join "eventsIp" eip on eip."eventId" = wht."eventId"
-    join events evt on evt.id = eip."eventId"
-    and eip."walletId" = wal.id
-where
-    evt.name = {eventName!r}
-order by
-    wht.created_dtz;
+            select
+                evt.name,
+                wal.address,
+                wal.email,
+                wal."socialHandle" as social_handle,
+                wal."socialPlatform" as social_platform,
+                allowance_sigusd,
+                eip."ipHash" as ip_hash,
+                wht.created_dtz
+            from
+                whitelist wht
+                join wallets wal on wal.id = wht."walletId"
+                join "eventsIp" eip on eip."eventId" = wht."eventId"
+                join events evt on evt.id = eip."eventId"
+                and eip."walletId" = wal.id
+            where
+                evt.name = {eventName!r}
+            order by
+                wht.created_dtz;
         """
         res = con.execute(sql).fetchall()
         logging.debug(res)
