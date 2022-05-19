@@ -17,7 +17,7 @@ from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
 from ergo.util import encodeLong, encodeString
 import uuid
-from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getBoxesWithUnspentTokens_beta, getUnspentBoxesByTokenId
+from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
 
