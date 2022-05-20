@@ -14,6 +14,9 @@ from ergo.util import encodeLongArray, encodeString, hexstringToB64
 from hashlib import blake2b
 from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
 from hashlib import blake2b
+from db.session import get_db
+from db.crud.staking_config import get_all_staking_config, get_staking_config_by_name, create_staking_config, edit_staking_config, delete_staking_config
+from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
 from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
@@ -1020,3 +1023,92 @@ async def stakedv2(project: str, req: AddressList):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
+
+
+########################################
+########## STAKING CONFIG CMS ##########
+########################################
+
+@r.get("/config", response_model_exclude_none=True, name="staking-cms:all-config")
+async def staking_config_list_cms(
+    db=Depends(get_db),
+):
+    """
+    Get all config
+    """
+    try:
+        return get_all_staking_config(db)
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
+        )
+
+
+@r.get("/config/{project}", response_model_exclude_none=True, name="staking-cms:config")
+async def staking_config_cms(
+    project: str,
+    db=Depends(get_db),
+):
+    """
+    Get config
+    """
+    try:
+        return get_staking_config_by_name(db, project)
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
+        )
+
+
+@r.post("/config", response_model_exclude_none=True, name="staking-cms:create-config")
+async def staking_config_create_cms(
+    staking_config: CreateAndUpdateStakingConfig,
+    db=Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Create a new staking config
+    """
+    try:
+        return create_staking_config(db, staking_config)
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
+        )
+
+
+@r.put("/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config")
+async def staking_config_edit_cms(
+    id: int,
+    staking_config: CreateAndUpdateStakingConfig,
+    db=Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Update existing config
+    """
+    try:
+        return edit_staking_config(db, id, staking_config)
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
+        )
+
+
+@r.delete(
+    "/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config"
+)
+async def staking_config_delete_cms(
+    id: int,
+    db=Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Delete config
+    """
+    try:
+        return delete_staking_config(db, id)
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
+        )

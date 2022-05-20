@@ -38,7 +38,6 @@ def get_all_staking_config(db: Session, skip: int = 0, limit: int = 100):
 def create_staking_config(
     db: Session, staking_config: schema.CreateAndUpdateStakingConfig
 ):
-    # insert event
     db_staking_config = model.StakingConfig(
         project=staking_config.project,
         title=staking_config.title,
