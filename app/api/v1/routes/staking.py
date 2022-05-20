@@ -864,7 +864,7 @@ async def bootstrapStaking(req: BootstrapRequest):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
 
-@r.post("/{project}/stake/", name="staking:stakev2")
+@r.post("/{project}/stake/", name="staking:stake-v2")
 async def stakeV2(project: str, req: StakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -881,7 +881,7 @@ async def stakeV2(project: str, req: StakeRequest):
         cache.set(f'ergopay_signing_request_{stakeProxyTx.unsignedTx.getId()}',stakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
 
-@r.post("/{project}/unstake/", name="staking:unstakev2")
+@r.post("/{project}/unstake/", name="staking:unstake-v2")
 async def unstakev2(project: str, req: UnstakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -899,7 +899,7 @@ async def unstakev2(project: str, req: UnstakeRequest):
         cache.set(f'ergopay_signing_request_{unstakeProxyTx.unsignedTx.getId()}',unstakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
 
-@r.post("/{project}/addstake/", name="staking:addstakev2")
+@r.post("/{project}/addstake/", name="staking:addstake-v2")
 async def addstake(project: str, req: UnstakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -917,7 +917,7 @@ async def addstake(project: str, req: UnstakeRequest):
         cache.set(f'ergopay_signing_request_{addStakeProxyTx.unsignedTx.getId()}',addStakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
 
-@r.get("/{project}/status/", name="staking:statusv2")
+@r.get("/{project}/status/", name="staking:status-v2")
 def stakingStatus(project: str):
     try:
         if project not in stakingConfigs:
@@ -956,7 +956,7 @@ def stakingStatus(project: str):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
-@r.post("/{project}/staked/", name="staking:stakedv2")
+@r.post("/{project}/staked/", name="staking:staked-v2")
 async def stakedv2(project: str, req: AddressList):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
