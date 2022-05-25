@@ -6,6 +6,7 @@ class CreateAndUpdateStakingConfig(BaseModel):
     project: str
     title: str
     tokenId: str
+    tokenDecimals: int
     stakingInfo: t.Optional[str]
     terms: t.Optional[str]
     # others
