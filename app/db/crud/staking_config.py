@@ -42,6 +42,7 @@ def create_staking_config(
         project=staking_config.project,
         title=staking_config.title,
         tokenId=staking_config.tokenId,
+        tokenDecimals=staking_config.tokenDecimals,
         stakingInfo=staking_config.stakingInfo,
         terms=staking_config.terms,
         additionalDetails=staking_config.additionalDetails,
