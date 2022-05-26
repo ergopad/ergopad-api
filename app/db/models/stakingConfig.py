@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Float, Integer, String, JSON
+from sqlalchemy import Column, Integer, String, JSON
 
 from db.session import Base
 
@@ -12,6 +12,7 @@ class StakingConfig(Base):
     project = Column(String)
     title = Column(String)
     tokenId = Column(String)
+    tokenDecimals = Column(Integer)
     stakingInfo = Column(String)
     terms = Column(String)
     additionalDetails = Column(JSON)
