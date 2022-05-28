@@ -5,7 +5,6 @@ from xmlrpc.client import Boolean
 import requests, json
 from core.auth import get_current_active_superuser
 from ergo_python_appkit.appkit import ErgoAppKit
-from wallet import Wallet
 
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
@@ -54,6 +53,8 @@ class TXFormat(str, Enum):
 # current node info (and more)
 @r.get("/info", name="blockchain:info")
 async def getInfo():
+    logging.error('BLOCKCHAIN')
+
     try:
         st = time() # stopwatch
         nodeInfo = {}
@@ -69,15 +70,6 @@ async def getInfo():
             if 'currentTime' in i: nodeInfo['currentTime_ms'] = i['currentTime']
         else:
             nodeInfo['ergonode'] = 'error'
-
-        # assembler
-        res = requests.get(f'{CFG.assembler}/state', headers=headers, timeout=2)
-        if res.ok:
-            nodeInfo['assemblerIsFunctioning'] = res.json()['functioning']
-            nodeInfo['assemblerStatus'] = 'ok'
-        else:
-            nodeInfo['assemblerIsFunctioning'] = 'invalid'
-            nodeInfo['assemblerStatus'] = 'error'
 
         # wallet and token
         # CAREFULL!!! XXX nodeInfo['apikey'] = CFG.ergopadApiKey XXX

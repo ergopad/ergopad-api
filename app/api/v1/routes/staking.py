@@ -20,6 +20,7 @@ from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
 from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
+from logger import logger
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
@@ -295,6 +296,7 @@ async def staked(req: AddressList):
     try:
         stakeKeys = {}
         for address in req.addresses:
+            logger.warning(f'ADDRESS: {address}')
             # cache balance confirmed
             ok = False
             data = None
@@ -352,7 +354,7 @@ async def staked(req: AddressList):
         }
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
 
 @r.get("/status/", name="staking:status")

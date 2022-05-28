@@ -1,10 +1,7 @@
-import inspect
 import logging
-import pandas as pd
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
 from fastapi import APIRouter, Depends, status, Request
-from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from time import time
 from datetime import datetime as dt
@@ -15,23 +12,12 @@ from db.schemas.whitelistEvents import CreateWhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
+from logger import logger, myself
+# from api.utils.db import get_session, execute
 
 CFG = Config[Network]
 
 whitelist_router = r = APIRouter()
-
-# region BLOCKHEADER
-"""
-Whitelist API
----------
-Created: vikingphoenixconsulting@gmail.com
-On: 20220111
-Purpose: allow wallets to be whitelisted
-Contributor(s): https://github.com/Luivatra
-
-Notes:
-"""
-# endregion BLOCKHEADER
 
 # region INIT
 DEBUG = CFG.debug
@@ -40,15 +26,6 @@ DATEFORMAT = '%m/%d/%Y %H:%M:%S.%f'
 headers = {'Content-Type': 'application/json'}
 # NOW = int(time()) # !! NOTE: can't use here; will only update once if being imported
 # endregion INIT
-
-# region LOGGING
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(
-    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-
-def myself(): return inspect.stack()[1][3]
-# endregion LOGGING
 
 # region CLASSES
 
@@ -83,18 +60,14 @@ async def go(request: Request):
         'hash': get_md5_hash(request.client.host)
     }
 
-# TODO: update /signup route
-# 1. Switch from pd.Dataframe().to_sql
-# 2. rewrite logic for max sigusd allowance
 @r.post("/signup", name="whitelist:signup")
 async def whitelistSignUp(whitelist: Whitelist, request: Request):
-    NOW = time()
     try:
+        NOW = time()
+        db = request.app.state.dbErgopad
         eventName = whitelist.event
-        # logging.debug(DATABASE)
-        con = create_engine(DATABASE)
-        logging.debug('sql')
-        sql = f"""
+
+        sqlFindEvent = f"""
             with wht as (
                 select "eventId"
                     , coalesce(sum("allowance_sigusd"), 0.0) as allowance_sigusd
@@ -118,30 +91,34 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             where evt.name = {eventName!r}
                 and evt."isWhitelist" = 1
         """
-        # logging.debug(sql)
-        res = con.execute(sql).fetchone()
-        # logging.debug(f'res: {res}')
+        resFindEvent = await db.fetch(sqlFindEvent)
+        # logging.warning(sqlFindEvent)
 
         # event not found
-        if res == None or len(res) == 0:
+        res = resFindEvent[0]
+        if resFindEvent == None or len(res) == 0:
+            logger.warning(f'whitelist event, {eventName} not found.')
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'whitelist event, {eventName} not found.')
 
         # is valid signup window?
         if (int(NOW) < int(res['start_dtz'].timestamp())) or (int(NOW) > int(res['end_dtz'].timestamp())):
+            logger.warning(f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}.")
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}.")
 
         # is funding complete?
         if res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']):
+            logger.warning(f"whitelist funds complete.")
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist funds complete.")
 
         eventId = res['id']
         # special checks
         validation = await checkEventConstraints(eventId, whitelist)
         if not validation[0]:
+            logger.warning(f"whitelist signup failed. {validation[1]}")
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup failed. {validation[1]}")
 
-        logging.debug(
-            f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
+        # calculate funding
+        logging.debug(f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
 
         whitelist.sigValue = int(whitelist.sigValue)
         # does individual cap exceed?
@@ -152,74 +129,88 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         if whitelist.sigValue <= 0:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"Invalid SigUSD value.")
 
-        # find wallet
-        # logging.debug(f'connecting to: {CFG.connectionString}')
-        con = create_engine(DATABASE)
-        logging.debug('connected to database...')
-        pd.options.mode.chained_assignment = None  # default='warn'
-        df = pd.DataFrame(jsonable_encoder(whitelist), index=[0])
-        logging.debug(f'dataframe: {df}')
+        # continue with signup
         sqlFindWallet = f"select id from wallets where address = {whitelist.ergoAddress!r}"
-        logging.debug(sqlFindWallet)
-        res = con.execute(sqlFindWallet)
+        resFindWallet = await db.fetch(sqlFindWallet)
+        logger.debug(f'find wallet: {resFindWallet}')
 
-        # create wallet if it doesn't exist
-        if res.rowcount == 0:
-            dfWallet = df[['ergoAddress', 'email']]
-            dfWallet['network'] = Network
-            dfWallet['lastSeen_dtz'] = dt.fromtimestamp(
-                NOW).strftime(DATEFORMAT)
-            dfWallet['created_dtz'] = dt.fromtimestamp(
-                NOW).strftime(DATEFORMAT)
-            dfWallet = dfWallet.rename(columns={'ergoAddress': 'address'})
-            logging.debug(f'save wallet: {dfWallet}')
-            dfWallet.to_sql('wallets', con=con,
-                            if_exists='append', index=False)
+        # does wallet exist, or do we need to create it?
+        if len(resFindWallet) == 0:
+            sql = f'''
+                insert into wallets(address, email, "blockChainId", network, "walletPass", mneumonic, "socialHandle", "socialPlatform", "chatHandle", "chatPlatform", created_dtz, "lastSeen_dtz", "twitterHandle", "discordHandle", "telegramHandle")
+	            values (
+                    {whitelist.ergoAddress!r} -- address
+                    , null -- email
+                    , null -- blockChainId
+                    , {Network!r} -- network
+                    , null, null -- walletPass, mneumonic
+                    , null, null -- socials                    
+                    , null, null -- chat                    
+                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- created_dtz
+                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- lastSeen_dtz
+                    , null, null, null -- twitter, discord, telegram
+                );
+            '''
+            res = await db.fetch(sql)
+            resFindWallet = await db.fetch(sqlFindWallet)
+            logger.debug(f'find wallet: {resFindWallet}')
 
-        # check this wallet has not already registered for this event
-        res = con.execute(sqlFindWallet).fetchone()
-        walletId = res['id']
-        sqlAlreadyWhitelisted = f'select id from "whitelist" where "walletId" = {walletId!r} and "eventId" = {eventId!r}'
-        res = con.execute(sqlAlreadyWhitelisted)
-        if res.rowcount == 0:
-            # add whitelist entry
-            # TODO: clean up logic
-            logging.debug(f'found id: {walletId}')
-            dfWhitelist = df[['sigValue']]
-            dfWhitelist['walletId'] = walletId
-            dfWhitelist['eventId'] = eventId
-            dfWhitelist['isWhitelist'] = 1
-            dfWhitelist['created_dtz'] = dt.fromtimestamp(
-                NOW).strftime(DATEFORMAT)
-            dfWhitelist = dfWhitelist.rename(
-                columns={'sigValue': 'allowance_sigusd'})
-            # dfWhitelist['allowance_sigusd'] = 20000
-            dfWhitelist.to_sql('whitelist', con=con,
-                               if_exists='append', index=False)
-
-            # log ip hash for analytics and backend filtering
-            # secure bcrypt one way hash
-            ipHash = get_md5_hash(request.client.host)
-            dfEventsIp = pd.DataFrame({
-                "walletId": [walletId],
-                "eventId": [eventId],
-                "ipHash": [ipHash]
-            })
-            logging.debug(f'save ipHash: {dfEventsIp}')
-            dfEventsIp.to_sql('eventsIp', con=con,
-                              if_exists='append', index=False)
-
-            # whitelist success
-            return {'status': 'success', 'detail': f'added to whitelist: {whitelist.sigValue} SigUSD.'}
+        # found or created, get wallet address
+        walletId = resFindWallet[0]['id']
+        logger.warning(f'WALLET_ID: {walletId}')
 
         # already whitelisted
+        sqlCheckSignup = f'''
+            select id 
+            from "whitelist" 
+            where "walletId" = {walletId!r} 
+                and "eventId" = {eventId!r}
+        '''
+        # logger.warning(f'check signup: {sqlCheckSignup}')
+        resCheckSignup = await db.fetch(sqlCheckSignup)
+        logger.debug(f'check signup: {resCheckSignup}')
+
+        # already signed up?
+        if len(resCheckSignup) == 0:
+            sqlSignup = f'''
+                insert into whitelist("walletId", "eventId", created_dtz, allowance_sigusd, spent_sigusd, "isAvailable", "lastAssemblerId", "lastAssemblerStatus", "isWhitelist")
+	            values (
+                    {walletId!r} -- walletId
+                    , {eventId!r} -- eventId
+                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- created_dtz
+                    , {whitelist.sigValue!r} -- allowance_sigusd
+                    , 0 -- spent_sigusd
+                    , 1 -- isAvailable
+                    , null, null -- lastAssemblerId, lastAssemblerStatus
+                    , 1 -- isWhitelist
+                );
+            '''
+            resSignup = await db.fetch(sqlSignup)
+            logger.debug(f'signup: {resSignup}')
+
+            # use obfuscated identifier to prevent bots
+            ipHash = get_md5_hash(request.client.host)
+            sqlIpHash = f'''
+                insert into "eventsIp" ("walletId", "eventId", "ipHash")
+                values (
+                    {walletId} -- walletId
+                    , {eventId} -- eventId
+                    , {ipHash!r} -- ipHash
+                )
+            '''
+            # logger.warning(f'ip hash: {sqlIpHash}')
+            resIpHash = await db.fetch(sqlIpHash)
+            logger.debug(f'ip hash: {resIpHash}')
+
+            return {'status': 'success', 'detail': f'added to whitelist: {whitelist.sigValue} SigUSD.'}
+
+        # already signed up
         else:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'wallet already signed up for this event')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: {e}')
+        logger.error(f'ERR:{myself()}: {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
-
 
 async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db())):
     whitelistEvent = get_whitelist_event_by_event_id(db, eventId)
@@ -238,58 +229,6 @@ async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_
         except:
             return (False, "Explorer API failed. Could not validate if enough ergopad is staked.")
     return (True, "ok")
-
-
-@r.get("/info/{eventName}", name="whitelist:info [DEPRECATED]")
-async def whitelistInfo(eventName):
-    NOW = int(time())
-    try:
-        logging.debug(DATABASE)
-        con = create_engine(DATABASE)
-        sql = f"""
-            with wht as (
-                select "eventId"
-                    , coalesce(sum("allowance_sigusd"), 0.0) as allowance_sigusd
-                    , coalesce(sum("spent_sigusd"), 0.0) as spent_sigusd
-                from whitelist
-                group by "eventId"
-            )
-            select 
-                name
-                , description
-                , total_sigusd
-                , buffer_sigusd
-                , start_dtz
-                , end_dtz
-                , coalesce(allowance_sigusd, 0.0) as allowance_sigusd
-                , coalesce(spent_sigusd, 0.0) as spent_sigusd
-            from "events" evt
-                left join wht on wht."eventId" = evt.id
-            where evt.name = {eventName!r}
-        """
-        res = con.execute(sql).fetchone()
-        logging.debug(res)
-        return {
-            'status': 'success',
-            'now': NOW,
-            'isBeforeSignup': NOW < int(res['start_dtz'].timestamp()),
-            'isAfterSignup': NOW > int(res['end_dtz'].timestamp()),
-            'isFundingComplete': res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']),
-            'name': res['name'],
-            'description': res['description'],
-            'total_sigusd': res['total_sigusd'],
-            'buffer_sigusd': res['buffer_sigusd'],
-            'start_dtz': int(res['start_dtz'].timestamp()),
-            'end_dtz': int(res['end_dtz'].timestamp()),
-            'allowance_sigusd': int(res['allowance_sigusd']),
-            'spent_sigusd': int(res['spent_sigusd']),
-            'gmt': NOW
-        }
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
-
 
 @r.get("/summary/{eventName}", name="whitelist:summary")
 async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
@@ -327,7 +266,6 @@ async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
 
-
 @r.get(
     "/events",
     response_model_exclude_none=True,
@@ -343,7 +281,6 @@ async def whitelist_event_list(
         return get_whitelist_events(db)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
-
 
 @r.get(
     "/events/{projectName}/{roundName}",
@@ -361,7 +298,6 @@ async def whitelist_event(projectName: str, roundName: str,
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
-
 @r.post("/events", response_model_exclude_none=True, name="whitelist:create-event")
 async def whitelist_event_create(
     whitelist_event: CreateWhitelistEvent,
@@ -378,7 +314,9 @@ async def whitelist_event_create(
 
 
 @r.put(
-    "/events/{id}", response_model_exclude_none=True, name="whitelist:edit-event"
+    "/events/{id}", 
+    response_model_exclude_none=True, 
+    name="whitelist:edit-event"
 )
 async def whitelist_event_edit(
     id: int,
@@ -395,7 +333,9 @@ async def whitelist_event_edit(
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 @r.delete(
-    "/events/{id}", response_model_exclude_none=True, name="whitelist:delete-event"
+    "/events/{id}", 
+    response_model_exclude_none=True, 
+    name="whitelist:delete-event"
 )
 async def whitelist_event_delete(
     id: int,
@@ -409,9 +349,4 @@ async def whitelist_event_delete(
         return delete_whitelist_event(db, id)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
-
 # endregion ROUTES
-
-# MAIN
-if __name__ == '__main__':
-    print('API routes: ...')
