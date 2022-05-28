@@ -199,3 +199,4 @@ websockets==8.1
 ergo-python-appkit==0.1.0
 paideia-contracts==0.0.5
 sqlmodel
+colorlog
