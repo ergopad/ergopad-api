@@ -1,14 +1,17 @@
 import uvicorn
 import time, os
 
-from logger import logger, myself
 from db.session import get_db
-from sqlmodel import Session
 
 from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from api.utils.db import execute, init_db_sqlalchemy, get_session, Database
+
+from api.utils.logger import logger, myself
+# from api.utils.db import execute, init_db_sqlalchemy, get_session, engine
+from api.utils.db import init_db, get_session, fetch, engine
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import text
 
 from api.v1.routes.users         import users_router
 from api.v1.routes.auth          import auth_router
@@ -39,8 +42,6 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api"
 )
-
-dbErgopad = Database()
 
 #region Routers
 app.include_router(users_router,        prefix="/api/users",         tags=["users"], dependencies=[Depends(get_current_active_user)])
@@ -87,21 +88,21 @@ app.add_middleware(
 async def add_logging_and_process_time(req: Request, call_next):
     try:
         beg = time.time()
-        res = await call_next(req)
+        resNext = await call_next(req)
         tot = str(round((time.time() - beg) * 1000))
-        res.headers["X-Process-Time-MS"] = tot
+        resNext.headers["X-Process-Time-MS"] = tot
         logger.debug(f"""{req.url} | host: {req.client.host}:{req.client.port} | pid {os.getpid()} | {tot}ms""".strip())
         logger.info(f"""{req.url}: {tot}ms""".strip())
 
         # create table api_audit (id serial primary key, request text, host text, port int, application varchar(20), response_time__ms int);
         if AUDIT_REQUESTS:
-            sql = f'''
+            sqlAudit = f'''
                 insert into api_audit (request, host, port, application, response_time__ms)
                 values ({str(req.url)!r}, {req.client.host!r}, {req.client.port}, 'ergopad', {tot}); 
-            '''
-            resAudit = await req.app.state.dbErgopad.fetch(sql)
+            '''            
+            resAudit = await fetch(sqlAudit)
 
-        return res
+        return resNext
 
     except Exception as e:
         logger.error(f'ERR:{myself()}: {e}')
@@ -109,12 +110,10 @@ async def add_logging_and_process_time(req: Request, call_next):
 
 @app.on_event('startup')
 async def startup():
-    await dbErgopad.connect()
-    app.state.dbErgopad = dbErgopad
-    # init_db_sqlalchemy()
+    await init_db()
 
 @app.get('/debug/dbinfo')
-def get_db_data_example(db = Depends(get_db)): # db: Session = Depends(get_session)):
+async def getDbInfo():
     if not DEBUG:
         return jsonable_encoder({'status': 'invalid', 'message': 'debug'})
     try:
@@ -124,9 +123,9 @@ def get_db_data_example(db = Depends(get_db)): # db: Session = Depends(get_sessi
                 , setting                  as server_port
                 , current_timestamp :: timestamp
             from pg_settings 
-            where name = 'port'; 
+            where name = :name;
         '''
-        res = execute(db, sql).all()
+        res = await fetch(sql, {'name': 'port'})
         return jsonable_encoder(res)
 
     except Exception as e:

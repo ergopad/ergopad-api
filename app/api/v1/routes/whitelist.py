@@ -12,8 +12,8 @@ from db.schemas.whitelistEvents import CreateWhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
-from logger import logger, myself
-# from api.utils.db import get_session, execute
+from api.utils.logger import logger, myself
+from api.utils.db import fetch
 
 CFG = Config[Network]
 
@@ -64,7 +64,7 @@ async def go(request: Request):
 async def whitelistSignUp(whitelist: Whitelist, request: Request):
     try:
         NOW = time()
-        db = request.app.state.dbErgopad
+        # db = request.app.state.dbErgopad
         eventName = whitelist.event
 
         sqlFindEvent = f"""
@@ -88,10 +88,10 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 , coalesce(spent_sigusd, 0.0) as spent_sigusd
             from "events" evt
                 left join wht on wht."eventId" = evt.id
-            where evt.name = {eventName!r}
+            where evt.name = :eventName
                 and evt."isWhitelist" = 1
         """
-        resFindEvent = await db.fetch(sqlFindEvent)
+        resFindEvent = await fetch(sqlFindEvent, {'eventName': eventName})
         # logging.warning(sqlFindEvent)
 
         # event not found
@@ -130,8 +130,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"Invalid SigUSD value.")
 
         # continue with signup
-        sqlFindWallet = f"select id from wallets where address = {whitelist.ergoAddress!r}"
-        resFindWallet = await db.fetch(sqlFindWallet)
+        sqlFindWallet = f"select id from wallets where address = :address"
+        resFindWallet = await fetch(sqlFindWallet, {'address': whitelist.ergoAddress})
         logger.debug(f'find wallet: {resFindWallet}')
 
         # does wallet exist, or do we need to create it?
@@ -142,7 +142,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                     {whitelist.ergoAddress!r} -- address
                     , null -- email
                     , null -- blockChainId
-                    , {Network!r} -- network
+                    , :network -- network
                     , null, null -- walletPass, mneumonic
                     , null, null -- socials                    
                     , null, null -- chat                    
@@ -151,8 +151,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , null, null, null -- twitter, discord, telegram
                 );
             '''
-            res = await db.fetch(sql)
-            resFindWallet = await db.fetch(sqlFindWallet)
+            res = await fetch(sql)
+            resFindWallet = await fetch(sqlFindWallet, {'network': Network})
             logger.debug(f'find wallet: {resFindWallet}')
 
         # found or created, get wallet address
@@ -163,11 +163,11 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         sqlCheckSignup = f'''
             select id 
             from "whitelist" 
-            where "walletId" = {walletId!r} 
-                and "eventId" = {eventId!r}
+            where "walletId" = :walletId 
+                and "eventId" = :eventId
         '''
         # logger.warning(f'check signup: {sqlCheckSignup}')
-        resCheckSignup = await db.fetch(sqlCheckSignup)
+        resCheckSignup = await fetch(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId})
         logger.debug(f'check signup: {resCheckSignup}')
 
         # already signed up?
@@ -175,17 +175,17 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             sqlSignup = f'''
                 insert into whitelist("walletId", "eventId", created_dtz, allowance_sigusd, spent_sigusd, "isAvailable", "lastAssemblerId", "lastAssemblerStatus", "isWhitelist")
 	            values (
-                    {walletId!r} -- walletId
-                    , {eventId!r} -- eventId
+                      :walletId -- walletId
+                    , :eventId -- eventId
                     , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- created_dtz
-                    , {whitelist.sigValue!r} -- allowance_sigusd
+                    , :allowance_sigusd -- allowance_sigusd
                     , 0 -- spent_sigusd
                     , 1 -- isAvailable
                     , null, null -- lastAssemblerId, lastAssemblerStatus
                     , 1 -- isWhitelist
                 );
             '''
-            resSignup = await db.fetch(sqlSignup)
+            resSignup = await fetch(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
             logger.debug(f'signup: {resSignup}')
 
             # use obfuscated identifier to prevent bots
@@ -193,13 +193,13 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             sqlIpHash = f'''
                 insert into "eventsIp" ("walletId", "eventId", "ipHash")
                 values (
-                    {walletId} -- walletId
-                    , {eventId} -- eventId
-                    , {ipHash!r} -- ipHash
+                      :walletId -- walletId
+                    , :eventId -- eventId
+                    , :ipHash -- ipHash
                 )
             '''
             # logger.warning(f'ip hash: {sqlIpHash}')
-            resIpHash = await db.fetch(sqlIpHash)
+            resIpHash = await fetch(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
             logger.debug(f'ip hash: {resIpHash}')
 
             return {'status': 'success', 'detail': f'added to whitelist: {whitelist.sigValue} SigUSD.'}

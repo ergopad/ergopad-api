@@ -20,6 +20,7 @@ import uuid
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
+from api.utils.logger import logger
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoClientException, InputBox
@@ -253,8 +254,6 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
 @r.get("/vested/{wallet}", name="vesting:findVestedTokens")
 def findVestingTokens(wallet:str):
     try:
-        #tokenId = CFG.ergopadTokenId
-        total = 0
         result = {}
         userWallet = Wallet(wallet)
         userErgoTree = userWallet.ergoTree()
@@ -262,36 +261,51 @@ def findVestingTokens(wallet:str):
         offset = 0
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
         while res.ok:
-            # returns array of dicts
             for box in res.json()["items"]:
-                if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
-                    tokenId = box["assets"][0]["tokenId"]
-                    if tokenId not in result:
-                        result[tokenId] = {}
-                        result[tokenId]['name'] = box["assets"][0]["name"]
-                        result[tokenId]['totalVested'] = 0.0
-                        result[tokenId]['outstanding'] = {}
-                    tokenDecimals = 10**box["assets"][0]["decimals"]
-                    initialVestedAmount = int(box["additionalRegisters"]["R8"]["renderedValue"])/tokenDecimals
-                    nextRedeemAmount = int(box["additionalRegisters"]["R6"]["renderedValue"])/tokenDecimals
-                    remainingVested = int(box["assets"][0]["amount"])/tokenDecimals
-                    result[tokenId]['totalVested'] += remainingVested
-                    nextRedeemTimestamp = (((initialVestedAmount-remainingVested)/nextRedeemAmount+1)*int(box["additionalRegisters"]["R5"]["renderedValue"])+int(box["additionalRegisters"]["R7"]["renderedValue"]))/1000.0
-                    nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
-                    while remainingVested > 0:
-                        if nextRedeemDate not in result[tokenId]['outstanding']:
-                            result[tokenId]['outstanding'][nextRedeemDate] = {}
-                            result[tokenId]['outstanding'][nextRedeemDate]['amount'] = 0.0
-                        redeemAmount = nextRedeemAmount if remainingVested >= 2*nextRedeemAmount else remainingVested
-                        result[tokenId]['outstanding'][nextRedeemDate]['amount'] += round(redeemAmount,int(box["assets"][0]["decimals"]))
-                        remainingVested -= redeemAmount
-                        nextRedeemTimestamp += int(box["additionalRegisters"]["R5"]["renderedValue"])/1000.0
+                try:
+                    # this must exist, or will be ignored
+                    assert 'R4' in box['additionalRegisters']
+                    
+                    # this should exist, but mostly for logging
+                    try: 
+                        boxId = box['boxId']
+                    except:
+                        boxId = 'invalid'
+                        pass
+
+                    if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
+                        tokenId = box["assets"][0]["tokenId"]
+                        if tokenId not in result:
+                            result[tokenId] = {}
+                            result[tokenId]['name'] = box["assets"][0]["name"]
+                            result[tokenId]['totalVested'] = 0.0
+                            result[tokenId]['outstanding'] = {}
+                        tokenDecimals = 10**box["assets"][0]["decimals"]
+                        initialVestedAmount = int(box["additionalRegisters"]["R8"]["renderedValue"])/tokenDecimals
+                        nextRedeemAmount = int(box["additionalRegisters"]["R6"]["renderedValue"])/tokenDecimals
+                        remainingVested = int(box["assets"][0]["amount"])/tokenDecimals
+                        result[tokenId]['totalVested'] += remainingVested
+                        nextRedeemTimestamp = (((initialVestedAmount-remainingVested)/nextRedeemAmount+1)*int(box["additionalRegisters"]["R5"]["renderedValue"])+int(box["additionalRegisters"]["R7"]["renderedValue"]))/1000.0
                         nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
-            if len(res.json()['items']) == 500:
-                offset += 500
-                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={0}&limit=500', headers=dict(headers), timeout=2)
-            else:
-                break
+                        while remainingVested > 0:
+                            if nextRedeemDate not in result[tokenId]['outstanding']:
+                                result[tokenId]['outstanding'][nextRedeemDate] = {}
+                                result[tokenId]['outstanding'][nextRedeemDate]['amount'] = 0.0
+                            redeemAmount = nextRedeemAmount if remainingVested >= 2*nextRedeemAmount else remainingVested
+                            result[tokenId]['outstanding'][nextRedeemDate]['amount'] += round(redeemAmount,int(box["assets"][0]["decimals"]))
+                            remainingVested -= redeemAmount
+                            nextRedeemTimestamp += int(box["additionalRegisters"]["R5"]["renderedValue"])/1000.0
+                            nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
+
+                except Exception as e:
+                    logging.error(f'ERR:{myself()}: Missing register in box: {boxId}')
+                    pass
+
+                if len(res.json()['items']) == 500:
+                    offset += 500
+                    res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={0}&limit=500', headers=dict(headers), timeout=2)
+                else:
+                    break
         
         resJson = []
         for key in result.keys():

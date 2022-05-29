@@ -20,7 +20,7 @@ from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
 from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
-from logger import logger
+from api.utils.logger import logger
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
@@ -301,7 +301,7 @@ async def staked(req: AddressList):
             ok = False
             data = None
             cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
-            if cached:
+            if False: # cached:
                 ok = True
                 data = cached
             else:
