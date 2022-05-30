@@ -2,7 +2,7 @@
 import pytest
 
 # imports
-from main import ping
+from main import ping, DEBUG
 
 
 def test_always_passes():
@@ -12,4 +12,7 @@ def test_always_passes():
 @pytest.mark.asyncio
 async def test_ping():
     res = await ping()
-    assert res["hello"] == "world"
+    if DEBUG:
+        assert res["hello,"] == "is it me you're looking for?"
+    else: 
+        assert res["status"] == "invalid"
