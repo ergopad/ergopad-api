@@ -1,5 +1,3 @@
-import inspect
-import logging
 import requests
 import typing as t
 
@@ -20,34 +18,6 @@ CFG = Config[Network]
 
 asset_router = r = APIRouter()
 
-# region BLOCKHEADER
-"""
-Asset API
----------
-Created: vikingphoenixconsulting@gmail.com
-On: 20211009
-Purpose: Returns coin and token values by user, coin or wallet.
-
-Notes: 
-. Developed for ErgoHack II, October 2021
-. TODO: intended to use reducers/redux model to improve testability/stability
-. Replace APIs with database calls once data is populated (need supporting import scripts to maintain)
-  - if keeping API calls, replace requests with async (i.e. httpx or aiohttp) to avoid blocking (requests is synchronous)
-. ?? is this SigRSV? 003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0
-
-Examples:
-> http://localhost:8000/api/asset/user/hello
-> http://localhost:8000/api/asset/price/cardano
-> http://localhost:8000/api/asset/price/sigusd
-> http://localhost:8000/api/asset/balance/9iD7JfYYemJgVz7nTGg9gaHuWg7hBbHo2kxrrJawyz4BD1r9fLS
-> http://localhost:8000/api/asset/price/history/ergo/3
-
-testnet: 3WwjaerfwDqYvFwvPRVJBJx2iUvCjD2jVpsL82Zho1aaV5R95jsG
-mainnet: 9iD7JfYYemJgVz7nTGg9gaHuWg7hBbHo2kxrrJawyz4BD1r9fLS
-
-"""
-# endregion BLOCKHEADER
-
 # region INIT
 DEBUG = CFG.debug
 st = time()  # stopwatch
@@ -66,11 +36,11 @@ con = create_engine(CFG.connectionString)
 # endregion INIT
 
 # region LOGGING
+import logging
 level = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(
-    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', level=level)
+logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', level=level)
 
-
+import inspect
 def myself(): return inspect.stack()[1][3]
 # endregion LOGGING
 
