@@ -1,4 +1,3 @@
-import logging
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
 from fastapi import APIRouter, Depends, status, Request
@@ -12,7 +11,7 @@ from db.schemas.whitelistEvents import CreateWhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
-from api.utils.logger import logger, myself
+from api.utils.logger import logger, myself, LEIF
 from api.utils.db import fetch
 
 CFG = Config[Network]
@@ -50,11 +49,10 @@ class Whitelist(BaseModel):
 # endregion CLASSES
 
 # region ROUTES
-
 @r.get("/checkIp")
-async def go(request: Request):
+async def checkIp(request: Request):
     # return {}
-    logging.debug(request.client.host)
+    logger.debug(request.client.host)
     return {
         'ip': request.client.host,
         'hash': get_md5_hash(request.client.host)
@@ -92,7 +90,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 and evt."isWhitelist" = 1
         """
         resFindEvent = await fetch(sqlFindEvent, {'eventName': eventName})
-        # logging.warning(sqlFindEvent)
+        # logger.warning(sqlFindEvent)
 
         # event not found
         res = resFindEvent[0]
@@ -118,7 +116,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup failed. {validation[1]}")
 
         # calculate funding
-        logging.debug(f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
+        logger.debug(f"Current funding: {100*res['allowance_sigusd']/(res['total_sigusd']+res['buffer_sigusd']):.2f}% ({res['allowance_sigusd']} of {res['total_sigusd']+res['buffer_sigusd']})")
 
         whitelist.sigValue = int(whitelist.sigValue)
         # does individual cap exceed?
@@ -233,7 +231,7 @@ async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_
 @r.get("/summary/{eventName}", name="whitelist:summary")
 async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
     try:
-        logging.debug(DATABASE)
+        logger.debug(DATABASE)
         con = create_engine(DATABASE)
         sql = f"""
             select
@@ -252,18 +250,18 @@ async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user
                 join events evt on evt.id = eip."eventId"
                 and eip."walletId" = wal.id
             where
-                evt.name = {eventName!r}
+                evt.name = :eventName
             order by
                 wht.created_dtz;
         """
-        res = con.execute(sql).fetchall()
-        logging.debug(res)
+        res = await fetch(sql, {'eventName': eventName})
+        logger.debug(res)
         return {
             'status': 'success',
             'data': res,
         }
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
 
 @r.get(
@@ -287,9 +285,11 @@ async def whitelist_event_list(
     response_model_exclude_none=True,
     name="whitelist:event"
 )
-async def whitelist_event(projectName: str, roundName: str,
-                          db=Depends(get_db),
-                          ):
+async def whitelist_event(
+    projectName: str, 
+    roundName: str,
+    db=Depends(get_db),
+):
     """
     Get event
     """
@@ -311,7 +311,6 @@ async def whitelist_event_create(
         return create_whitelist_event(db, whitelist_event)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
-
 
 @r.put(
     "/events/{id}", 

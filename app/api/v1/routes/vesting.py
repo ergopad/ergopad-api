@@ -20,7 +20,7 @@ import uuid
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
-from api.utils.logger import logger
+from api.utils.logger import logger, myself, LEIF
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoClientException, InputBox
@@ -44,15 +44,6 @@ duration_ms = {
     'day': 24*60*60*1000,
     'minute': 60*1000
 }
-
-#region LOGGING
-import logging
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-import inspect
-myself = lambda: inspect.stack()[1][3]
-#endregion LOGGING
 
 class Vestment(BaseModel):
     wallet: str
@@ -123,7 +114,7 @@ def getScenario(scenarioName: str):
         return
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: get scenario ({e})')
+        logger.error(f'ERR:{myself()}: get scenario ({e})')
         return
 
 def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
@@ -145,15 +136,15 @@ def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
                 }
 
             # make async request to assembler
-            # logging.info(request); exit(); # !! testing
-            logging.debug(request)
+            # logger.info(request); exit(); # !! testing
+            logger.debug(request)
             res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request)   
-            logging.debug(res)
+            logger.debug(res)
             result = res.content
             return result
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to redeem transaction ({e})')
+        logger.error(f'ERR:{myself()}: unable to redeem transaction ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem transaction')
 
 # redeem/disburse tokens after lock
@@ -170,7 +161,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2) #This needs to be put in a loop in case of more than 500 boxes
         while res.ok:
             rJson = res.json()
-            logging.info(rJson['total'])
+            logger.info(rJson['total'])
             for box in rJson['items']:
                 if len(inBoxes) >= numBoxes:
                     redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
@@ -231,7 +222,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
                 break
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem.')
 
     # redeem
@@ -247,7 +238,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
         })
     
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to redeem token ({e})')
+        logger.error(f'ERR:{myself()}: unable to redeem token ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem token.')
 
 # find vesting/vested tokens
@@ -298,7 +289,7 @@ def findVestingTokens(wallet:str):
                             nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
 
                 except Exception as e:
-                    logging.error(f'ERR:{myself()}: Missing register in box: {boxId}')
+                    logger.error(f'ERR:{myself()}: Missing register in box: {boxId}')
                     pass
 
                 if len(res.json()['items']) == 500:
@@ -325,12 +316,12 @@ def findVestingTokens(wallet:str):
         })
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to build vesting request ({e})')
+        logger.error(f'ERR:{myself()}: unable to build vesting request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
 @r.get('/unspent', name="vesting:unspent")
 def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
-    logging.debug(f'TOKEN::{tokenId}')
+    logger.debug(f'TOKEN::{tokenId}')
     ergopadTokenBoxes = {}
     try:
         res = requests.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
@@ -353,7 +344,7 @@ def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
                 except: pass # assets
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find tokens for exchange ({e})')
+        logger.error(f'ERR:{myself()}: unable to find tokens for exchange ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find tokens for exchange.')
 
     return ergopadTokenBoxes
@@ -469,7 +460,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         m = re.search('reason: NotEnoughErgsError\(not enough boxes to meet ERG needs (\d+) \(found only (\d+)\),\d+\)\)', str(e))
         if m is not None:
              content = f'transaction requires {(m.group(0)/10e9):,.3} ergs, and only {(m.group(1)/10e9):,.3} ergs were found.'
-        logging.error(f'ERR:{myself()}: {content} ({e})')
+        logger.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 
@@ -556,7 +547,7 @@ async def vested(req: AddressList):
         return vested
         
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to vest with NFT.')
 
 class BootstrapRoundRequest(BaseModel):
@@ -692,7 +683,7 @@ async def bootstrapRound(
         }
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: Unable to bootstrap round. ({e})')
+        logger.error(f'ERR:{myself()}: Unable to bootstrap round. ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to bootstrap round.')
 
 
@@ -707,7 +698,7 @@ async def activeRounds():
         for proxyAddress in proxyAddresses:
             proxyBoxes = appKit.getUnspentBoxes(proxyAddress)
             for proxyBox in proxyBoxes:
-                logging.info(proxyBox)
+                logger.info(proxyBox)
                 tokens = list(proxyBox.getTokens())
                 roundInfo = getTokenInfo(tokens[0].getId().toString())
                 if len(tokens) > 1:
@@ -724,7 +715,7 @@ async def activeRounds():
         return result
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: Unable to determine proper round. ({e})')
+        logger.error(f'ERR:{myself()}: Unable to determine proper round. ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to determine proper round.')
 
 class RequiredNergTokensRequest(BaseModel):
@@ -766,7 +757,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
         return result
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: Unable to calculate required tokens for transaction. ({e})')
+        logger.error(f'ERR:{myself()}: Unable to calculate required tokens for transaction. ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to calculate required tokens for transaction.')
 
 class VestFromProxyRequest(RequiredNergTokensRequest):   
@@ -811,7 +802,7 @@ async def contribute(req: VestFromProxyRequest):
             userInputs = appKit.getBoxesById(req.utxos)
             if not ErgoAppKit.boxesCovered(userInputs,int(22e6+nergRequired),tokensToSpend):
                 userInputs = appKit.boxesToSpend(req.address,int(22e6+nergRequired),tokensToSpend)
-        logging.info("0")
+        logger.info("0")
         if userInputs is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
 
@@ -821,7 +812,7 @@ async def contribute(req: VestFromProxyRequest):
             {
                 "_ErgUSDOracleNFT": ErgoAppKit.ergoValue(ergUsdOracleNFT, ErgoValueT.ByteArrayFromHex).getValue()    
             })
-        logging.info("1")
+        logger.info("1")
         proxyOutput = appKit.buildOutBox(
             value=int(22e6)+nergRequired,
             tokens=tokensToSpend,
@@ -832,7 +823,7 @@ async def contribute(req: VestFromProxyRequest):
             ],
             contract=appKit.contractFromTree(userProxyNFTLockedVestingContractTree)
         )
-        logging.info("2")
+        logger.info("2")
         unsignedTx = appKit.buildUnsignedTransaction(
             inputs=userInputs,
             outputs=[proxyOutput],
@@ -858,7 +849,7 @@ async def contribute(req: VestFromProxyRequest):
         m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', str(e))
         if m is not None:
             content = f'Blockchain is synchronizing, please try again shortly (ref: {m.group(1)})'
-        logging.error(f'ERR:{myself()}: {content} ({e})')
+        logger.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 @r.post('/vestFromProxy', name="vesting:vestFromProxy")
@@ -980,7 +971,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
         m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', str(e))
         if m is not None:
             content = f'Blockchain is synchronizing, please try again shortly (ref: {m.group(1)})'
-        logging.error(f'ERR:{myself()}: {content} ({e})')
+        logger.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 
