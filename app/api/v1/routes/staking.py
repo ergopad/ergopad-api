@@ -12,14 +12,14 @@ from base64 import b64encode
 from ergo.util import encodeLongArray, encodeString, hexstringToB64
 from hashlib import blake2b
 from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
-from hashlib import blake2b
 from db.session import get_db
 from db.crud.staking_config import get_all_staking_config, get_staking_config_by_name, create_staking_config, edit_staking_config, delete_staking_config
 from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
-from cache.cache import cache
 from core.auth import get_current_active_superuser, get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 from api.utils.logger import logger, myself, LEIF
+from core.security import get_md5_hash
+from cache.cache import cache
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
@@ -893,6 +893,8 @@ async def stakedv2(project: str, req: AddressList):
                     stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += round(box["assets"][1]["amount"]/10**config.stakedTokenDecimals,config.stakedTokenDecimals)
 
         return {
+            'project': project,
+            'tokenName': config.stakedTokenName,
             'totalStaked': totalStaked,
             'addresses': stakePerAddress
         }
@@ -900,6 +902,31 @@ async def stakedv2(project: str, req: AddressList):
     except Exception as e:
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
+
+
+@r.post("/staked-v2/", name="staking:all-staked-v2")
+async def allstakedv2(req: AddressList):
+    try:
+        # creating a hash for the input that is independent of ordering
+        u_hash = "hash_" + str(sum(list(map(lambda address: int(get_md5_hash(address), 16), set(req.addresses)))))
+        cached = cache.get(f"get_staking_staked_v2_{u_hash}")
+        if cached:
+            logging.info(f"INFO:{myself()}: cache hit")
+            return cached
+
+        ret = []
+        for project in stakingConfigs:
+            staked = await stakedv2(project, req)
+            if type(staked) == JSONResponse:
+                # error
+                return staked
+            ret.append(staked)
+
+        cache.set(f"get_staking_staked_v2_{u_hash}", ret)
+        return ret
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}::{str(e)}')
 
 
 ########################################
