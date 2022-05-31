@@ -137,7 +137,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             sql = f'''
                 insert into wallets(address, email, "blockChainId", network, "walletPass", mneumonic, "socialHandle", "socialPlatform", "chatHandle", "chatPlatform", created_dtz, "lastSeen_dtz", "twitterHandle", "discordHandle", "telegramHandle")
 	            values (
-                    {whitelist.ergoAddress!r} -- address
+                    :address -- address
                     , null -- email
                     , null -- blockChainId
                     , :network -- network
@@ -149,8 +149,9 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , null, null, null -- twitter, discord, telegram
                 );
             '''
-            res = await fetch(sql)
-            resFindWallet = await fetch(sqlFindWallet, {'network': Network})
+            logger.debug(sql)
+            res = await fetch(sql, {'address': whitelist.ergoAddress,'network': Network})
+            resFindWallet = await fetch(sqlFindWallet, {'address': whitelist.ergoAddress})
             logger.debug(f'find wallet: {resFindWallet}')
 
         # found or created, get wallet address

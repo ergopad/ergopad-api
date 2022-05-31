@@ -6,8 +6,7 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.utils.logger import logger, myself, LEIF
-from api.utils.db import init_db, fetch, engine
-from sqlalchemy.sql import text
+from api.utils.db import init_db, fetch
 
 from api.v1.routes.users         import users_router
 from api.v1.routes.auth          import auth_router
@@ -88,7 +87,6 @@ async def add_logging_and_process_time(req: Request, call_next):
         tot = str(round((time.time() - beg) * 1000))
         resNext.headers["X-Process-Time-MS"] = tot
         logger.debug(f"""{req.url} | host: {req.client.host}:{req.client.port} | pid {os.getpid()} | {tot}ms""".strip())
-        # logger.info(f"""{req.url}: {tot}ms""".strip())
         logger.log(LEIF, f"""{req.url}: {tot}ms""".strip())
 
         # create table api_audit (id serial primary key, request text, host text, port int, application varchar(20), response_time__ms int);
