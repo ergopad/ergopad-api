@@ -4,10 +4,8 @@ import pytest
 # imports
 from main import ping, DEBUG
 
-
 def test_always_passes():
     return True
-
 
 @pytest.mark.asyncio
 async def test_ping():

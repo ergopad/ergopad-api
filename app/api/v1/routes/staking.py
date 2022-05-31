@@ -3,19 +3,19 @@ import requests
 from starlette.responses import JSONResponse
 from wallet import Wallet
 from config import Config, Network # api specific config
-from fastapi import APIRouter, Request, Depends, Response, encoders, status
+from fastapi import APIRouter, Request, Depends, status
 from typing import List
 from pydantic import BaseModel
 from time import sleep, time
 from datetime import datetime
 from base64 import b64encode
-from ergo.util import encodeLongArray, encodeString, hexstringToB64
+from ergo.util import encodeLongArray, hexstringToB64
 from hashlib import blake2b
-from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
+from api.v1.routes.blockchain import TXFormat, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
 from db.session import get_db
 from db.crud.staking_config import get_all_staking_config, get_staking_config_by_name, create_staking_config, edit_staking_config, delete_staking_config
-from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
-from core.auth import get_current_active_superuser, get_current_active_user
+from db.schemas.stakingConfig import CreateAndUpdateStakingConfig
+from core.auth import get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 from api.utils.logger import logger, myself, LEIF
 from core.security import get_md5_hash
@@ -23,7 +23,6 @@ from cache.cache import cache
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
-
 from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaTestConfig
 
 stakingConfigs = {
@@ -94,7 +93,12 @@ class BootstrapRequest(BaseModel):
     cycleDuration_ms: int
 #endregion CLASSES
 
-@r.post("/unstake/", name="staking:unstake")
+@r.post("/compound", name="staking:unstake")
+def compound(req: APIKeyRequest, request: Request,):
+    logger.log(LEIF, f'compund request: {APIKeyRequest}')
+    return JSONResponse(content='Compound not longer available via API.', status_code=status.HTTP_410_GONE)
+
+@r.post("/unstake", name="staking:unstake")
 async def unstake(req: UnstakeRequest):
     try:
         logger.debug('unstake::appKit')
@@ -248,7 +252,7 @@ async def unstake(req: UnstakeRequest):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
-@r.get("/snapshot/", name="staking:snapshot")
+@r.get("/snapshot", name="staking:snapshot")
 def snapshot(
     request: Request,
     current_user=Depends(get_current_active_user)
@@ -285,7 +289,7 @@ def validPenalty(startTime: int):
     weeksStaked = int(timeStaked/week)
     return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
-@r.post("/staked/", name="staking:staked")
+@r.post("/staked", name="staking:staked")
 async def staked(req: AddressList):
     CACHE_TTL = 600 # 10 mins
     try:
@@ -352,7 +356,7 @@ async def staked(req: AddressList):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
 
-@r.get("/status/", name="staking:status")
+@r.get("/status", name="staking:status")
 def stakingStatus():
     try:
         # check cache
@@ -382,8 +386,8 @@ def stakingStatus():
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
-@r.post("/emit/", name="staking:emit")
-async def emit(
+@r.post("/emit", name="staking:emit")
+def emit(
     req: APIKeyRequest,
     request: Request,
     # current_user=Depends(get_current_active_superuser)
@@ -508,7 +512,7 @@ async def emit(
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to emit, try again shortly or contact support if error continues.')
 
-@r.post("/stake/", name="staking:stake")
+@r.post("/stake", name="staking:stake")
 async def stake(req: StakeRequest):
     try:
         logger.debug(f'stake::staked token info')
@@ -633,7 +637,7 @@ async def stake(req: StakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to stake, try again shortly or contact support if error continues.')
 
 # bootstrap staking setup
-@r.post("/bootstrap/", name="staking:bootstrap")
+@r.post("/bootstrap", name="staking:bootstrap")
 async def bootstrapStaking(req: BootstrapRequest):
     try:
         stakedToken = getTokenInfo(req.stakedTokenID)
@@ -741,7 +745,7 @@ async def bootstrapStaking(req: BootstrapRequest):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
 
-@r.post("/{project}/stake/", name="staking:stake-v2")
+@r.post("/{project}/stake", name="staking:stake-v2")
 async def stakeV2(project: str, req: StakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -758,7 +762,7 @@ async def stakeV2(project: str, req: StakeRequest):
         cache.set(f'ergopay_signing_request_{stakeProxyTx.unsignedTx.getId()}',stakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
 
-@r.post("/{project}/unstake/", name="staking:unstake-v2")
+@r.post("/{project}/unstake", name="staking:unstake-v2")
 async def unstakev2(project: str, req: UnstakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -776,7 +780,7 @@ async def unstakev2(project: str, req: UnstakeRequest):
         cache.set(f'ergopay_signing_request_{unstakeProxyTx.unsignedTx.getId()}',unstakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
 
-@r.post("/{project}/addstake/", name="staking:addstake-v2")
+@r.post("/{project}/addstake", name="staking:addstake-v2")
 async def addstake(project: str, req: UnstakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -794,7 +798,7 @@ async def addstake(project: str, req: UnstakeRequest):
         cache.set(f'ergopay_signing_request_{addStakeProxyTx.unsignedTx.getId()}',addStakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
 
-@r.get("/{project}/status/", name="staking:status-v2")
+@r.get("/{project}/status", name="staking:status-v2")
 def stakingStatus(project: str):
     try:
         if project not in stakingConfigs:
@@ -833,7 +837,7 @@ def stakingStatus(project: str):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
-@r.post("/{project}/staked/", name="staking:staked-v2")
+@r.post("/{project}/staked", name="staking:staked-v2")
 async def stakedv2(project: str, req: AddressList):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -901,7 +905,7 @@ async def stakedv2(project: str, req: AddressList):
 
     except Exception as e:
         logger.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine stake amount, try again shortly or contact support if error continues.')
 
 
 @r.post("/staked-v2/", name="staking:all-staked-v2")

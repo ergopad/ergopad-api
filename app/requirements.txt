@@ -1,4 +1,5 @@
 aiocsv
+aiohttp[speedups]
 aiofiles
 alembic
 amqp

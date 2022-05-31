@@ -20,6 +20,7 @@ import uuid
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
+from api.utils.asyncrequests import Req
 from api.utils.logger import logger, myself, LEIF
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
@@ -243,7 +244,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
 
 # find vesting/vested tokens
 @r.get("/vested/{wallet}", name="vesting:findVestedTokens")
-def findVestingTokens(wallet:str):
+async def findVestingTokens(wallet:str):
     try:
         result = {}
         userWallet = Wallet(wallet)
@@ -251,19 +252,26 @@ def findVestingTokens(wallet:str):
         address = CFG.vestingContract
         offset = 0
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+        logger.log(LEIF, f'''TOTAL:{res.json()['total']}''')
+        # async with Req() as r:
+        #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers))
         while res.ok:
-            for box in res.json()["items"]:
-                try:
-                    # this must exist, or will be ignored
-                    assert 'R4' in box['additionalRegisters']
-                    
-                    # this should exist, but mostly for logging
-                    try: 
-                        boxId = box['boxId']
-                    except:
-                        boxId = 'invalid'
-                        pass
+            boxes = res.json()["items"]
+            for box in boxes:
+                # this should exist, but mostly for logging
+                try: 
+                    boxId = box['boxId']
+                except:
+                    boxId = '<invalid>'
+                    pass
 
+                # this must exist, or will be ignored
+                if 'R4' not in box['additionalRegisters']:
+                    logger.error(f'ERR:{myself()}: Missing register in box: {boxId}')
+
+                else:
+                    logger.log(LEIF, f'''BOX:{boxId}''')
+                    
                     if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
                         tokenId = box["assets"][0]["tokenId"]
                         if tokenId not in result:
@@ -288,15 +296,13 @@ def findVestingTokens(wallet:str):
                             nextRedeemTimestamp += int(box["additionalRegisters"]["R5"]["renderedValue"])/1000.0
                             nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
 
-                except Exception as e:
-                    logger.error(f'ERR:{myself()}: Missing register in box: {boxId}')
-                    pass
-
-                if len(res.json()['items']) == 500:
-                    offset += 500
-                    res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={0}&limit=500', headers=dict(headers), timeout=2)
-                else:
-                    break
+            if len(boxes) == 500:
+                offset += 500
+                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+                # async with Req() as r:
+                #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers))
+            else:
+                break
         
         resJson = []
         for key in result.keys():

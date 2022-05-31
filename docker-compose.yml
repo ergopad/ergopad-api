@@ -22,12 +22,17 @@ services:
             max-size: 10m
     volumes: 
      - ./app:/app
+     - ./nginx-unit.json:/var/lib/unit/conf.json # seems to be undocumented atm
+     # - ./postgresql.key:/root/.postgresql/postgresql.key # total hack right here; ignore this in api/utils/db.py
     networks:
       - ergopad-data_net
       - ergopad-node_net
     # command: uvicorn main:app --workers 4 --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '52.72.64.235'
-    command: uvicorn main:app --reload --workers 4 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '52.72.64.235'
+    # command: uvicorn main:app --reload --workers 2 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors
+    # command: gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${API_PORT} --timeout 60
     # command: tail /dev/null -f
+    # command: unitd-debug --no-daemon --control unix:/var/run/control.unit.sock
+    command: unitd --no-daemon --control unix:/var/run/control.unit.sock
 
     # NOTE: 5/2022 Leif, using gunicorn seems to lock up on certain calls; could not find a configuration that worked; uvicorn does not have same issue
     # uvicorn.workers.UvicornH11Worker # use for pure python implementation
