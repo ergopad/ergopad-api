@@ -3,7 +3,7 @@ aiohttp[speedups]
 aiofiles
 alembic
 amqp
-asyncpg
+asyncpg==0.24.0
 base58
 bcrypt
 boto3

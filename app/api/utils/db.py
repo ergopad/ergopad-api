@@ -60,20 +60,13 @@ async def get_session() -> AsyncSession:
 
 # use with SQL statements (param binding)
 async def fetch(query: str, params: dict = {}):
-    try:        
+    try:
         async with engine.begin() as con:
             res = await con.execute(text(query), params)
             if res.returns_rows:
                 return res.fetchall()
             else:
                 return {'rows': 0}
-
-    except PermissionError as e:
-        # asyncpg 0.25.0 hack
-        if '/root/.postgresql/postgresql.key' in str(e):
-            pass
-        else:
-            logger.warning(f'asyncpg issue: {str(e)}')
 
     except Exception as e:
         logger.error(f'ERR:{myself()}: {e}')
