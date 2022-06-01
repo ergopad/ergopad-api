@@ -1,7 +1,4 @@
-import inspect
-import logging
 import requests
-import ssl
 
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Request, Depends, status
@@ -10,8 +7,8 @@ from pydantic import BaseModel
 from smtplib import SMTP
 from config import Config, Network  # api specific config
 from core.auth import get_current_active_superuser
-
 from cache.cache import cache
+from api.utils.logger import logger, myself, LEIF
 
 CFG = Config[Network]
 
@@ -34,15 +31,6 @@ class Ergoscript(BaseModel):
         }
 # endregion CLASSES
 
-# region LOGGING
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(
-    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-
-def myself(): return inspect.stack()[1][3]
-# endregion LOGGING
-
 @r.post("/compileErgoscript", name="blockchain:sendPayment")
 def compileErgoscript(ergoscript: Ergoscript):
     try:
@@ -55,13 +43,11 @@ def compileErgoscript(ergoscript: Ergoscript):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid ergoscript:\n{ergoscript.script}')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
+        logger..error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to compile ergoscript ({e})')
-
 
 class InvalidateCacheRequest(BaseModel):
     key: str
-
 
 @r.post("/forceInvalidateCache", name="cache:invalidate")
 def forceInvalidateCache(req: InvalidateCacheRequest, current_user=Depends(get_current_active_superuser)):

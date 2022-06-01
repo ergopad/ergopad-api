@@ -1,15 +1,15 @@
 import requests
 
 from starlette.responses import JSONResponse
-from wallet import Wallet
+from api.utils.wallet import Wallet
 from config import Config, Network # api specific config
 from fastapi import APIRouter, Request, Depends, status
 from typing import List
 from pydantic import BaseModel
-from time import sleep, time
+from time import time
 from datetime import datetime
 from base64 import b64encode
-from ergo.util import encodeLongArray, hexstringToB64
+from api.utils.ergo import encodeLongArray, hexstringToB64
 from hashlib import blake2b
 from api.v1.routes.blockchain import TXFormat, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
 from db.session import get_db
@@ -516,7 +516,7 @@ def emit(
 async def stake(req: StakeRequest):
     try:
         logger.debug(f'stake::staked token info')
-        stakedTokenInfo = getTokenInfo(CFG.stakedTokenID)
+        stakedTokenInfo = await getTokenInfo(CFG.stakedTokenID)
 
         logger.debug(f'stake::appkit')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
@@ -640,28 +640,28 @@ async def stake(req: StakeRequest):
 @r.post("/bootstrap", name="staking:bootstrap")
 async def bootstrapStaking(req: BootstrapRequest):
     try:
-        stakedToken = getTokenInfo(req.stakedTokenID)
+        stakedToken = await getTokenInfo(req.stakedTokenID)
         stakedTokenDecimalMultiplier = 10**stakedToken["decimals"]
         
-        stakeStateNFT = getTokenInfo(req.stakeStateNFT)
+        stakeStateNFT = await getTokenInfo(req.stakeStateNFT)
         if (stakeStateNFT["name"] != f'{stakedToken["name"]} Stake State'):
             return({"success": False, "Error": f"Wrong name for stake state NFT {stakeStateNFT['name']}"})
         if (stakeStateNFT["emissionAmount"]>1):
             return({"success": False, "Error": f"There should only be one {stakeStateNFT['name']}"})
 
-        stakePoolNFT = getTokenInfo(req.stakePoolNFT)
+        stakePoolNFT = await getTokenInfo(req.stakePoolNFT)
         if (stakePoolNFT["name"] != f'{stakedToken["name"]} Stake Pool'):
             return({"success": False, "Error": f"Wrong name for stake pool NFT {stakePoolNFT['name']}"})
         if (stakePoolNFT["emissionAmount"]>1):
             return({"success": False, "Error": f"There should only be one {stakePoolNFT['name']}"})
 
-        emissionNFT = getTokenInfo(req.emissionNFT)
+        emissionNFT = await getTokenInfo(req.emissionNFT)
         if (emissionNFT["name"] != f'{stakedToken["name"]} Emission'):
             return({"success": False, "Error": f"Wrong name for emission NFT {emissionNFT['name']}"})
         if (emissionNFT["emissionAmount"]>1):
             return({"success": False, "Error": f"There should only be one {emissionNFT['name']}"})
 
-        stakeTokenID = getTokenInfo(req.stakeTokenID)
+        stakeTokenID = await getTokenInfo(req.stakeTokenID)
         if (stakeTokenID["name"] != f'{stakedToken["name"]} Stake Token'):
             return({"success": False, "Error": f"Wrong name for stake token {stakeTokenID['name']}"})
         if (stakeTokenID["emissionAmount"]<1000000000):
@@ -915,7 +915,7 @@ async def allstakedv2(req: AddressList):
         u_hash = "hash_" + str(sum(list(map(lambda address: int(get_md5_hash(address), 16), set(req.addresses)))))
         cached = cache.get(f"get_staking_staked_v2_{u_hash}")
         if cached:
-            logging.info(f"INFO:{myself()}: cache hit")
+            logger.info(f"INFO:{myself()}: cache hit")
             return cached
 
         ret = []
@@ -929,7 +929,7 @@ async def allstakedv2(req: AddressList):
         cache.set(f"get_staking_staked_v2_{u_hash}", ret)
         return ret
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}::{str(e)}')
 
 

@@ -30,7 +30,6 @@ logger.setLevel('LEIF')
 logger.addHandler(handler)
 
 # prevent logging from other handlers
-import logging
 logging.getLogger('uvicorn.error').propagate = False
 logging.getLogger('sqlalchemy.engine.Engine').propagate = False
 logging.getLogger('sqlalchemy.pool.impl.QueuePool').propagate = False

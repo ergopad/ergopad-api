@@ -6,22 +6,11 @@ from fastapi import APIRouter, Response, status #, Request
 from time import time
 from datetime import datetime as dt
 from config import Config, Network # api specific config
+from api.utils.logger import logger, myself, LEIF
+
 CFG = Config[Network]
 
 events_router = r = APIRouter()
-
-#region BLOCKHEADER
-"""
-Events API
----------
-Created: vikingphoenixconsulting@gmail.com
-On: 20220113
-Purpose: allow wallets to be whitelisted
-Contributor(s): https://github.com/Luivatra
-
-Notes: 
-"""
-#endregion BLOCKHEADER
 
 #region INIT
 DEBUG = CFG.debug
@@ -34,15 +23,6 @@ NOW = int(time())
 DEBUG = True
 st = time() # stopwatch
 #endregion INIT
-
-#region LOGGING
-import logging
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-import inspect
-myself = lambda: inspect.stack()[1][3]
-#endregion LOGGING
 
 @r.get("/summary/{eventName}")
 def summary(eventName):
@@ -70,7 +50,7 @@ def summary(eventName):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid events request ({res.text})')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: events info {e}')
+        logger..error(f'ERR:{myself()}: events info {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')
 
 @r.get("/info/{eventName}")
@@ -87,9 +67,9 @@ def events(eventName):
             from events
             {where}
         """
-        # logging.debug(sql)
+        # logger..debug(sql)
         res = con.execute(sql)
-        # logging.debug(res)
+        # logger..debug(res)
         events = []
         for r in res:
             events.append({
@@ -112,5 +92,5 @@ def events(eventName):
         return events
 
     except:
-        logging.error(f'ERR:{myself()}: events info {e}')
+        logger..error(f'ERR:{myself()}: events info {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')

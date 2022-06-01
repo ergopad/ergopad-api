@@ -4,6 +4,7 @@ from base64 import b64encode, b64decode
 from pyblake2 import blake2b
 from ecdsa import SECP256k1
 from types import SimpleNamespace
+from api.utils.logger import logger, myself, LEIF
 
 class dotdict(SimpleNamespace):
     def __init__(self, dictionary, **kwargs):
@@ -13,11 +14,6 @@ class dotdict(SimpleNamespace):
                 self.__setattr__(key, dotdict(value))
             else:
                 self.__setattr__(key, value)
-
-### LOGGING
-import logging
-level = logging.INFO # TODO: set from .env
-logging.basicConfig(format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s", datefmt='%m-%d %H:%M', level=level)
 
 ### INIT
 curve = SECP256k1
@@ -93,7 +89,7 @@ class Address:
   def fromBase58(self, address):
     addr = Address(address)
     if (not addr.isValid()):
-      logging.error(f'Invalid Ergo address ${address}')
+      logger.error(f'Invalid Ergo address ${address}')
     return addr
 
   def fromBytes(self, bytes):    
@@ -125,7 +121,7 @@ if __name__ == '__main__':
   tree = address.ergoTree()
   
   # fromBytes: {address.fromBytes(address.addrBytes)}
-  logging.info(f"""Validation:
+  logger.info(f"""Validation:
     address: {address.address}
     addressBytes: {address.addrBytes}
     ergoTree: {address.ergoTree()}
