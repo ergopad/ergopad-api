@@ -37,13 +37,6 @@ async def init_db():
         async with engine.begin() as con:
             await con.run_sync(SQLModel.metadata.create_all)
 
-    except PermissionError as e:
-        # asyncpg 0.25.0 hack
-        if '/root/.postgresql/postgresql.key' in str(e):
-            pass
-        else:
-            logger.warning(f'asyncpg issue: {str(e)}')
-
     except Exception as e:
         logger.error(f'ERR:{myself()}: {e}')
 

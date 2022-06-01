@@ -539,7 +539,7 @@ async def vested(req: AddressList):
                     totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
                 redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
-                vestedTokenInfo = getTokenInfo(box["assets"][0]["tokenId"])
+                vestedTokenInfo = await getTokenInfo(box["assets"][0]["tokenId"])
                 if vestedTokenInfo["name"] not in vested:
                     vested[vestedTokenInfo["name"]] = []
                 vested[vestedTokenInfo["name"]].append({
@@ -576,7 +576,7 @@ async def bootstrapRound(
     current_user=Depends(get_current_active_superuser)
 ):
     try:
-        vestedToken = getTokenInfo(req.tokenId)
+        vestedToken = await getTokenInfo(req.tokenId)
         vestedTokenAmount = int(req.roundAllocation*10**vestedToken["decimals"])
 
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/",CFG.ergopadApiKey)
@@ -706,9 +706,9 @@ async def activeRounds():
             for proxyBox in proxyBoxes:
                 logger.info(proxyBox)
                 tokens = list(proxyBox.getTokens())
-                roundInfo = getTokenInfo(tokens[0].getId().toString())
+                roundInfo = await getTokenInfo(tokens[0].getId().toString())
                 if len(tokens) > 1:
-                    vestedInfo = getTokenInfo(tokens[1].getId().toString())
+                    vestedInfo = await getTokenInfo(tokens[1].getId().toString())
                     whitelistTokenId = list(proxyBox.getRegisters())[3].toHex()[4:]
                     result['activeRounds'].append({
                         'roundName': roundInfo["name"], 
@@ -738,7 +738,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
         roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
-        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        vestedTokenInfo = await getTokenInfo(vestedTokenId)
         oracleInfo = await ergusdoracle()
         nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
         sigUsdDecimals = int(2)
@@ -782,13 +782,12 @@ async def contribute(req: VestFromProxyRequest):
         proxyBox = getNFTBox(req.proxyNFT)
         if proxyBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
-        #roundInfo = getTokenInfo(req.proxyNFT)
         whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
         vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
         roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
-        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        vestedTokenInfo = await getTokenInfo(vestedTokenId)
         nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
@@ -869,14 +868,14 @@ async def vestFromProxy(req: VestFromProxyRequest):
         proxyBox = getNFTBox(req.proxyNFT)
         if proxyBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
-        roundInfo = getTokenInfo(req.proxyNFT)
+        roundInfo = await getTokenInfo(req.proxyNFT)
         whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
         vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
         sellerAddress = proxyBox["additionalRegisters"]["R6"]["renderedValue"]
         roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
-        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        vestedTokenInfo = await getTokenInfo(vestedTokenId)
         nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
