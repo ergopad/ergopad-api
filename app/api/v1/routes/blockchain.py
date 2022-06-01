@@ -455,7 +455,7 @@ def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
 
 # GET unspent stake boxes
 # Note: Run with useExplorerApi = True in case local explorer service failure
-def getUnspentStakeBoxes(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS, useExplorerApi=False):
+async def getUnspentStakeBoxes(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS, useExplorerApi=False):
     if useExplorerApi:
         # slow, makes 10+ api calls each taking 1 to 1.5 seconds on average
         boxes = []
@@ -463,7 +463,7 @@ def getUnspentStakeBoxes(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = S
         limit = 100
         done = False
         while not done:
-            res = getTokenBoxes(stakeTokenId, offset, limit)
+            res = await getTokenBoxes(stakeTokenId, offset, limit)
             boxes.extend(res)
             offset += limit
             if len(res) < limit:

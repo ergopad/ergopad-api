@@ -879,7 +879,7 @@ async def stakedv2(project: str, req: AddressList):
         if cached:
             checkBoxes = cached
         else:
-            checkBoxes = getUnspentStakeBoxes(config.stakeTokenId,config.stakeContract.contract.toAddress().toString(),True)
+            checkBoxes = await getUnspentStakeBoxes(config.stakeTokenId,config.stakeContract.contract.toAddress().toString(),True)
             cache.set(f"get_staking_staked_token_boxes_{config.stakeTokenId}", checkBoxes, CACHE_TTL)
         for box in checkBoxes:
             if box["assets"][0]["tokenId"]==config.stakeTokenId:
