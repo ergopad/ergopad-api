@@ -371,8 +371,7 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
 async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     pair = pair.lower()
     # check cache
-    cached = cache.get(
-        f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
+    cached = cache.get(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
     if cached:
         return cached
 
@@ -400,10 +399,6 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
             ORDER BY t.timestamp_utc DESC
             LIMIT {limit}
         """
-        sql = f"""
-            SELECT timestamp_utc, sigusd, ergopad, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
-            FROM "{table}"
-        """
         logger.debug(f'exec sql: {sql}')
         res = await dbErgopad.fetch_all(sql)
 
@@ -425,8 +420,8 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
                 "price": tokenBase,
             })
 
-        cache.set(
-            f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}", tokenData)
+        cache.set(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}", tokenData)
+        
         return tokenData
 
     except Exception as e:
