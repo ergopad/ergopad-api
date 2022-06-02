@@ -1,11 +1,10 @@
-import requests
-
 from starlette.responses import JSONResponse 
 from fastapi import APIRouter, status #, Request
 from time import time
 from config import Config, Network # api specific config
 from api.utils.logger import logger, myself, LEIF
 from api.utils.db import dbErgopad, dbExplorer
+from api.utils.aioreq import Req
 
 CFG = Config[Network]
 
@@ -24,13 +23,15 @@ st = time() # stopwatch
 #endregion INIT
 
 @r.get("/summary/{eventName}")
-def summary(eventName):
+async def summary(eventName):
     try:
         headers = {'Content-Type': 'application/json', 'api_key': CFG.ergopadApiKey}
 
         startingTokenAmount = 20500000
         spentTokenAmount = 0
-        res = requests.get(f'{CFG.node}/wallet/balances', headers=headers)
+        # res = requests.get(f'{CFG.node}/wallet/balances', headers=headers)
+        async with Req() as r:
+            res = await r.get(f'{CFG.node}/wallet/balances', headers=headers)
         if res.ok:
             try:
                 balance = res.json()

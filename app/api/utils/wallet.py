@@ -117,7 +117,7 @@ class Wallet:
       'assets': assets,
     }]
     try:
-      pay = requests.post(f'{CFG.wallet}/payment/send', headers={'Content-Type': 'application/json', 'api_key': CFG.walletApiKey}, json=sendMe)        
+      pay = requests.post(f'{CFG.wallet}/payment/send', headers={'Content-Type': 'application/json', 'api_key': CFG.walletApiKey}, data=sendMe)        
       if pay.ok:
         return pay.json() # dict
       else: 

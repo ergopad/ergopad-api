@@ -33,7 +33,7 @@ class SyncMap:
 
 # Parallize the following code from staking.py
 """
-keyHolder = getNFTBox(box["additionalRegisters"]["R5"]["renderedValue"])
+keyHolder = await getNFTBox(box["additionalRegisters"]["R5"]["renderedValue"])
 if keyHolder is None:
     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake key box')
 if keyHolder["address"] not in addresses.keys():
@@ -53,8 +53,8 @@ class AsyncSnapshotEngine:
     def add_job(self, token_id, amount):
         self.inputs.append((token_id, amount))
 
-    def handle_nft_box(self, token_id, amount):
-        key_holder = getNFTBox(token_id, True)
+    async def handle_nft_box(self, token_id, amount):
+        key_holder = await getNFTBox(token_id, True)
         if (key_holder):
             self.output.increment(key_holder["address"], amount)
         else:

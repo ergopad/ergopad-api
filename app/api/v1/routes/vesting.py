@@ -1,4 +1,4 @@
-import requests, json
+import json
 import fractions
 import re
 
@@ -114,7 +114,7 @@ def getScenario(scenarioName: str):
         logger.error(f'ERR:{myself()}: get scenario ({e})')
         return
 
-def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
+async def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
     try:
         # redeem
         result = ""
@@ -123,7 +123,9 @@ def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
             txFee = max(txFee_nerg,(len(outBoxes)+len(inBoxes))*200000)
             ergopadTokenBoxes = getBoxesWithUnspentTokens(tokenId="", nErgAmount=txBoxTotal_nerg+txFee+txFee_nerg, tokenAmount=0,emptyRegisters=True)
             for box in inBoxes+list(ergopadTokenBoxes.keys()):
-                res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
+                # res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
+                async with Req() as r:
+                    res = await r.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=headers)
                 if res.ok:
                     inBoxesRaw.append(res.json()['bytes'])
             request = {
@@ -135,7 +137,9 @@ def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
             # make async request to assembler
             # logger.info(request); exit(); # !! testing
             logger.debug(request)
-            res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request)   
+            # res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request)   
+            async with Req() as r:
+                res = await r.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), data=json.dumps(request))
             logger.debug(res)
             result = res.content
             return result
@@ -146,16 +150,22 @@ def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
 
 # redeem/disburse tokens after lock
 @r.get("/redeem/{address}", name="vesting:redeem")
-def redeemToken(address:str, numBoxes:Optional[int]=200):
+async def redeemToken(address:str, numBoxes:Optional[int]=200):
     try:
         txFee_nerg = CFG.txFee
         txBoxTotal_nerg = 0
         #scPurchase = getErgoscript('alwaysTrue', {})
         outBoxes = []
         inBoxes = []
-        currentTime = requests.get(f'{CFG.node}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
+        # currentTime = requests.get(f'{CFG.node}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
+        async with Req() as r:
+            currentTime = await r.get(f'{CFG.node}/blocks/lastHeaders/1', headers=headers).json()[0]['timestamp']
+        
         offset = 0
-        res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2) #This needs to be put in a loop in case of more than 500 boxes
+        # res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2) #This needs to be put in a loop in case of more than 500 boxes
+        async with Req() as r:
+            res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=headers) #This needs to be put in a loop in case of more than 500 boxes
+
         while res.ok:
             rJson = res.json()
             logger.info(rJson['total'])
@@ -172,7 +182,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
 
                 else:
                     if len(inBoxes) >= numBoxes:
-                        redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
+                        await redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
                         inBoxes = []
                         outBoxes = []
                         txBoxTotal_nerg = 0
@@ -187,7 +197,9 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
                     totalRedeemable = periods * redeemAmount
                     redeemableTokens = totalVested - redeemed if (totalVested-totalRedeemable) < redeemAmount else totalRedeemable - redeemed
                     if redeemableTokens > 0:
-                        nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
+                        # nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
+                        async with Req() as r:
+                            nodeRes = await r.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
                         buyerAddress = nodeRes['address']
                         if (totalVested-(redeemableTokens+redeemed))>0:
                             outBox = {
@@ -225,7 +237,9 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
 
             if len(res.json()['items']) == 500 and len(inBoxes) < 200:
                 offset += 500
-                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+                # res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+                async with Req() as r:
+                    res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=headers)
             else:
                 break
 
@@ -236,7 +250,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
     # redeem
     result = ""
     if len(outBoxes) > 0:
-        result = redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
+        result = await redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
     try:
         return({
             'status': 'success',
@@ -258,7 +272,10 @@ async def findVestingTokens(wallet:str):
         userErgoTree = userWallet.ergoTree()
         address = CFG.vestingContract
         offset = 0
-        res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+        # res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+        async with Req() as r:
+            res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=headers)
+
         logger.log(LEIF, f'''TOTAL:{res.json()['total']}''')
         # async with Req() as r:
         #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers))
@@ -304,9 +321,9 @@ async def findVestingTokens(wallet:str):
 
             if len(boxes) == 500:
                 offset += 500
-                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
-                # async with Req() as r:
-                #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers))
+                # res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+                async with Req() as r:
+                    res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=headers)
             else:
                 break
         
@@ -332,11 +349,14 @@ async def findVestingTokens(wallet:str):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
 @r.get('/unspent', name="vesting:unspent")
-def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
+async def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
     logger.debug(f'TOKEN::{tokenId}')
     ergopadTokenBoxes = {}
     try:
-        res = requests.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
+        # res = requests.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
+        async with Req() as r:
+            res = await r.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
+
         if res.ok:
             for box in res.json():
                 try: 
@@ -492,7 +512,9 @@ async def vested(req: AddressList):
                 ok = True
                 data = cached
             else:
-                res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                # res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                async with Req() as r:
+                    res = await r.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
                 ok = res.ok
                 if ok:
                     data = res.json()
@@ -736,7 +758,7 @@ class RequiredNergTokensRequest(BaseModel):
 @r.post('/requiredNergTokens', name="vesting:requiredNergTokens")
 async def requiredNergTokens(req: RequiredNergTokensRequest):
     try:
-        proxyBox = getNFTBox(req.proxyNFT)
+        proxyBox = await getNFTBox(req.proxyNFT)
         whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
         vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
         roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
@@ -783,7 +805,7 @@ async def contribute(req: VestFromProxyRequest):
         if oracleInfo is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle info')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
-        proxyBox = getNFTBox(req.proxyNFT)
+        proxyBox = await getNFTBox(req.proxyNFT)
         if proxyBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
         whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
@@ -865,11 +887,11 @@ async def contribute(req: VestFromProxyRequest):
 async def vestFromProxy(req: VestFromProxyRequest):
     try:
         oracleInfo = getUnspentBoxesByTokenId(ergUsdOracleNFT)[0]
-        #oracleInfo = getNFTBox(ergUsdOracleNFT,includeMempool=False)
+        #oracleInfo = await getNFTBox(ergUsdOracleNFT,includeMempool=False)
         if oracleInfo is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle box')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
-        proxyBox = getNFTBox(req.proxyNFT)
+        proxyBox = await getNFTBox(req.proxyNFT)
         if proxyBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
         roundInfo = await getTokenInfo(req.proxyNFT)

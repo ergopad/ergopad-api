@@ -1,4 +1,4 @@
-import requests
+import json
 
 from ast import literal_eval
 from starlette.responses import JSONResponse
@@ -19,6 +19,7 @@ from db.schemas.stakingConfig import CreateAndUpdateStakingConfig
 from core.auth import get_current_active_user
 from cache.staking import AsyncSnapshotEngine 
 from api.utils.logger import logger, myself, LEIF
+from api.utils.aioreq import Req
 from core.security import get_md5_hash
 from cache.cache import cache
 
@@ -106,10 +107,12 @@ async def unstake(req: UnstakeRequest):
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
 
         logger.debug('unstake::get NFT stakeStateBox')
-        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
+        stakeStateBox = await getNFTBox(CFG.stakeStateNFT)
         if stakeStateBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to find stake state box')
-        res = requests.get(f'{CFG.explorer}/boxes/{req.stakeBox}')
+        # res = requests.get(f'{CFG.explorer}/boxes/{req.stakeBox}')
+        async with Req() as r:
+            res = await r.get(f'{CFG.explorer}/boxes/{req.stakeBox}')
 
         if res.ok:
             logger.debug('unstake::find stakeBox')
@@ -124,7 +127,7 @@ async def unstake(req: UnstakeRequest):
             stakeTime = stakeBoxR4[1] 
             
             logger.debug('unstake::get NFG userBox')
-            userBox = getNFTBox(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
+            userBox = await getNFTBox(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
             timeStaked = currentTime - stakeTime
             weeksStaked = int(timeStaked/week)
             penalty = int(0 if (weeksStaked >= 8) else amountToUnstake*5/100  if (weeksStaked >= 6) else amountToUnstake*125/1000 if (weeksStaked >= 4) else amountToUnstake*20/100 if (weeksStaked >= 2) else amountToUnstake*25/100)
@@ -306,7 +309,9 @@ async def staked(req: AddressList):
                 ok = True
                 data = cached
             else:
-                res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                # res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                async with Req() as r:
+                    res = await r.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
                 ok = res.ok
                 if ok:
                     data = res.json()
@@ -372,14 +377,14 @@ async def staked(req: AddressList):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
 
 @r.get("/status", name="staking:status")
-def stakingStatus():
+async def stakingStatus():
     try:
         # check cache
         cached = cache.get(f"get_api_staking_status")
         if cached:
             return cached
 
-        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
+        stakeStateBox = await getNFTBox(CFG.stakeStateNFT)
         stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
 
         totalStaked = stakeStateR4[0]
@@ -402,15 +407,15 @@ def stakingStatus():
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 @r.post("/emit", name="staking:emit")
-def emit(
+async def emit(
     req: APIKeyRequest,
     request: Request,
     # current_user=Depends(get_current_active_superuser)
 ):
     try:
-        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
-        stakePoolBox = getNFTBox(CFG.stakePoolNFT)
-        emissionBox = getNFTBox(CFG.emissionNFT)
+        stakeStateBox = await getNFTBox(CFG.stakeStateNFT)
+        stakePoolBox = await getNFTBox(CFG.stakePoolNFT)
+        emissionBox = await getNFTBox(CFG.emissionNFT)
 
         stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
         stakePoolR4 = eval(stakePoolBox["additionalRegisters"]["R4"]["renderedValue"])
@@ -422,7 +427,9 @@ def emit(
         logger.info(stakePoolBox)
         logger.info(emissionBox)
 
-        currentTime = requests.get(f'{CFG.node}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
+        # currentTime = requests.get(f'{CFG.node}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
+        async with Req() as r:
+            currentTime = await r.get(f'{CFG.node}/blocks/lastHeaders/1', headers=headers).json()[0]['timestamp']        
 
         if currentTime < stakeStateR4[3]+stakeStateR4[4]:
             logger.info("Too early for emission")
@@ -499,7 +506,10 @@ def emit(
 
         inBoxesRaw = []
         for box in [stakeStateBox["boxId"],stakePoolBox["boxId"],emissionBox["boxId"]]+list(getBoxesWithUnspentTokens(nErgAmount=int(0.001*nergsPerErg),emptyRegisters=True).keys()):
-            res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
+            # res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
+            async with Req() as r:
+                res = await r.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=headers)
+
             if res.ok:
                 inBoxesRaw.append(res.json()['bytes'])
             else:
@@ -512,7 +522,9 @@ def emit(
         }
         logger.info(tx)
 
-        res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)  
+        # res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), data=json.dumps(tx))  
+        async with Req() as r:
+            res = await r.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), data=json.dumps(tx))
         logger.info(res.content) 
 
         return {
@@ -548,7 +560,7 @@ async def stake(req: StakeRequest):
         )
 
         logger.debug(f'stake::get NFT box')
-        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
+        stakeStateBox = await getNFTBox(CFG.stakeStateNFT)
 
         logger.debug(f'stake::token amount')
         tokenAmount = int(req.amount*10**stakedTokenInfo["decimals"])
@@ -815,7 +827,7 @@ async def addstake(project: str, req: UnstakeRequest):
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
 
 @r.get("/{project}/status", name="staking:status-v2")
-def stakingStatus(project: str):
+async def stakingStatus(project: str):
     try:
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -827,9 +839,9 @@ def stakingStatus(project: str):
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
         config = stakingConfigs[project](appKit)
 
-        stakeStateBox = getNFTBox(config.stakeStateNFT)
+        stakeStateBox = await getNFTBox(config.stakeStateNFT)
         stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
-        stakePoolBox = getNFTBox(config.stakePoolNFT)
+        stakePoolBox = await getNFTBox(config.stakePoolNFT)
         stakePoolR4 = eval(stakePoolBox["additionalRegisters"]["R4"]["renderedValue"])
 
         totalStaked = stakeStateR4[0]
@@ -872,7 +884,10 @@ async def stakedv2(project: str, req: AddressList):
                 ok = True
                 data = cached
             else:
-                res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                # res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                async with Req() as r:
+                    res = await r.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
+                
                 ok = res.ok
                 if ok:
                     data = res.json()

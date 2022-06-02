@@ -1,7 +1,9 @@
-import requests
+import asyncio 
+
 from config import Config, Network  # api specific config
 from cache.cache import cache
 from api.utils.logger import logger, myself, LEIF
+from api.utils.aioreq import Req
 
 """
 ========================
@@ -189,13 +191,15 @@ def getTokenName(tokenId, prices):
     return None
 
 
-def getErgodexPoolBox():
+async def getErgodexPoolBox():
     cached = cache.get(f"ergodex_pool_{POOL_SAMPLE}")
     if cached:
         return cached
     res = {"items": []}
     try:
-        res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
+        # res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
+        async with Req() as r:
+            res = await r.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
         cache.set(f"ergodex_pool_{POOL_SAMPLE}", res)
     except:
         logger.error(f"ERR:getErgodexPoolBox: unable to find box")
@@ -244,9 +248,14 @@ def getErgodexTokenPriceByTokenId(tokenId: str):
     except:
         return {"id": tokenId, "name": "0xdead", "price": 0.0, "status": "error"}
 
+async def main():
+    async with Req() as r:
+        return await r.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
 
 if __name__ == "__main__":
-    res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/")
+    # res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/")
+    res = asyncio.run(main())
+
     boxes = list(map(explorerToErgoBox, res.json()["items"]))
     pools = parseValidPools(boxes)
     for pool in pools:

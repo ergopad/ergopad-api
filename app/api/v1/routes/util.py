@@ -1,4 +1,4 @@
-import requests
+import json
 
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Request, Depends, status
@@ -8,6 +8,7 @@ from smtplib import SMTP
 from config import Config, Network  # api specific config
 from core.auth import get_current_active_superuser
 from cache.cache import cache
+from api.utils.aioreq import Req
 from api.utils.logger import logger, myself, LEIF
 
 CFG = Config[Network]
@@ -32,11 +33,12 @@ class Ergoscript(BaseModel):
 # endregion CLASSES
 
 @r.post("/compileErgoscript", name="blockchain:sendPayment")
-def compileErgoscript(ergoscript: Ergoscript):
+async def compileErgoscript(ergoscript: Ergoscript):
     try:
-        script = {'source': ergoscript.script}
-        p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=dict(
-            headers, **{'api_key': CFG.ergopadApiKey}), timeout=2, json=script)
+        data = {'source': ergoscript.script}
+        # p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), timeout=2, json=script)
+        async with Req() as r:
+            p2s = await r.post(f'{CFG.node}/script/p2sAddress', headers=headers, data=json.dumps(data))
         if p2s.ok:
             return p2s.json()['address']
         else:
