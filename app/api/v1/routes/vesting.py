@@ -1,26 +1,22 @@
-from decimal import Decimal
-import requests, json, os
+import requests, json
 import fractions
 import re
-from sqlalchemy import create_engine
+
+from decimal import Decimal
 from starlette.responses import JSONResponse
 from api.v1.routes.staking import AddressList
 from core.auth import get_current_active_superuser 
-from wallet import Wallet, NetworkEnvironment # ergopad.io library
+from api.utils.wallet import Wallet
 from config import Config, Network # api specific config
 from fastapi import APIRouter, Depends, status
 from typing import List, Optional
 from pydantic import BaseModel
 from time import sleep, time
 from datetime import date, datetime, timezone, timedelta
-from api.v1.routes.asset import get_asset_current_price
-from base64 import b64encode
-from ergo.util import encodeLong, encodeString
-import uuid
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
-from api.utils.asyncrequests import Req
+from api.utils.aioreq import Req
 from api.utils.logger import logger, myself, LEIF
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
@@ -267,7 +263,7 @@ async def findVestingTokens(wallet:str):
 
                 # this must exist, or will be ignored
                 if 'R4' not in box['additionalRegisters']:
-                    logger.error(f'ERR:{myself()}: Missing register in box: {boxId}')
+                    logger.warning(f'ERR:{myself()}: Missing register in box: {boxId}')
 
                 else:
                     logger.log(LEIF, f'''BOX:{boxId}''')
