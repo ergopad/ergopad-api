@@ -4,9 +4,9 @@ import time, os
 from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+# from fastapi.openapi.utils import get_openapi
 
 from api.utils.logger import logger, myself, LEIF
-from api.utils.db import init_db, fetch
 
 from api.v1.routes.users         import users_router
 from api.v1.routes.auth          import auth_router
@@ -25,6 +25,8 @@ from api.v1.routes.announcements import announcement_router
 from api.v1.routes.tutorials     import tutorial_router
 from api.v1.routes.faq           import faq_router
 from api.v1.routes.notifications import notification_router
+
+from api.utils.db import dbExplorer, dbErgopad
 
 from core import config
 from core.auth import get_current_active_user
@@ -95,7 +97,7 @@ async def add_logging_and_process_time(req: Request, call_next):
                 insert into api_audit (request, host, port, application, response_time__ms)
                 values (:request, :host, :port, 'ergopad', :response_time__ms); 
             '''            
-            resAudit = await fetch(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
+            resAudit = await dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
 
         return resNext
 
@@ -105,7 +107,13 @@ async def add_logging_and_process_time(req: Request, call_next):
 
 @app.on_event('startup')
 async def startup():
-    await init_db()
+    await dbErgopad.connect()
+    await dbExplorer.connect()
+
+@app.on_event('shutdown')
+async def shutdown():
+    await dbErgopad.disconnect()
+    await dbExplorer.disconnect()
 
 @app.get('/debug/dbinfo')
 async def getDbInfo():
@@ -120,7 +128,7 @@ async def getDbInfo():
             from pg_settings 
             where name = :name;
         '''
-        res = await fetch(sql, {'name': 'port'})
+        res = await dbErgopad.fetch_one(sql, {'name': 'port'})
         return jsonable_encoder(res)
 
     except Exception as e:

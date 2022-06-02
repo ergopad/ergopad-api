@@ -1,5 +1,6 @@
 import requests
 
+from ast import literal_eval
 from starlette.responses import JSONResponse
 from api.utils.wallet import Wallet
 from config import Config, Network # api specific config
@@ -301,7 +302,7 @@ async def staked(req: AddressList):
             ok = False
             data = None
             cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
-            if False: # cached:
+            if cached:
                 ok = True
                 data = cached
             else:
@@ -332,23 +333,34 @@ async def staked(req: AddressList):
         else:
             checkBoxes = await getUnspentStakeBoxes()
             cache.set(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}", checkBoxes, CACHE_TTL)
+                
+        for box in checkBoxes:  
+            # this should exist, but mostly for logging
+            try: 
+                boxId = box['boxId']
+            except:
+                boxId = '<invalid>'
+                pass
 
-        for box in checkBoxes:
             if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
-                    if stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]] not in stakePerAddress:
-                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
-                    stakeBoxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
-                    cleanedBox = {
-                        'boxId': box["boxId"],
-                        'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
-                        'stakeAmount': box["assets"][1]["amount"]/10**2,
-                        'penaltyPct': validPenalty(stakeBoxR4[1]),
-                        'penaltyEndTime': int(stakeBoxR4[1]+8*week)
-                    }
-                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
-                    totalStaked += box["assets"][1]["amount"]/10**2
-                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
+                reg = dict(literal_eval(box["additionalRegisters"]))
+                if 'R5' not in reg:
+                    logger.warning(f'ERR:{myself()}: Missing R5 in box: {boxId}')
+                else:                
+                    if reg["R5"]["renderedValue"] in stakeKeys.keys():
+                        if stakeKeys[reg["R5"]["renderedValue"]] not in stakePerAddress:
+                            stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
+                        stakeBoxR4 = eval(reg["R4"]["renderedValue"])
+                        cleanedBox = {
+                            'boxId': box["boxId"],
+                            'stakeKeyId': reg["R5"]["renderedValue"],
+                            'stakeAmount': box["assets"][1]["amount"]/10**2,
+                            'penaltyPct': validPenalty(stakeBoxR4[1]),
+                            'penaltyEndTime': int(stakeBoxR4[1]+8*week)
+                        }
+                        stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
+                        totalStaked += box["assets"][1]["amount"]/10**2
+                        stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
 
         return {
             'totalStaked': totalStaked,
