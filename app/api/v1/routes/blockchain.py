@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from cache.cache import cache
 from api.utils.aioreq import Req
 from api.utils.logger import logger, myself, LEIF
-from api.utils.db import fetch
+from api.utils.db import dbErgopad, dbExplorer
 
 CFG = Config[Network]
 DEBUG = CFG.debug
@@ -49,6 +49,15 @@ async def getInfo():
     try:
         st = time() # stopwatch
         nodeInfo = {}
+
+        # not super useful, but example for async db call
+        sqlWallets = f'''
+            select count(distinct address) as i 
+            from wallets 
+            where network = :network
+        '''
+        resWallets = await dbErgopad.fetch_val(query=sqlWallets, values={'network': 'mainnet'})
+        nodeInfo['wallets'] = resWallets
 
         # ergonode
         res = requests.get(f'{CFG.node}/info', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), timeout=2)
@@ -174,9 +183,8 @@ async def sqlTokenValue(address, token_id):
                 join assets a on a.box_id = u.box_id
                 join tokens t on t.token_id = a.token_id
         """
-        # res = con.execute(sql).fetchone()
-        res = await fetch(sql, {'address': address, 'token_id': token_id}, 'explorer')
-        return res[0]['tokenValue']
+        res = await dbExplorer.fetch_one(sql, {'address': address, 'token_id': token_id})
+        return res['tokenValue']
 
     except:
         return 0
@@ -295,8 +303,8 @@ async def totalSupply(tokenId):
                 and a.token_id = :tokenId
                 and coalesce(a.value, 0) > 0 -- ignore nulls
         """
-        res = await fetch(sqlTotalSupply, {'tokenId': tokenId}, 'explorer')
-        totalSupply = res[0]['totalSupply']
+        res = await dbExplorer.fetch_one(sqlTotalSupply, {'tokenId': tokenId})
+        totalSupply = res['totalSupply']
 
         # set cache
         cache.set(f"get_api_blockchain_total_supply_{tokenId}", totalSupply) # default 15 min TTL
@@ -432,8 +440,7 @@ async def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
                     and i.box_id is null -- output with no input = unspent
                     and a.token_id = :tokenId
             """
-            # res = con.execute(sql).fetchall()
-            res = await fetch(sql, {'tokenId': tokenId})
+            res = await dbExplorer.fetch_all(sql, {'tokenId': tokenId})
             boxes = []
             for data in res:
                 boxes.append({ 
@@ -517,8 +524,7 @@ async def getUnspentStakeBoxesFromExplorerDB(stakeTokenId: str = STAKE_KEY_ID, s
                         and coalesce(a.value, 0) > 0
                 );
         """
-        # res = con.execute(sql).fetchall()
-        res = await fetch(sql, {'stakeAddress': stakeAddress, 'stakeTokenId': stakeTokenId}, 'explorer')
+        res = await dbExplorer.fetch_all(sql, {'stakeAddress': stakeAddress, 'stakeTokenId': stakeTokenId})
         boxes = {}
         for data in res:
             if data["box_id"] in boxes:

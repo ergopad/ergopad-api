@@ -3,6 +3,7 @@ aiohttp[speedups]
 aiofiles
 alembic
 amqp
+databases[asyncpg]
 asyncpg==0.24.0
 base58
 bcrypt

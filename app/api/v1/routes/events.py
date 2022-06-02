@@ -1,12 +1,11 @@
-import requests, json, os
+import requests
 
 from starlette.responses import JSONResponse 
-from sqlalchemy import create_engine
-from fastapi import APIRouter, Response, status #, Request
+from fastapi import APIRouter, status #, Request
 from time import time
-from datetime import datetime as dt
 from config import Config, Network # api specific config
 from api.utils.logger import logger, myself, LEIF
+from api.utils.db import dbErgopad, dbExplorer
 
 CFG = Config[Network]
 
@@ -54,22 +53,19 @@ def summary(eventName):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')
 
 @r.get("/info/{eventName}")
-def events(eventName):
+async def events(eventName):
     # return {'hello': 'world'}
     try:
+        where = ''
         if eventName != '_':
-            where = f"where name = {eventName!r}"
-        else:
-            where = ''
-        con = create_engine(DATABASE)
+            where = f"where name = :eventName"
+            
         sql = f"""
             select id, name, description, total_sigusd, buffer_sigusd, "walletId", "individualCap", "vestedTokenId", "vestingPeriods", "vestingPeriodDuration", "vestingPeriodType", "tokenPrice", "isWhitelist", start_dtz, end_dtz
             from events
             {where}
         """
-        # logger.debug(sql)
-        res = con.execute(sql)
-        # logger.debug(res)
+        res = await dbErgopad.fetch_all(sql, {'eventName': eventName})
         events = []
         for r in res:
             events.append({

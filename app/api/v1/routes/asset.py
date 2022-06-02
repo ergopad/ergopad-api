@@ -14,6 +14,7 @@ from config import Config, Network  # api specific config
 from cache.cache import cache
 from api.utils.aioreq import Req
 from api.utils.logger import logger, myself, LEIF
+from api.utils.db import dbErgopad, dbExplorer
 
 CFG = Config[Network]
 
@@ -216,8 +217,7 @@ async def get_asset_current_price(coin: str = None):
                         order by timestamp_utc 
                         desc limit 1
                     """
-                    res = con.execute(sqlFindLatestPrice)
-                    price = res.fetchone()[0]
+                    price = await dbErgopad.fetch_val(sqlFindLatestPrice)                    
                 except Exception as e:
                     logger.warning(
                         f"invalid price scraper price: {str(e)}"
@@ -306,19 +306,17 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
         resolution = int(stepSize * timeMap[stepUnit])
         logger.info(f'Fecthing history for resolution: {resolution}')
         table = "ergodex_ERG/ergodexToken_continuous_5m"
-        # sql
         sql = f"""
             SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta 
             FROM (
                 SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
                 FROM "{table}"
             ) as t
-            WHERE ((t.rownum - 1) %% {resolution}) = 0
+            WHERE ((t.rownum - 1)::int % {resolution}::int) = 0
             ORDER BY t.timestamp_utc DESC
             LIMIT {limit}
         """
-        logger.debug(f'exec sql: {sql}')
-        res = con.execute(sql).fetchall()
+        res = await dbErgopad.fetch_all(sql)
         result = []
         # filter tokens
         tokens = ("sigusd", "sigrsv", "erdoge", "lunadog", "ergopad", "neta")
@@ -392,19 +390,22 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
         resolution = int(stepSize * timeMap[stepUnit])
         logger.info(f'Fecthing history for resolution: {resolution}')
         table = "ergodex_ERG/ergodexToken_continuous_5m"
-        # sql
         sql = f"""
             SELECT timestamp_utc, sigusd, ergopad
             FROM (
                 SELECT timestamp_utc, sigusd, ergopad, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
                 FROM "{table}"
             ) as t
-            WHERE ((t.rownum - 1) %% {resolution}) = 0
+            WHERE ((t.rownum - 1)::int % {resolution}::int) = 0
             ORDER BY t.timestamp_utc DESC
             LIMIT {limit}
         """
+        sql = f"""
+            SELECT timestamp_utc, sigusd, ergopad, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
+            FROM "{table}"
+        """
         logger.debug(f'exec sql: {sql}')
-        res = con.execute(sql).fetchall()
+        res = await dbErgopad.fetch_all(sql)
 
         tokenData = {
             "token": pair,

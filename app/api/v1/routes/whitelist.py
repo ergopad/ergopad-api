@@ -12,7 +12,7 @@ from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
 from api.utils.logger import logger, myself, LEIF
-from api.utils.db import fetch
+from api.utils.db import dbErgopad, dbExplorer
 
 CFG = Config[Network]
 
@@ -89,11 +89,11 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             where evt.name = :eventName
                 and evt."isWhitelist" = 1
         """
-        resFindEvent = await fetch(sqlFindEvent, {'eventName': eventName})
+        resFindEvent = await dbErgopad.fetch_one(sqlFindEvent, {'eventName': eventName})
         # logger.warning(sqlFindEvent)
 
         # event not found
-        res = resFindEvent[0]
+        res = resFindEvent
         if resFindEvent == None or len(res) == 0:
             logger.warning(f'whitelist event, {eventName} not found.')
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'whitelist event, {eventName} not found.')
@@ -129,7 +129,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
 
         # continue with signup
         sqlFindWallet = f"select id from wallets where address = :address"
-        resFindWallet = await fetch(sqlFindWallet, {'address': whitelist.ergoAddress})
+        resFindWallet = await dbErgopad.fetch_all(sqlFindWallet, {'address': whitelist.ergoAddress})
         logger.debug(f'find wallet: {resFindWallet}')
 
         # does wallet exist, or do we need to create it?
@@ -150,8 +150,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 );
             '''
             logger.debug(sql)
-            res = await fetch(sql, {'address': whitelist.ergoAddress,'network': Network})
-            resFindWallet = await fetch(sqlFindWallet, {'address': whitelist.ergoAddress})
+            res = await dbErgopad.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
+            resFindWallet = await dbErgopad.fetch_all(sqlFindWallet, {'address': whitelist.ergoAddress})
             logger.debug(f'find wallet: {resFindWallet}')
 
         # found or created, get wallet address
@@ -166,7 +166,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 and "eventId" = :eventId
         '''
         # logger.warning(f'check signup: {sqlCheckSignup}')
-        resCheckSignup = await fetch(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId})
+        resCheckSignup = await dbErgopad.fetch_one(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId})
         logger.debug(f'check signup: {resCheckSignup}')
 
         # already signed up?
@@ -184,7 +184,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , 1 -- isWhitelist
                 );
             '''
-            resSignup = await fetch(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
+            resSignup = await dbErgopad.fetch_one(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
             logger.debug(f'signup: {resSignup}')
 
             # use obfuscated identifier to prevent bots
@@ -198,7 +198,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 )
             '''
             # logger.warning(f'ip hash: {sqlIpHash}')
-            resIpHash = await fetch(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
+            resIpHash = await dbErgopad.fetch_one(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
             logger.debug(f'ip hash: {resIpHash}')
 
             return {'status': 'success', 'detail': f'added to whitelist: {whitelist.sigValue} SigUSD.'}
@@ -255,7 +255,7 @@ async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user
             order by
                 wht.created_dtz;
         """
-        res = await fetch(sql, {'eventName': eventName})
+        res = await dbErgopad.fetch_one(sql, {'eventName': eventName})
         logger.debug(res)
         return {
             'status': 'success',

@@ -266,8 +266,7 @@ async def findVestingTokens(wallet:str):
                     logger.warning(f'ERR:{myself()}: Missing register in box: {boxId}')
 
                 else:
-                    logger.log(LEIF, f'''BOX:{boxId}''')
-                    
+                    # logger.log(LEIF, f'''BOX:{boxId}''')                    
                     if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
                         tokenId = box["assets"][0]["tokenId"]
                         if tokenId not in result:

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from time import time
 from config import Config, Network # api specific config
 from api.utils.logger import logger, myself, LEIF
+from api.utils.db import dbErgopad, dbExplorer
 
 CFG = Config[Network]
 
@@ -32,22 +33,21 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
     NOW = int(time())
 
     try:
-        con = create_engine(DATABASE)
         sql = f"""
             with evt as (
                 select id
                 from events
-                where name = {eventName!r}
+                where name = :eventName
             )
             , wal as (
                 select id, address
                 from wallets
-                where address = {wallet!r}
+                where address = :wallet
             )
             , pur as (
                 select "walletAddress", sum(coalesce("sigusdAmount", 0.0)) as "sigusdAmount"
                 from purchases
-                where "walletAddress" = {wallet!r}
+                where "walletAddress" = :wallet
                     and "assemblerStatus" = 'success'
                 group by "walletAddress"
             )
@@ -59,9 +59,7 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
                 left outer join pur on pur."walletAddress" = wal.address
             where wht."isWhitelist" = 1    
         """
-        logger.debug(sql)
-        res = con.execute(sql).fetchone()
-        logger.debug(res)
+        res = await dbErgopad.fetch_one(sql, {'eventName': eventName, 'wallet': wallet})
         remainingSigusd = res['remaining_sigusd']
         logger.info(f'sigusd: {remainingSigusd} remaining')
         if remainingSigusd == None:
