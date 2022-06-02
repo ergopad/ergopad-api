@@ -1,4 +1,5 @@
-import requests, json
+#import requests
+import json
 
 from decimal import Decimal
 from enum import Enum
@@ -60,9 +61,9 @@ async def getInfo():
         nodeInfo['wallets'] = resWallets
 
         # ergonode
-        res = requests.get(f'{CFG.node}/info', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), timeout=2)
-        # async with Req() as r:
-        #     res = await r.get(f'{CFG.node}/info', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
+        # res = requests.get(f'{CFG.node}/info', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), timeout=2)
+        async with Req() as r:
+            res = await r.get(f'{CFG.node}/info', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
         if res.ok:
             i = res.json()
             # nodeInfo['network'] = Network
@@ -94,9 +95,9 @@ async def getInfo():
 async def getTokenInfo(tokenId):
     # tkn = requests.get(f'{CFG.node}/wallet/balances/withUnconfirmed', headers=dict(headers, **{'api_key': CFG.apiKey})
     try:
-        tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
-        # async with Req() as r:
-        #     tkn = await r.get(f'{CFG.explorer}/tokens/{tokenId}', headers=dict(headers))
+        # tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
+        async with Req() as r:
+            tkn = await r.get(f'{CFG.explorer}/tokens/{tokenId}')
         
         return tkn.json()
     except Exception as e:
@@ -106,9 +107,9 @@ async def getTokenInfo(tokenId):
 @r.get("/boxInfo/{boxId}", name="blockchain:boxInfo")
 async def getBoxInfo(boxId):
     try:
-        box = requests.get(f'{CFG.explorer}/boxes/{boxId}')
-        # async with Req() as r:
-        #     box = await r.get(f'{CFG.explorer}/boxes/{boxId}')
+        # box = requests.get(f'{CFG.explorer}/boxes/{boxId}')
+        async with Req() as r:
+            box = await r.get(f'{CFG.explorer}/boxes/{boxId}')
         return box.json()
     except Exception as e:
         logger.error(f'ERR:{myself()}: invalid box request ({e})')
@@ -117,9 +118,9 @@ async def getBoxInfo(boxId):
 @r.get("/transactionInfo/{transactionId}", name="blockchain:transactionInfo")
 async def getTransactionInfo(transactionId):
     try:
-        tx = requests.get(f'{CFG.explorer}/transactions/{transactionId}')
-        # async with Req() as r:
-        #     tx = await r.get(f'{CFG.explorer}/transactions/{transactionId}')
+        # tx = requests.get(f'{CFG.explorer}/transactions/{transactionId}')
+        async with Req() as r:
+            tx = await r.get(f'{CFG.explorer}/transactions/{transactionId}')
         return tx.json()
     except Exception as e:
         logger.error(f'ERR:{myself()}: invalid tx info ({e})')
@@ -129,9 +130,9 @@ async def getTransactionInfo(transactionId):
 @r.get("/emissionAmount/{tokenId}", name="blockchain:emissionAmount")
 async def getEmmissionAmount(tokenId):
     try:
-        tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
-        # async with Req() as r:
-        #     tkn = await r.get(f'{CFG.explorer}/tokens/{tokenId}', headers=dict(headers))
+        # tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
+        async with Req() as r:
+            tkn = await r.get(f'{CFG.explorer}/tokens/{tokenId}')
         decimals = tkn.json()['decimals']
         emissionAmount = tkn.json()['emissionAmount'] / 10**decimals
         return emissionAmount
@@ -142,9 +143,10 @@ async def getEmmissionAmount(tokenId):
 
 @r.get("/ergusdoracle", name="blockchain:ergusdoracle")
 async def ergusdoracle():
-    res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
-    # async with Req() as r:
-    #         res = await r.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
+    # res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
+    async with Req() as r:
+            res = await r.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
+    
     return json.loads(res.json())
 
 # find value from token and address
@@ -318,9 +320,9 @@ async def getInputBoxes(boxes, txFormat: TXFormat):
     if txFormat==TXFormat.NODE:
         inBoxesRaw = []
         for box in boxes:
-            res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers), timeout=2)
-            # async with Req() as r:
-            #     res = await r.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=dict(headers))
+            # res = requests.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=headers, timeout=2)
+            async with Req() as r:
+                res = await r.get(f'{CFG.node}/utxo/withPool/byIdBinary/{box}', headers=headers)
             if res.ok:
                 inBoxesRaw.append(res.json()['bytes'])
             else:
@@ -329,9 +331,9 @@ async def getInputBoxes(boxes, txFormat: TXFormat):
     if txFormat==TXFormat.EIP_12:
         unsignedInputs = []
         for ibox in boxes:
-            res = requests.get(f'{CFG.node}/utxo/withPool/byId/{ibox}', headers=dict(headers), timeout=2)
-            # async with Req() as r:
-            #     res = await r.get(f'{CFG.node}/utxo/withPool/byId/{ibox}', headers=dict(headers))
+            # res = requests.get(f'{CFG.node}/utxo/withPool/byId/{ibox}', headers=headers, timeout=2)
+            async with Req() as r:
+                res = await r.get(f'{CFG.node}/utxo/withPool/byId/{ibox}', headers=headers)
             if res.ok:
                 box = res.json()
                 unsignedInputs.append({
@@ -348,8 +350,18 @@ async def getInputBoxes(boxes, txFormat: TXFormat):
         return unsignedInputs
     return None
 
-def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
+async def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
     try:
+        if includeMempool:
+            async with Req() as r:
+                memRes = await r.get(f'{CFG.explorer}/mempool/boxes/unspent')
+
+            for memBox in memRes.json():
+                if "assets" in memBox:
+                    for token in memBox["assets"]:
+                        if token["tokenId"]==tokenId:
+                            return memBox
+
         if includeMempool:
             ok = False
             memResContent = None
@@ -362,9 +374,9 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
                 else:
                     # same api hit independent of token id
                     # cache for 5 mins for snapshots only
-                    memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
-                    # async with Req() as r:
-                    #     memRes = await r.get(f'{CFG.explorer}/mempool/boxes/unspent')
+                    # memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+                    async with Req() as r:
+                        memRes = await r.get(f'{CFG.explorer}/mempool/boxes/unspent')
                     
                     ok = memRes.ok
                     if ok:
@@ -376,9 +388,9 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
                     cache.set("get_explorer_mempool_boxes_unspent", content, 600) # 10 mins
             else:
                 # if cached is not allowed force api call
-                memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
-                # async with Req() as r:
-                #     memRes = await r.get(f'{CFG.explorer}/mempool/boxes/unspent')
+                # memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
+                async with Req() as r:
+                    memRes = await r.get(f'{CFG.explorer}/mempool/boxes/unspent')
                 ok = memRes.ok
                 if ok:
                     memResContent = memRes.content.decode('utf-8')
@@ -402,10 +414,10 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
                             if token["tokenId"]==tokenId:
                                 return memBox
 
-        res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}')
+        # res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}')        
+        async with Req() as r:
+            res = await r.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}')
         
-        # async with Req() as r:
-        #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}')
         logger.debug('Explorer api call: return from boxes/unspent/byTokenId')
         if res.ok:
             items = res.json()["items"]
@@ -546,9 +558,9 @@ async def getUnspentStakeBoxesFromExplorerDB(stakeTokenId: str = STAKE_KEY_ID, s
 # GET token boxes legacy code using explorer API
 async def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100):
     try:
-        res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}?offset={offset}&limit={limit}')
-        # async with Req() as r:
-        #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}?offset={offset}&limit={limit}')
+        # res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}?offset={offset}&limit={limit}')
+        async with Req() as r:
+            res = await r.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}?offset={offset}&limit={limit}')
         if res.ok:
             items = res.json()["items"]
             return items
@@ -564,9 +576,9 @@ async def getBoxesWithUnspentTokens(nErgAmount=-1, tokenId=CFG.ergopadTokenId, t
         foundNErgAmount = 0
         ergopadTokenBoxes = {}
 
-        res = requests.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
-        # async with Req() as r:
-        #     res = await r.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
+        # res = requests.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
+        async with Req() as r:
+            res = await r.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
         if res.ok:
             assets = res.json()
             for ast in assets:
@@ -608,7 +620,7 @@ async def getBoxesWithUnspentTokens(nErgAmount=-1, tokenId=CFG.ergopadTokenId, t
 
 # ergoscripts
 @r.get("/script/{name}", name="blockchain:getErgoscript")
-def getErgoscript(name, params={}):
+async def getErgoscript(name, params={}):
     try:
         script = None
         if name == 'alwaysTrue':
@@ -626,17 +638,16 @@ def getErgoscript(name, params={}):
             with open(f'contracts/{name}.es') as f:
                 unformattedScript = f.read()
             script = unformattedScript.format(**params)
-        request = {'source': script}
+        
+        data = {'source': script}
 
         logger.debug(f'Script: {script}')
         # get the P2S address (basically a hash of the script??)
-        p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=headers, json=request)
-        # async with Req() as r:
-        #     res = await r.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
+        # p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=headers, json=request)
+        async with Req() as r:
+            p2s = await r.post(f'{CFG.node}/script/p2sAddress', headers=headers, data=json.dumps(data))
         logger.debug(f'p2s: {p2s.content}')
         smartContract = p2s.json()['address']
-        # logger.debug(f'smart contract: {smartContract}')
-        # logger.info(f':::{name}:::{script}')
 
         return smartContract
 
