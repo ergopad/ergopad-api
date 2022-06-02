@@ -28,9 +28,9 @@ services:
       - ergopad-net
     ### DEV
     # command: tail /dev/null -f
-    command: uvicorn main:app --reload --workers 1 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors
+    # command: uvicorn main:app --reload --workers 1 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors
     ### PROD
-    # command: unitd-debug --no-daemon --control unix:/var/run/control.unit.sock
+    command: unitd-debug --no-daemon --control unix:/var/run/control.unit.sock
     # command: unitd --no-daemon --control unix:/var/run/control.unit.sock
     ### TESTED
     # command: uvicorn main:app --workers 4 --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '52.72.64.235'

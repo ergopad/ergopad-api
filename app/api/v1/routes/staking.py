@@ -302,7 +302,7 @@ async def staked(req: AddressList):
             ok = False
             data = None
             cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
-            if False: # cached:
+            if cached:
                 ok = True
                 data = cached
             else:
@@ -328,7 +328,7 @@ async def staked(req: AddressList):
         # getTokenBoxes from cache
         checkBoxes = []
         cached = cache.get(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}")
-        if False: # cached:
+        if cached:
             checkBoxes = cached
         else:
             checkBoxes = await getUnspentStakeBoxes()
