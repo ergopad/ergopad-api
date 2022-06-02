@@ -89,7 +89,7 @@ class Address:
   def fromBase58(self, address):
     addr = Address(address)
     if (not addr.isValid()):
-      logger.error(f'Invalid Ergo address ${address}')
+      logger.warning(f'Invalid Ergo address ${address}')
     return addr
 
   def fromBytes(self, bytes):    

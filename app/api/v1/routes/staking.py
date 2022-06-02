@@ -44,7 +44,7 @@ CFG["stakedTokenID"] = "d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791
 
 '''
 How to find remaining stakers (use emissionNFT):
-> from requests import get; eval(get('http://172.31.8.85:9090/api/v1/boxes/unspent/byTokenId/0549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab9195eed59').json()['items'][0]['additionalRegisters']['R4']['renderedValue'])[2]
+> from requests import get; eval(get('http://explorer-api:8080/api/v1/boxes/unspent/byTokenId/0549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab9195eed59').json()['items'][0]['additionalRegisters']['R4']['renderedValue'])[2]
 '''
 
 nergsPerErg = 10**9
@@ -296,6 +296,7 @@ async def staked(req: AddressList):
         stakeKeys = {}
         for address in req.addresses:
             logger.warning(f'ADDRESS: {address}')
+
             # cache balance confirmed
             ok = False
             data = None
@@ -309,6 +310,7 @@ async def staked(req: AddressList):
                 if ok:
                     data = res.json()
                     cache.set(f"get_staking_staked_addresses_{address}_balance_confirmed", data, CACHE_TTL)
+
             if ok:
                 if 'tokens' in data:
                     for token in data["tokens"]:
@@ -328,8 +330,9 @@ async def staked(req: AddressList):
         if cached:
             checkBoxes = cached
         else:
-            checkBoxes = getUnspentStakeBoxes()
+            checkBoxes = await getUnspentStakeBoxes()
             cache.set(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}", checkBoxes, CACHE_TTL)
+
         for box in checkBoxes:
             if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
                 if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
@@ -749,6 +752,7 @@ async def bootstrapStaking(req: BootstrapRequest):
 async def stakeV2(project: str, req: StakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     config = stakingConfigs[project](appKit)
     assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals))
@@ -841,6 +845,7 @@ def stakingStatus(project: str):
 async def stakedv2(project: str, req: AddressList):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+
     CACHE_TTL = 600 # 10 mins
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     config = stakingConfigs[project](appKit)
@@ -907,7 +912,6 @@ async def stakedv2(project: str, req: AddressList):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine stake amount, try again shortly or contact support if error continues.')
 
-
 @r.post("/staked-v2/", name="staking:all-staked-v2")
 async def allstakedv2(req: AddressList):
     try:
@@ -932,7 +936,6 @@ async def allstakedv2(req: AddressList):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}::{str(e)}')
 
-
 ########################################
 ########## STAKING CONFIG CMS ##########
 ########################################
@@ -951,7 +954,6 @@ async def staking_config_list_cms(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
 
-
 @r.get("/config/{project}", response_model_exclude_none=True, name="staking-cms:config")
 async def staking_config_cms(
     project: str,
@@ -966,7 +968,6 @@ async def staking_config_cms(
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
-
 
 @r.post("/config", response_model_exclude_none=True, name="staking-cms:create-config")
 async def staking_config_create_cms(
@@ -984,7 +985,6 @@ async def staking_config_create_cms(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
 
-
 @r.put("/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config")
 async def staking_config_edit_cms(
     id: int,
@@ -1001,7 +1001,6 @@ async def staking_config_edit_cms(
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
-
 
 @r.delete(
     "/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config"

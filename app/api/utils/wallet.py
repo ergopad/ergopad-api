@@ -5,7 +5,7 @@ from base64 import b64encode
 from pyblake2 import blake2b
 from ecdsa import SECP256k1
 from config import dotdict, Network, Config
-from api.utils.logger.er import logger.er, myself, LEIF
+from api.utils.logger import logger, myself, LEIF
 
 ### INIT
 curve = SECP256k1
@@ -86,7 +86,7 @@ class Wallet:
   def fromBase58(self, address):
     addr = Wallet(address)
     if (not addr.isValid()):
-      logger.error(f'Invalid Ergo address ${address}')
+      logger.warning(f'Invalid Ergo address ${address}')
     return addr
 
   def fromBytes(self, bytes):

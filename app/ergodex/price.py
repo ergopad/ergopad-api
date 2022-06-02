@@ -1,7 +1,7 @@
 import requests
 from config import Config, Network  # api specific config
 from cache.cache import cache
-from api.utils.logger.er import logger.er, myself, LEIF
+from api.utils.logger import logger, myself, LEIF
 
 """
 ========================

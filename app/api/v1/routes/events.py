@@ -50,7 +50,7 @@ def summary(eventName):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid events request ({res.text})')
 
     except Exception as e:
-        logger..error(f'ERR:{myself()}: events info {e}')
+        logger.error(f'ERR:{myself()}: events info {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')
 
 @r.get("/info/{eventName}")
@@ -67,9 +67,9 @@ def events(eventName):
             from events
             {where}
         """
-        # logger..debug(sql)
+        # logger.debug(sql)
         res = con.execute(sql)
-        # logger..debug(res)
+        # logger.debug(res)
         events = []
         for r in res:
             events.append({
@@ -92,5 +92,5 @@ def events(eventName):
         return events
 
     except:
-        logger..error(f'ERR:{myself()}: events info {e}')
+        logger.error(f'ERR:{myself()}: events info {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')

@@ -43,7 +43,7 @@ def compileErgoscript(ergoscript: Ergoscript):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid ergoscript:\n{ergoscript.script}')
 
     except Exception as e:
-        logger..error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
+        logger.error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to compile ergoscript ({e})')
 
 class InvalidateCacheRequest(BaseModel):

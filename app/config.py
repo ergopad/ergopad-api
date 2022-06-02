@@ -92,7 +92,7 @@ Config = {
     'vestingDuration_1' : 30, # days
     'connectionString'  : f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DBNM')}",
     'csErgopad'         : f"postgresql+asyncpg://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DBNM')}",
-    'csExplorer'        : f"postgresql://{os.getenv('EXPLORER_USER')}:{os.getenv('EXPLORER_PASSWORD')}@{os.getenv('EXPLORER_HOST')}:{os.getenv('EXPLORER_PORT')}/{os.getenv('EXPLORER_DBNM')}",
+    'csExplorer'        : f"postgresql+asyncpg://{os.getenv('EXPLORER_USER')}:{os.getenv('EXPLORER_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('EXPLORER_DBNM')}",
     'redisHost'         : os.getenv('REDIS_HOST'),
     'redisPort'         : os.getenv('REDIS_PORT'),
     'jwtSecret'         : os.getenv('JWT_SECRET_KEY'),

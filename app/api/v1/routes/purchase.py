@@ -1,7 +1,3 @@
-import requests, json, os
-import math
-import uuid
-
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
 from api.utils.wallet import Wallet
@@ -10,6 +6,7 @@ from typing import Optional
 from pydantic import BaseModel
 from time import time
 from config import Config, Network # api specific config
+from api.utils.logger import logger, myself, LEIF
 
 CFG = Config[Network]
 
@@ -62,11 +59,11 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
                 left outer join pur on pur."walletAddress" = wal.address
             where wht."isWhitelist" = 1    
         """
-        logger..debug(sql)
+        logger.debug(sql)
         res = con.execute(sql).fetchone()
-        logger..debug(res)
+        logger.debug(res)
         remainingSigusd = res['remaining_sigusd']
-        logger..info(f'sigusd: {remainingSigusd} remaining')
+        logger.info(f'sigusd: {remainingSigusd} remaining')
         if remainingSigusd == None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid wallet or allowance; wallet may not exist or remaining value is non-numeric')
         else:
@@ -78,12 +75,5 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
             }
 
     except Exception as e:
-        logger..error(f'ERR:{myself()}: allowance remaining ({e})')
+        logger.error(f'ERR:{myself()}: allowance remaining ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: allowance remaining ({e})')
-
-    logger..info(f'sigusd: 0 (not found)')
-    return {'wallet': wallet, 'sigusd': 0.0, 'message': 'not found'}
-
-### MAIN
-if __name__ == '__main__':
-    print('API routes: ...')

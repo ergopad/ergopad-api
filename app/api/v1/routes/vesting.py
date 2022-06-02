@@ -263,7 +263,7 @@ async def findVestingTokens(wallet:str):
 
                 # this must exist, or will be ignored
                 if 'R4' not in box['additionalRegisters']:
-                    logger.error(f'ERR:{myself()}: Missing register in box: {boxId}')
+                    logger.warning(f'ERR:{myself()}: Missing register in box: {boxId}')
 
                 else:
                     logger.log(LEIF, f'''BOX:{boxId}''')
