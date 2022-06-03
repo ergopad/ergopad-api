@@ -24,10 +24,11 @@ from cache.cache import cache
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
 
-from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaTestConfig
+from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaConfig, PaideiaTestConfig
 
 stakingConfigs = {
-    'paideiatest': PaideiaTestConfig
+    'paideiatest': PaideiaTestConfig,
+    'paideia': PaideiaConfig
 }
 
 staking_router = r = APIRouter()
