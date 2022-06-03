@@ -96,7 +96,6 @@ class BootstrapRequest(BaseModel):
 
 @r.post("/compound", name="staking:unstake")
 def compound(req: APIKeyRequest, request: Request,):
-    logger.log(LEIF, f'compund request: {APIKeyRequest}')
     return JSONResponse(content='Compound not longer available via API.', status_code=status.HTTP_410_GONE)
 
 @r.post("/unstake", name="staking:unstake")
@@ -343,14 +342,14 @@ async def staked(req: AddressList):
                 pass
 
             if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                reg = dict(literal_eval(box["additionalRegisters"]))
+                reg = literal_eval(box["additionalRegisters"])
                 if 'R5' not in reg:
                     logger.warning(f'ERR:{myself()}: Missing R5 in box: {boxId}')
                 else:                
                     if reg["R5"]["renderedValue"] in stakeKeys.keys():
                         if stakeKeys[reg["R5"]["renderedValue"]] not in stakePerAddress:
                             stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
-                        stakeBoxR4 = eval(reg["R4"]["renderedValue"])
+                        stakeBoxR4 = literal_eval(reg["R4"]["renderedValue"])
                         cleanedBox = {
                             'boxId': box["boxId"],
                             'stakeKeyId': reg["R5"]["renderedValue"],

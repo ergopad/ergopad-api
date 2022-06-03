@@ -1,3 +1,4 @@
+import requests
 import typing as t
 
 from sqlalchemy import create_engine
@@ -12,7 +13,6 @@ from datetime import datetime
 from ergodex.price import getErgodexTokenPrice, getErgodexTokenPriceByTokenId
 from config import Config, Network  # api specific config
 from cache.cache import cache
-from api.utils.aioreq import Req
 from api.utils.logger import logger, myself, LEIF
 from api.utils.db import dbErgopad, dbExplorer
 
@@ -45,9 +45,7 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
     try:
         # get balance from ergo explorer api
         logger.debug(f'find balance for [blockchain], address: {address}...')
-        # res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/total')
-        async with Req() as r:
-            res = await r.get(f'{CFG.explorer}/addresses/{address}/balance/total')
+        res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/total')
 
         # handle invalid address or other error
         wallet_assets = {}
@@ -152,9 +150,7 @@ async def get_asset_current_price(coin: str = None):
 
         # SigUSD/SigRSV
         if coin in ("sigusd", "sigrsv"):
-            # res = requests.get(ergo_watch_api).json()
-            async with Req() as r:
-                res = await r.get(ergo_watch_api)
+            res = requests.get(ergo_watch_api).json()
 
             if res.ok:
                 if coin == "sigusd":
@@ -227,9 +223,7 @@ async def get_asset_current_price(coin: str = None):
             if price == None:
                 logger.warning("fallback to price from exchange")
                 try:
-                    # res = requests.get(f"{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}")
-                    async with Req() as r:
-                        res = await r.get(f"{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}")
+                    res = requests.get(f"{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}")
                     price = res.json()[coin][currency]
                 except Exception as e:
                     logger.warning(f"invalid coingecko price: {str(e)}")
@@ -462,9 +456,7 @@ async def get_all_assets(request: Request) -> None:
             if wallet == 'ethereum':
                 for address in wallets[wallet]:
                     try:
-                        # res = requests.get(f'https://api.ethplorer.io/getAddressInfo/{address}?apiKey=freekey')
-                        async with Req() as r:
-                            res = await r.get(f'https://api.ethplorer.io/getAddressInfo/{address}?apiKey=freekey')
+                        res = requests.get(f'https://api.ethplorer.io/getAddressInfo/{address}?apiKey=freekey')
                         assets[wallet].append({
                             "address": address,
                             "balance": {

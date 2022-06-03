@@ -16,7 +16,6 @@ from datetime import date, datetime, timezone, timedelta
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
-from api.utils.aioreq import Req
 from api.utils.logger import logger, myself, LEIF
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
@@ -259,9 +258,6 @@ async def findVestingTokens(wallet:str):
         address = CFG.vestingContract
         offset = 0
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
-        logger.log(LEIF, f'''TOTAL:{res.json()['total']}''')
-        # async with Req() as r:
-        #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers))
         while res.ok:
             boxes = res.json()["items"]
             for box in boxes:
@@ -277,7 +273,6 @@ async def findVestingTokens(wallet:str):
                     logger.warning(f'ERR:{myself()}: Missing register in box: {boxId}')
 
                 else:
-                    # logger.log(LEIF, f'''BOX:{boxId}''')                    
                     if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
                         tokenId = box["assets"][0]["tokenId"]
                         if tokenId not in result:
@@ -305,8 +300,6 @@ async def findVestingTokens(wallet:str):
             if len(boxes) == 500:
                 offset += 500
                 res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
-                # async with Req() as r:
-                #     res = await r.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers))
             else:
                 break
         
