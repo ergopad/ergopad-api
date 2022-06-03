@@ -4,7 +4,6 @@ from config import Config, Network
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from sigmastate.lang.exceptions import InterpreterException
 from org.ergoplatform.appkit import Address
-import logging
 
 CFG = Config[Network]
 DEBUG = True # CFG.DEBUG

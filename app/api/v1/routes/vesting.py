@@ -1,25 +1,22 @@
-from decimal import Decimal
-import requests, json, os
+import requests, json
 import fractions
 import re
-from sqlalchemy import create_engine
+
+from decimal import Decimal
 from starlette.responses import JSONResponse
 from api.v1.routes.staking import AddressList
 from core.auth import get_current_active_superuser 
-from wallet import Wallet, NetworkEnvironment # ergopad.io library
+from api.utils.wallet import Wallet
 from config import Config, Network # api specific config
 from fastapi import APIRouter, Depends, status
 from typing import List, Optional
 from pydantic import BaseModel
 from time import sleep, time
 from datetime import date, datetime, timezone, timedelta
-from api.v1.routes.asset import get_asset_current_price
-from base64 import b64encode
-from ergo.util import encodeLong, encodeString
-import uuid
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
+from api.utils.logger import logger, myself, LEIF
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoClientException, InputBox
@@ -43,15 +40,6 @@ duration_ms = {
     'day': 24*60*60*1000,
     'minute': 60*1000
 }
-
-#region LOGGING
-import logging
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-import inspect
-myself = lambda: inspect.stack()[1][3]
-#endregion LOGGING
 
 class Vestment(BaseModel):
     wallet: str
@@ -122,7 +110,7 @@ def getScenario(scenarioName: str):
         return
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: get scenario ({e})')
+        logger.error(f'ERR:{myself()}: get scenario ({e})')
         return
 
 def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
@@ -144,15 +132,15 @@ def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
                 }
 
             # make async request to assembler
-            # logging.info(request); exit(); # !! testing
-            logging.debug(request)
+            # logger.info(request); exit(); # !! testing
+            logger.debug(request)
             res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}), json=request)   
-            logging.debug(res)
+            logger.debug(res)
             result = res.content
             return result
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to redeem transaction ({e})')
+        logger.error(f'ERR:{myself()}: unable to redeem transaction ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem transaction')
 
 # redeem/disburse tokens after lock
@@ -169,59 +157,70 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2) #This needs to be put in a loop in case of more than 500 boxes
         while res.ok:
             rJson = res.json()
-            logging.info(rJson['total'])
+            logger.info(rJson['total'])
             for box in rJson['items']:
-                if len(inBoxes) >= numBoxes:
-                    redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
-                    inBoxes = []
-                    outBoxes = []
-                    txBoxTotal_nerg = 0
-                    sleep(10)
-                redeemPeriod = int(box['additionalRegisters']['R5']['renderedValue'])
-                redeemAmount = int(box['additionalRegisters']['R6']['renderedValue'])
-                vestingStart = int(box['additionalRegisters']['R7']['renderedValue'])
-                totalVested = int(box['additionalRegisters']['R8']['renderedValue'])
-                timeVested = int(currentTime - vestingStart)
-                periods = int(timeVested/redeemPeriod)
-                redeemed = totalVested - box['assets'][0]['amount']
-                totalRedeemable = periods * redeemAmount
-                redeemableTokens = totalVested - redeemed if (totalVested-totalRedeemable) < redeemAmount else totalRedeemable - redeemed
-                if redeemableTokens > 0:
-                    nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
-                    buyerAddress = nodeRes['address']
-                    if (totalVested-(redeemableTokens+redeemed))>0:
+                # this should exist, but mostly for logging
+                try: 
+                    boxId = box['boxId']
+                except:
+                    boxId = '<invalid>'
+                    pass
+
+                if 'R4' not in box['additionalRegisters']:
+                    logger.warning(f'ERR:{myself()}: Missing register in box: {boxId}')
+
+                else:
+                    if len(inBoxes) >= numBoxes:
+                        redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
+                        inBoxes = []
+                        outBoxes = []
+                        txBoxTotal_nerg = 0
+                        sleep(10)
+                    redeemPeriod = int(box['additionalRegisters']['R5']['renderedValue'])
+                    redeemAmount = int(box['additionalRegisters']['R6']['renderedValue'])
+                    vestingStart = int(box['additionalRegisters']['R7']['renderedValue'])
+                    totalVested = int(box['additionalRegisters']['R8']['renderedValue'])
+                    timeVested = int(currentTime - vestingStart)
+                    periods = int(timeVested/redeemPeriod)
+                    redeemed = totalVested - box['assets'][0]['amount']
+                    totalRedeemable = periods * redeemAmount
+                    redeemableTokens = totalVested - redeemed if (totalVested-totalRedeemable) < redeemAmount else totalRedeemable - redeemed
+                    if redeemableTokens > 0:
+                        nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
+                        buyerAddress = nodeRes['address']
+                        if (totalVested-(redeemableTokens+redeemed))>0:
+                            outBox = {
+                                'address': box['address'],
+                                'value': box['value'],
+                                'registers': {
+                                    'R4': box['additionalRegisters']['R4']['serializedValue'],
+                                    'R5': box['additionalRegisters']['R5']['serializedValue'],
+                                    'R6': box['additionalRegisters']['R6']['serializedValue'],
+                                    'R7': box['additionalRegisters']['R7']['serializedValue'],
+                                    'R8': box['additionalRegisters']['R8']['serializedValue'],
+                                    'R9': box['additionalRegisters']['R9']['serializedValue']
+                                },
+                                'assets': [{
+                                    'tokenId': box['assets'][0]['tokenId'],
+                                    'amount': (totalVested-(redeemableTokens+redeemed))
+                                }]
+                            }
+                            txBoxTotal_nerg += box['value']
+                            outBoxes.append(outBox)
                         outBox = {
-                            'address': box['address'],
-                            'value': box['value'],
-                            'registers': {
-                                'R4': box['additionalRegisters']['R4']['serializedValue'],
-                                'R5': box['additionalRegisters']['R5']['serializedValue'],
-                                'R6': box['additionalRegisters']['R6']['serializedValue'],
-                                'R7': box['additionalRegisters']['R7']['serializedValue'],
-                                'R8': box['additionalRegisters']['R8']['serializedValue'],
-                                'R9': box['additionalRegisters']['R9']['serializedValue']
-                            },
+                            'address': str(buyerAddress),
+                            'value': txFee_nerg,
                             'assets': [{
                                 'tokenId': box['assets'][0]['tokenId'],
-                                'amount': (totalVested-(redeemableTokens+redeemed))
-                            }]
+                                'amount': redeemableTokens
+                        }],
+                        'registers': {
+                            'R4': box['additionalRegisters']['R9']['serializedValue']
                         }
-                        txBoxTotal_nerg += box['value']
+                        }
                         outBoxes.append(outBox)
-                    outBox = {
-                        'address': str(buyerAddress),
-                        'value': txFee_nerg,
-                        'assets': [{
-                            'tokenId': box['assets'][0]['tokenId'],
-                            'amount': redeemableTokens
-                    }],
-                    'registers': {
-                        'R4': box['additionalRegisters']['R9']['serializedValue']
-                    }
-                    }
-                    outBoxes.append(outBox)
-                    txBoxTotal_nerg += txFee_nerg
-                    inBoxes.append(box['boxId'])
+                        txBoxTotal_nerg += txFee_nerg
+                        inBoxes.append(box['boxId'])
 
             if len(res.json()['items']) == 500 and len(inBoxes) < 200:
                 offset += 500
@@ -230,7 +229,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
                 break
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem.')
 
     # redeem
@@ -246,15 +245,13 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
         })
     
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to redeem token ({e})')
+        logger.error(f'ERR:{myself()}: unable to redeem token ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem token.')
 
 # find vesting/vested tokens
 @r.get("/vested/{wallet}", name="vesting:findVestedTokens")
-def findVestingTokens(wallet:str):
+async def findVestingTokens(wallet:str):
     try:
-        #tokenId = CFG.ergopadTokenId
-        total = 0
         result = {}
         userWallet = Wallet(wallet)
         userErgoTree = userWallet.ergoTree()
@@ -262,34 +259,47 @@ def findVestingTokens(wallet:str):
         offset = 0
         res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
         while res.ok:
-            # returns array of dicts
-            for box in res.json()["items"]:
-                if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
-                    tokenId = box["assets"][0]["tokenId"]
-                    if tokenId not in result:
-                        result[tokenId] = {}
-                        result[tokenId]['name'] = box["assets"][0]["name"]
-                        result[tokenId]['totalVested'] = 0.0
-                        result[tokenId]['outstanding'] = {}
-                    tokenDecimals = 10**box["assets"][0]["decimals"]
-                    initialVestedAmount = int(box["additionalRegisters"]["R8"]["renderedValue"])/tokenDecimals
-                    nextRedeemAmount = int(box["additionalRegisters"]["R6"]["renderedValue"])/tokenDecimals
-                    remainingVested = int(box["assets"][0]["amount"])/tokenDecimals
-                    result[tokenId]['totalVested'] += remainingVested
-                    nextRedeemTimestamp = (((initialVestedAmount-remainingVested)/nextRedeemAmount+1)*int(box["additionalRegisters"]["R5"]["renderedValue"])+int(box["additionalRegisters"]["R7"]["renderedValue"]))/1000.0
-                    nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
-                    while remainingVested > 0:
-                        if nextRedeemDate not in result[tokenId]['outstanding']:
-                            result[tokenId]['outstanding'][nextRedeemDate] = {}
-                            result[tokenId]['outstanding'][nextRedeemDate]['amount'] = 0.0
-                        redeemAmount = nextRedeemAmount if remainingVested >= 2*nextRedeemAmount else remainingVested
-                        result[tokenId]['outstanding'][nextRedeemDate]['amount'] += round(redeemAmount,int(box["assets"][0]["decimals"]))
-                        remainingVested -= redeemAmount
-                        nextRedeemTimestamp += int(box["additionalRegisters"]["R5"]["renderedValue"])/1000.0
+            boxes = res.json()["items"]
+            for box in boxes:
+                # this should exist, but mostly for logging
+                try: 
+                    boxId = box['boxId']
+                except:
+                    boxId = '<invalid>'
+                    pass
+
+                # this must exist, or will be ignored
+                if 'R4' not in box['additionalRegisters']:
+                    logger.warning(f'ERR:{myself()}: Missing register in box: {boxId}')
+
+                else:
+                    if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
+                        tokenId = box["assets"][0]["tokenId"]
+                        if tokenId not in result:
+                            result[tokenId] = {}
+                            result[tokenId]['name'] = box["assets"][0]["name"]
+                            result[tokenId]['totalVested'] = 0.0
+                            result[tokenId]['outstanding'] = {}
+                        tokenDecimals = 10**box["assets"][0]["decimals"]
+                        initialVestedAmount = int(box["additionalRegisters"]["R8"]["renderedValue"])/tokenDecimals
+                        nextRedeemAmount = int(box["additionalRegisters"]["R6"]["renderedValue"])/tokenDecimals
+                        remainingVested = int(box["assets"][0]["amount"])/tokenDecimals
+                        result[tokenId]['totalVested'] += remainingVested
+                        nextRedeemTimestamp = (((initialVestedAmount-remainingVested)/nextRedeemAmount+1)*int(box["additionalRegisters"]["R5"]["renderedValue"])+int(box["additionalRegisters"]["R7"]["renderedValue"]))/1000.0
                         nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
-            if len(res.json()['items']) == 500:
+                        while remainingVested > 0:
+                            if nextRedeemDate not in result[tokenId]['outstanding']:
+                                result[tokenId]['outstanding'][nextRedeemDate] = {}
+                                result[tokenId]['outstanding'][nextRedeemDate]['amount'] = 0.0
+                            redeemAmount = nextRedeemAmount if remainingVested >= 2*nextRedeemAmount else remainingVested
+                            result[tokenId]['outstanding'][nextRedeemDate]['amount'] += round(redeemAmount,int(box["assets"][0]["decimals"]))
+                            remainingVested -= redeemAmount
+                            nextRedeemTimestamp += int(box["additionalRegisters"]["R5"]["renderedValue"])/1000.0
+                            nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
+
+            if len(boxes) == 500:
                 offset += 500
-                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={0}&limit=500', headers=dict(headers), timeout=2)
+                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
             else:
                 break
         
@@ -311,12 +321,12 @@ def findVestingTokens(wallet:str):
         })
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to build vesting request ({e})')
+        logger.error(f'ERR:{myself()}: unable to build vesting request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
 @r.get('/unspent', name="vesting:unspent")
 def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
-    logging.debug(f'TOKEN::{tokenId}')
+    logger.debug(f'TOKEN::{tokenId}')
     ergopadTokenBoxes = {}
     try:
         res = requests.get(f'{CFG.node}/wallet/boxes/unspent?minInclusionHeight=0&minConfirmations={(0, -1)[allowMempool]}', headers=dict(headers, **{'api_key': CFG.ergopadApiKey}))
@@ -325,21 +335,19 @@ def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
                 try: 
                     for asset in box['box']['assets']:
                         try:
-                            assert asset['tokenId'] == tokenId
-                            assert asset['amount'] > 0
-
-                            boxId = box['box']['boxId']
-                            if boxId in ergopadTokenBoxes:
-                                ergopadTokenBoxes[boxId].append(asset)
-                            else: 
-                                ergopadTokenBoxes[boxId] = [asset]
+                            if asset['tokenId'] == tokenId and asset['amount'] > 0:
+                                boxId = box['box']['boxId']
+                                if boxId in ergopadTokenBoxes:
+                                    ergopadTokenBoxes[boxId].append(asset)
+                                else: 
+                                    ergopadTokenBoxes[boxId] = [asset]
                     
                         except: pass # tokens
 
                 except: pass # assets
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find tokens for exchange ({e})')
+        logger.error(f'ERR:{myself()}: unable to find tokens for exchange ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find tokens for exchange.')
 
     return ergopadTokenBoxes
@@ -455,7 +463,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         m = re.search('reason: NotEnoughErgsError\(not enough boxes to meet ERG needs (\d+) \(found only (\d+)\),\d+\)\)', str(e))
         if m is not None:
              content = f'transaction requires {(m.group(0)/10e9):,.3} ergs, and only {(m.group(1)/10e9):,.3} ergs were found.'
-        logging.error(f'ERR:{myself()}: {content} ({e})')
+        logger.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 
@@ -528,7 +536,7 @@ async def vested(req: AddressList):
                     totalRedeemable     = int(periods * totalVested / numberOfPeriods)
 
                 redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
-                vestedTokenInfo = getTokenInfo(box["assets"][0]["tokenId"])
+                vestedTokenInfo = await getTokenInfo(box["assets"][0]["tokenId"])
                 if vestedTokenInfo["name"] not in vested:
                     vested[vestedTokenInfo["name"]] = []
                 vested[vestedTokenInfo["name"]].append({
@@ -542,7 +550,7 @@ async def vested(req: AddressList):
         return vested
         
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to vest with NFT.')
 
 class BootstrapRoundRequest(BaseModel):
@@ -565,7 +573,7 @@ async def bootstrapRound(
     current_user=Depends(get_current_active_superuser)
 ):
     try:
-        vestedToken = getTokenInfo(req.tokenId)
+        vestedToken = await getTokenInfo(req.tokenId)
         vestedTokenAmount = int(req.roundAllocation*10**vestedToken["decimals"])
 
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/",CFG.ergopadApiKey)
@@ -678,7 +686,7 @@ async def bootstrapRound(
         }
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: Unable to bootstrap round. ({e})')
+        logger.error(f'ERR:{myself()}: Unable to bootstrap round. ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to bootstrap round.')
 
 
@@ -693,11 +701,11 @@ async def activeRounds():
         for proxyAddress in proxyAddresses:
             proxyBoxes = appKit.getUnspentBoxes(proxyAddress)
             for proxyBox in proxyBoxes:
-                logging.info(proxyBox)
+                logger.info(proxyBox)
                 tokens = list(proxyBox.getTokens())
-                roundInfo = getTokenInfo(tokens[0].getId().toString())
+                roundInfo = await getTokenInfo(tokens[0].getId().toString())
                 if len(tokens) > 1:
-                    vestedInfo = getTokenInfo(tokens[1].getId().toString())
+                    vestedInfo = await getTokenInfo(tokens[1].getId().toString())
                     whitelistTokenId = list(proxyBox.getRegisters())[3].toHex()[4:]
                     result['activeRounds'].append({
                         'roundName': roundInfo["name"], 
@@ -710,7 +718,7 @@ async def activeRounds():
         return result
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: Unable to determine proper round. ({e})')
+        logger.error(f'ERR:{myself()}: Unable to determine proper round. ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to determine proper round.')
 
 class RequiredNergTokensRequest(BaseModel):
@@ -727,7 +735,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
         roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
-        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        vestedTokenInfo = await getTokenInfo(vestedTokenId)
         oracleInfo = await ergusdoracle()
         nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
         sigUsdDecimals = int(2)
@@ -752,7 +760,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
         return result
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: Unable to calculate required tokens for transaction. ({e})')
+        logger.error(f'ERR:{myself()}: Unable to calculate required tokens for transaction. ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to calculate required tokens for transaction.')
 
 class VestFromProxyRequest(RequiredNergTokensRequest):   
@@ -771,13 +779,12 @@ async def contribute(req: VestFromProxyRequest):
         proxyBox = getNFTBox(req.proxyNFT)
         if proxyBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
-        #roundInfo = getTokenInfo(req.proxyNFT)
         whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
         vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
         roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
-        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        vestedTokenInfo = await getTokenInfo(vestedTokenId)
         nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
@@ -797,7 +804,7 @@ async def contribute(req: VestFromProxyRequest):
             userInputs = appKit.getBoxesById(req.utxos)
             if not ErgoAppKit.boxesCovered(userInputs,int(22e6+nergRequired),tokensToSpend):
                 userInputs = appKit.boxesToSpend(req.address,int(22e6+nergRequired),tokensToSpend)
-        logging.info("0")
+        logger.info("0")
         if userInputs is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
 
@@ -807,7 +814,7 @@ async def contribute(req: VestFromProxyRequest):
             {
                 "_ErgUSDOracleNFT": ErgoAppKit.ergoValue(ergUsdOracleNFT, ErgoValueT.ByteArrayFromHex).getValue()    
             })
-        logging.info("1")
+        logger.info("1")
         proxyOutput = appKit.buildOutBox(
             value=int(22e6)+nergRequired,
             tokens=tokensToSpend,
@@ -818,7 +825,7 @@ async def contribute(req: VestFromProxyRequest):
             ],
             contract=appKit.contractFromTree(userProxyNFTLockedVestingContractTree)
         )
-        logging.info("2")
+        logger.info("2")
         unsignedTx = appKit.buildUnsignedTransaction(
             inputs=userInputs,
             outputs=[proxyOutput],
@@ -844,7 +851,7 @@ async def contribute(req: VestFromProxyRequest):
         m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', str(e))
         if m is not None:
             content = f'Blockchain is synchronizing, please try again shortly (ref: {m.group(1)})'
-        logging.error(f'ERR:{myself()}: {content} ({e})')
+        logger.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 @r.post('/vestFromProxy', name="vesting:vestFromProxy")
@@ -858,14 +865,14 @@ async def vestFromProxy(req: VestFromProxyRequest):
         proxyBox = getNFTBox(req.proxyNFT)
         if proxyBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve proxy box')
-        roundInfo = getTokenInfo(req.proxyNFT)
+        roundInfo = await getTokenInfo(req.proxyNFT)
         whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
         vestedTokenId = proxyBox["additionalRegisters"]["R5"]["renderedValue"]
         sellerAddress = proxyBox["additionalRegisters"]["R6"]["renderedValue"]
         roundParameters = eval(proxyBox["additionalRegisters"]["R4"]["renderedValue"])
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
-        vestedTokenInfo = getTokenInfo(vestedTokenId)
+        vestedTokenInfo = await getTokenInfo(vestedTokenId)
         nErgPerUSD = int(oracleInfo["additionalRegisters"]["R4"]["renderedValue"])
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
@@ -966,7 +973,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
         m = re.search('\(org.ergoplatform.appkit.ErgoClientException: Cannot load UTXO box (.+?)\)', str(e))
         if m is not None:
             content = f'Blockchain is synchronizing, please try again shortly (ref: {m.group(1)})'
-        logging.error(f'ERR:{myself()}: {content} ({e})')
+        logger.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 

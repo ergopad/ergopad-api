@@ -1,29 +1,29 @@
 import requests
-import asyncio
 
+from ast import literal_eval
 from starlette.responses import JSONResponse
-from wallet import Wallet
+from api.utils.wallet import Wallet
 from config import Config, Network # api specific config
-from fastapi import APIRouter, Request, Depends, Response, encoders, status
+from fastapi import APIRouter, Request, Depends, status
 from typing import List
 from pydantic import BaseModel
-from time import sleep, time
+from time import time
 from datetime import datetime
 from base64 import b64encode
-from ergo.util import encodeLongArray, encodeString, hexstringToB64
+from api.utils.ergo import encodeLongArray, hexstringToB64
 from hashlib import blake2b
-from api.v1.routes.blockchain import TXFormat, getInputBoxes, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
+from api.v1.routes.blockchain import TXFormat, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentStakeBoxes
 from db.session import get_db
 from db.crud.staking_config import get_all_staking_config, get_staking_config_by_name, create_staking_config, edit_staking_config, delete_staking_config
-from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
-from core.auth import get_current_active_superuser, get_current_active_user
+from db.schemas.stakingConfig import CreateAndUpdateStakingConfig
+from core.auth import get_current_active_user
+from cache.staking import AsyncSnapshotEngine 
+from api.utils.logger import logger, myself, LEIF
 from core.security import get_md5_hash
-from cache.staking import AsyncSnapshotEngine
 from cache.cache import cache
 
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
-
 from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaTestConfig
 
 stakingConfigs = {
@@ -43,6 +43,11 @@ CFG["emissionNFT"] = "0549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab919
 CFG["stakeTokenID"] =  "1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee"
 CFG["stakedTokenID"] = "d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413"
 
+'''
+How to find remaining stakers (use emissionNFT):
+> from requests import get; eval(get('http://explorer-api:8080/api/v1/boxes/unspent/byTokenId/0549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab9195eed59').json()['items'][0]['additionalRegisters']['R4']['renderedValue'])[2]
+'''
+
 nergsPerErg = 10**9
 headers = {'Content-Type': 'application/json'}
 
@@ -54,15 +59,6 @@ duration_ms = {
     'minute': 60*1000
 }
 #endregion INIT
-
-#region LOGGING
-import logging
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-import inspect
-myself = lambda: inspect.stack()[1][3]
-#endregion LOGGING
 
 #region CLASSES
 class UnstakeRequest(BaseModel):
@@ -98,43 +94,47 @@ class BootstrapRequest(BaseModel):
     cycleDuration_ms: int
 #endregion CLASSES
 
-@r.post("/unstake/", name="staking:unstake")
+@r.post("/compound", name="staking:unstake")
+def compound(req: APIKeyRequest, request: Request,):
+    return JSONResponse(content='Compound not longer available via API.', status_code=status.HTTP_410_GONE)
+
+@r.post("/unstake", name="staking:unstake")
 async def unstake(req: UnstakeRequest):
     try:
-        logging.debug('unstake::appKit')
+        logger.debug('unstake::appKit')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
 
-        logging.debug('unstake::get NFT stakeStateBox')
+        logger.debug('unstake::get NFT stakeStateBox')
         stakeStateBox = getNFTBox(CFG.stakeStateNFT)
         if stakeStateBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to find stake state box')
         res = requests.get(f'{CFG.explorer}/boxes/{req.stakeBox}')
 
         if res.ok:
-            logging.debug('unstake::find stakeBox')
+            logger.debug('unstake::find stakeBox')
             stakeBox = res.json()
             currentTime = int(time()*1000)
             amountToUnstake = min(int(req.amount*10**2),stakeBox["assets"][1]["amount"])
             remaining = stakeBox["assets"][1]["amount"]-amountToUnstake
-            logging.debug(f'unstake::find remaining=={remaining}')
+            logger.debug(f'unstake::find remaining=={remaining}')
             if remaining > 0 and remaining < 1000:
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Remaining amount needs to be at least 10 ErgoPad')
             stakeBoxR4 = eval(stakeBox["additionalRegisters"]["R4"]["renderedValue"])
             stakeTime = stakeBoxR4[1] 
             
-            logging.debug('unstake::get NFG userBox')
+            logger.debug('unstake::get NFG userBox')
             userBox = getNFTBox(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
             timeStaked = currentTime - stakeTime
             weeksStaked = int(timeStaked/week)
             penalty = int(0 if (weeksStaked >= 8) else amountToUnstake*5/100  if (weeksStaked >= 6) else amountToUnstake*125/1000 if (weeksStaked >= 4) else amountToUnstake*20/100 if (weeksStaked >= 2) else amountToUnstake*25/100)
             partial = amountToUnstake < stakeBox["assets"][1]["amount"]
 
-            logging.debug('unstake::stake state R4')
+            logger.debug('unstake::stake state R4')
             stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
             if stakeStateR4[1] != stakeBoxR4[0]:
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'This stake box has a pending compound transaction. Compounding needs to happen before unstaking.')
             
-            logging.debug('unstake::build outBox 1')
+            logger.debug('unstake::build outBox 1')
             outputs = []
             outputs.append(appKit.buildOutBox(
                 value = stakeStateBox["value"],
@@ -153,7 +153,7 @@ async def unstake(req: UnstakeRequest):
                 contract=appKit.contractFromAddress(stakeStateBox["address"])
             ))
                
-            logging.debug('unstake::build outBox 2')
+            logger.debug('unstake::build outBox 2')
             outputs.append(appKit.buildOutBox(
                 value=int(0.01*nergsPerErg),
                 tokens={CFG.stakedTokenID:amountToUnstake-penalty,stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1} if (partial) else {CFG.stakedTokenID:amountToUnstake-penalty},
@@ -161,7 +161,7 @@ async def unstake(req: UnstakeRequest):
                 contract=appKit.contractFromAddress(userBox["address"])
             ))
                 
-            try: logging.debug(f'unstake::partial=={partial}')
+            try: logger.debug(f'unstake::partial=={partial}')
             except: pass
             assetsToBurn = {}
             if partial:
@@ -182,7 +182,7 @@ async def unstake(req: UnstakeRequest):
             if penalty > 0:
                 assetsToBurn[CFG.stakedTokenID] = penalty
 
-            logging.debug('unstake::address')
+            logger.debug('unstake::address')
             if req.address == "":
                 changeAddress = userBox["address"]
             else:
@@ -191,7 +191,7 @@ async def unstake(req: UnstakeRequest):
             userInputs = List[InputBox]
             tokensToSpend = {stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1}
 
-            logging.debug('unstake::count utxos')
+            logger.debug('unstake::count utxos')
             if len(req.utxos) == 0:
                 if len(req.addresses) == 0:
                     userInputs = appKit.boxesToSpend(req.address,int(2e7),tokensToSpend)
@@ -207,7 +207,7 @@ async def unstake(req: UnstakeRequest):
             keyBox = None
             otherBoxes = []
 
-            logging.debug('unstake::each user input')
+            logger.debug('unstake::each user input')
             for box in userInputs:
                 keyFound = False
                 for token in box.getTokens():
@@ -217,7 +217,7 @@ async def unstake(req: UnstakeRequest):
                 if not keyFound:
                     otherBoxes.append(box)
 
-            logging.debug('unstake::other boxes')
+            logger.debug('unstake::other boxes')
             userInputs = [keyBox] + list(otherBoxes)
 
             userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(2e7),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
@@ -226,9 +226,9 @@ async def unstake(req: UnstakeRequest):
 
             unsignedTx = appKit.buildUnsignedTransaction(inputs+userInputs,outputs,int(1e6),Address.create(changeAddress).getErgoAddress(),tokensToBurn=assetsToBurn)
             
-            logging.debug('unstake::txFormat')
+            logger.debug('unstake::txFormat')
             if req.txFormat == TXFormat.EIP_12:
-                logging.debug('unstake::EIP_12')
+                logger.debug('unstake::EIP_12')
                 result = {
                     'penalty': (penalty/100),
                     'unsignedTX': ErgoAppKit.unsignedTxToJson(unsignedTx)
@@ -237,7 +237,7 @@ async def unstake(req: UnstakeRequest):
                 return result
 
             if req.txFormat == TXFormat.ERGO_PAY:
-                logging.debug('unstake::ERGO_PAY')
+                logger.debug('unstake::ERGO_PAY')
                 reducedTx = appKit.reducedTx(unsignedTx)
                 ergoPaySigningRequest = ErgoAppKit.formErgoPaySigningRequest(
                     reducedTx,
@@ -249,10 +249,10 @@ async def unstake(req: UnstakeRequest):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake box')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
-@r.get("/snapshot/", name="staking:snapshot")
+@r.get("/snapshot", name="staking:snapshot")
 def snapshot(
     request: Request,
     current_user=Depends(get_current_active_user)
@@ -280,7 +280,7 @@ def snapshot(
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch snapshot')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to snapshot, try again shortly or contact support if error continues.')
 
 def validPenalty(startTime: int):
@@ -289,12 +289,14 @@ def validPenalty(startTime: int):
     weeksStaked = int(timeStaked/week)
     return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
-@r.post("/staked/", name="staking:staked")
+@r.post("/staked", name="staking:staked")
 async def staked(req: AddressList):
     CACHE_TTL = 600 # 10 mins
     try:
         stakeKeys = {}
         for address in req.addresses:
+            logger.warning(f'ADDRESS: {address}')
+
             # cache balance confirmed
             ok = False
             data = None
@@ -308,6 +310,7 @@ async def staked(req: AddressList):
                 if ok:
                     data = res.json()
                     cache.set(f"get_staking_staked_addresses_{address}_balance_confirmed", data, CACHE_TTL)
+
             if ok:
                 if 'tokens' in data:
                     for token in data["tokens"]:
@@ -327,24 +330,36 @@ async def staked(req: AddressList):
         if cached:
             checkBoxes = cached
         else:
-            checkBoxes = getUnspentStakeBoxes()
+            checkBoxes = await getUnspentStakeBoxes()
             cache.set(f"get_staking_staked_token_boxes_{CFG.stakeTokenID}", checkBoxes, CACHE_TTL)
-        for box in checkBoxes:
+                
+        for box in checkBoxes:  
+            # this should exist, but mostly for logging
+            try: 
+                boxId = box['boxId']
+            except:
+                boxId = '<invalid>'
+                pass
+
             if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
-                    if stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]] not in stakePerAddress:
-                        stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
-                    stakeBoxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
-                    cleanedBox = {
-                        'boxId': box["boxId"],
-                        'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
-                        'stakeAmount': box["assets"][1]["amount"]/10**2,
-                        'penaltyPct': validPenalty(stakeBoxR4[1]),
-                        'penaltyEndTime': int(stakeBoxR4[1]+8*week)
-                    }
-                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
-                    totalStaked += box["assets"][1]["amount"]/10**2
-                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
+                reg = literal_eval(box["additionalRegisters"])
+                if 'R5' not in reg:
+                    logger.warning(f'ERR:{myself()}: Missing R5 in box: {boxId}')
+                else:                
+                    if reg["R5"]["renderedValue"] in stakeKeys.keys():
+                        if stakeKeys[reg["R5"]["renderedValue"]] not in stakePerAddress:
+                            stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
+                        stakeBoxR4 = literal_eval(reg["R4"]["renderedValue"])
+                        cleanedBox = {
+                            'boxId': box["boxId"],
+                            'stakeKeyId': reg["R5"]["renderedValue"],
+                            'stakeAmount': box["assets"][1]["amount"]/10**2,
+                            'penaltyPct': validPenalty(stakeBoxR4[1]),
+                            'penaltyEndTime': int(stakeBoxR4[1]+8*week)
+                        }
+                        stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
+                        totalStaked += box["assets"][1]["amount"]/10**2
+                        stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
 
         return {
             'totalStaked': totalStaked,
@@ -352,10 +367,10 @@ async def staked(req: AddressList):
         }
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
 
-@r.get("/status/", name="staking:status")
+@r.get("/status", name="staking:status")
 def stakingStatus():
     try:
         # check cache
@@ -382,131 +397,11 @@ def stakingStatus():
         return ret
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
-def compoundTX(appKit: ErgoAppKit, stakeBoxes: List[str],stakeBoxesOutput: List[OutBox],totalReward: int,emissionBox, emissionR4):
-    try:
-        emissionAssets = {
-                        CFG.emissionNFT: 1
-                    }
-        if totalReward < emissionBox["assets"][1]["amount"]:
-            emissionAssets[CFG.stakedTokenID] = emissionBox["assets"][1]["amount"]-totalReward
-
-        emissionOutput = appKit.buildOutBox(
-            value=emissionBox["value"],
-            tokens=emissionAssets,
-            registers=[ErgoAppKit.ergoValue([
-                emissionR4[0],
-                emissionR4[1],
-                emissionR4[2]-len(stakeBoxes),
-                emissionR4[3]],ErgoValueT.LongArray)
-            ],
-            contract=appKit.contractFromAddress(emissionBox["address"]))
-
-        txFee = int(max(CFG.txFee,(0.001+0.0005*len(stakeBoxesOutput))*nergsPerErg))
-
-        inputs = appKit.getBoxesById([emissionBox["boxId"]]+stakeBoxes+list(getBoxesWithUnspentTokens(nErgAmount=txFee,emptyRegisters=True).keys()))
-
-        unsignedTx = appKit.buildUnsignedTransaction(
-            inputs=inputs,
-            outputs=[emissionOutput]+stakeBoxesOutput,
-            fee=txFee,
-            sendChangeTo=Address.create(CFG.ergopadWallet).getErgoAddress()
-        )
-
-        return unsignedTx
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to compound, try again shortly or contact support if error continues.')
-
-@r.post("/compound/", name="staking:compound")
-async def compound(
-    req: APIKeyRequest,
-    request: Request,
-    # current_user=Depends(get_current_active_superuser)
-):
-    try:
-        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
-        stakeBoxes = []
-        stakeBoxesOutput = []
-        totalReward = 0
-        compoundTransactions = []
-        # emmission box contains current staking info        
-        emissionBox = getNFTBox(CFG.emissionNFT)
-        emissionR4 = eval(emissionBox["additionalRegisters"]["R4"]["renderedValue"])
-        
-        # emission box R4[2] contains current remaining stakers
-        if emissionR4[2] <= 0: 
-            return {'remainingStakers': 0}
-        else:
-            logging.debug(f'remaining stakers: {emissionR4[2]}')
-
-        # iterate over all staking boxes
-        checkBoxes = getUnspentStakeBoxes()
-        for box in checkBoxes:
-            # make sure token exists, and ??
-            if box["assets"][0]["tokenId"] == CFG.stakeTokenID:
-                boxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
-                if boxR4[0] == emissionR4[1]:
-
-                    # calc rewards and build tx
-                    stakeBoxes.append(box["boxId"])
-                    stakeReward = int(box["assets"][1]["amount"] * emissionR4[3] / emissionR4[0])
-                    totalReward += stakeReward
-                    stakeBoxesOutput.append(appKit.buildOutBox(
-                        value=box["value"],
-                        tokens={
-                            CFG.stakeTokenID: 1,
-                            CFG.stakedTokenID: box["assets"][1]["amount"] + stakeReward
-                        },
-                        registers=[
-                            ErgoAppKit.ergoValue([boxR4[0]+1,boxR4[1]],ErgoValueT.LongArray),
-                            ErgoAppKit.ergoValue(box["additionalRegisters"]["R5"]["renderedValue"],ErgoValueT.ByteArrayFromHex)
-                        ],
-                        contract=appKit.contractFromAddress(box["address"])
-                    ))
-
-            # every <numBoxes>, go ahead and submit tx
-            txId = None
-            if len(stakeBoxes)>=req.numBoxes:
-                retriesLeft = 10
-                while retriesLeft > 0:
-                    try:
-                        unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
-                        signedTX = appKit.signTransactionWithNode(unsignedTx)
-                        txId = appKit.sendTransaction(signedTX)
-                        retriesLeft = 0
-                    except Exception as e:
-                        utx = unsignedTx or '[NOPE]'
-                        retriesLeft -= 1
-                        await asyncio.sleep(3)
-                if txId is None:
-                    return {'status':'error', 'remainingBoxes': emissionR4[2], 'compoundTx': compoundTransactions}
-                compoundTransactions.append(txId)
-                emissionR4[2]=emissionR4[2]-len(stakeBoxes)
-                emissionBox["assets"][1]["amount"] = emissionBox["assets"][1]["amount"]-totalReward
-                emissionBox["boxId"] = signedTX.getOutputsToSpend()[0].getId().toString()
-                stakeBoxes = []
-                stakeBoxesOutput = []
-                totalReward = 0
-
-        if len(stakeBoxes) > 0: 
-            unsignedTx = compoundTX(appKit, stakeBoxes, stakeBoxesOutput, totalReward, emissionBox, emissionR4)
-            signedTX = appKit.signTransactionWithNode(unsignedTx)
-            txId = appKit.sendTransaction(signedTX)
-            compoundTransactions.append(txId)
-            emissionR4[2]=emissionR4[2]-len(stakeBoxes)
-            
-        return {'status': 'success', 'remainingBoxes': emissionR4[2], 'compoundTx': compoundTransactions}
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to compound, try again shortly or contact support if error continues.')
-
-@r.post("/emit/", name="staking:emit")
-async def emit(
+@r.post("/emit", name="staking:emit")
+def emit(
     req: APIKeyRequest,
     request: Request,
     # current_user=Depends(get_current_active_superuser)
@@ -522,14 +417,14 @@ async def emit(
         if emissionR4[2] > 0:
             return {'remainingStakersToBeCompounded': emissionR4[2]}
 
-        logging.info(stakeStateBox)
-        logging.info(stakePoolBox)
-        logging.info(emissionBox)
+        logger.info(stakeStateBox)
+        logger.info(stakePoolBox)
+        logger.info(emissionBox)
 
         currentTime = requests.get(f'{CFG.node}/blocks/lastHeaders/1', headers=dict(headers),timeout=2).json()[0]['timestamp']
 
         if currentTime < stakeStateR4[3]+stakeStateR4[4]:
-            logging.info("Too early for emission")
+            logger.info("Too early for emission")
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Too early for a new emission')
 
         newStakePoolAmount = stakePoolBox["assets"][1]["amount"] - stakePoolR4[0]
@@ -614,10 +509,10 @@ async def emit(
             'fee': int(0.001*nergsPerErg),
             'inputsRaw': inBoxesRaw
         }
-        logging.info(tx)
+        logger.info(tx)
 
         res = requests.post(f'{CFG.node}/wallet/transaction/send', headers=dict(headers, **{'api_key': req.apiKey}), json=tx)  
-        logging.info(res.content) 
+        logger.info(res.content) 
 
         return {
             'stakers': stakeStateR4[2],
@@ -628,19 +523,19 @@ async def emit(
         }
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to emit, try again shortly or contact support if error continues.')
 
-@r.post("/stake/", name="staking:stake")
+@r.post("/stake", name="staking:stake")
 async def stake(req: StakeRequest):
     try:
-        logging.debug(f'stake::staked token info')
-        stakedTokenInfo = getTokenInfo(CFG.stakedTokenID)
+        logger.debug(f'stake::staked token info')
+        stakedTokenInfo = await getTokenInfo(CFG.stakedTokenID)
 
-        logging.debug(f'stake::appkit')
+        logger.debug(f'stake::appkit')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
 
-        logging.debug(f'stake::stakeAppkit.es')
+        logger.debug(f'stake::stakeAppkit.es')
         with open(f'contracts/stakeAppkit.es') as f:
             script = f.read()
         stakeTree = appKit.compileErgoScript(
@@ -651,13 +546,13 @@ async def stake(req: StakeRequest):
             }
         )
 
-        logging.debug(f'stake::get NFT box')
+        logger.debug(f'stake::get NFT box')
         stakeStateBox = getNFTBox(CFG.stakeStateNFT)
 
-        logging.debug(f'stake::token amount')
+        logger.debug(f'stake::token amount')
         tokenAmount = int(req.amount*10**stakedTokenInfo["decimals"])
         
-        logging.debug(f'stake::r4')
+        logger.debug(f'stake::r4')
         r4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
         stakeStateOutput = appKit.buildOutBox(
             value=stakeStateBox["value"],
@@ -673,7 +568,7 @@ async def stake(req: StakeRequest):
             contract=appKit.contractFromAddress(stakeStateBox["address"])
         )
 
-        logging.debug(f'stake::build outbox stakeOutput')
+        logger.debug(f'stake::build outbox stakeOutput')
         stakeOutput = appKit.buildOutBox(
             value=int(0.001*nergsPerErg),
             tokens={
@@ -691,7 +586,7 @@ async def stake(req: StakeRequest):
         userInputs = List[InputBox]
         tokensToSpend = {CFG.stakedTokenID: tokenAmount}
 
-        try: logging.debug(f'stake::count utxos=={req.utxos}')
+        try: logger.debug(f'stake::count utxos=={req.utxos}')
         except: pass
         if len(req.utxos) == 0:
             if len(req.addresses) == 0:
@@ -705,7 +600,7 @@ async def stake(req: StakeRequest):
         if userInputs is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
 
-        logging.debug('stake::mint token')
+        logger.debug('stake::mint token')
         userOutput = appKit.mintToken(
             value=int(0.01*nergsPerErg),
             tokenId=stakeStateBox["boxId"],
@@ -716,7 +611,7 @@ async def stake(req: StakeRequest):
             contract=appKit.contractFromTree(userInputs[0].getErgoTree())
         )
         
-        logging.debug('stake::build outbox for fee')
+        logger.debug('stake::build outbox for fee')
         feeOutput = appKit.buildOutBox(
             value=int(0.25*nergsPerErg),
             tokens=None,
@@ -724,11 +619,11 @@ async def stake(req: StakeRequest):
             contract=appKit.contractFromAddress(CFG.ergopadWallet)
         )
 
-        logging.debug('stake::inputs/outputs')
+        logger.debug('stake::inputs/outputs')
         inputs = appKit.getBoxesById([stakeStateBox["boxId"]])+userInputs
         outputs = [stakeStateOutput,stakeOutput,userOutput,feeOutput]
 
-        logging.debug('stake::build utx')
+        logger.debug('stake::build utx')
         unsignedTx = appKit.buildUnsignedTransaction(
             inputs=inputs,
             outputs=outputs,
@@ -736,13 +631,13 @@ async def stake(req: StakeRequest):
             sendChangeTo=Address.create(req.wallet).getErgoAddress()
         )
 
-        logging.debug(f'stake::txFormat=={req.txFormat}')
+        logger.debug(f'stake::txFormat=={req.txFormat}')
         if req.txFormat == TXFormat.EIP_12:
-            logging.debug('stake::utx to json')
+            logger.debug('stake::utx to json')
             return ErgoAppKit.unsignedTxToJson(unsignedTx)
                 
         if req.txFormat == TXFormat.ERGO_PAY:
-            logging.debug('stake::reduced tx')
+            logger.debug('stake::reduced tx')
             reducedTx = appKit.reducedTx(unsignedTx)
             ergoPaySigningRequest = ErgoAppKit.formErgoPaySigningRequest(
                 reducedTx,
@@ -752,35 +647,35 @@ async def stake(req: StakeRequest):
             return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to stake, try again shortly or contact support if error continues.')
 
 # bootstrap staking setup
-@r.post("/bootstrap/", name="staking:bootstrap")
+@r.post("/bootstrap", name="staking:bootstrap")
 async def bootstrapStaking(req: BootstrapRequest):
     try:
-        stakedToken = getTokenInfo(req.stakedTokenID)
+        stakedToken = await getTokenInfo(req.stakedTokenID)
         stakedTokenDecimalMultiplier = 10**stakedToken["decimals"]
         
-        stakeStateNFT = getTokenInfo(req.stakeStateNFT)
+        stakeStateNFT = await getTokenInfo(req.stakeStateNFT)
         if (stakeStateNFT["name"] != f'{stakedToken["name"]} Stake State'):
             return({"success": False, "Error": f"Wrong name for stake state NFT {stakeStateNFT['name']}"})
         if (stakeStateNFT["emissionAmount"]>1):
             return({"success": False, "Error": f"There should only be one {stakeStateNFT['name']}"})
 
-        stakePoolNFT = getTokenInfo(req.stakePoolNFT)
+        stakePoolNFT = await getTokenInfo(req.stakePoolNFT)
         if (stakePoolNFT["name"] != f'{stakedToken["name"]} Stake Pool'):
             return({"success": False, "Error": f"Wrong name for stake pool NFT {stakePoolNFT['name']}"})
         if (stakePoolNFT["emissionAmount"]>1):
             return({"success": False, "Error": f"There should only be one {stakePoolNFT['name']}"})
 
-        emissionNFT = getTokenInfo(req.emissionNFT)
+        emissionNFT = await getTokenInfo(req.emissionNFT)
         if (emissionNFT["name"] != f'{stakedToken["name"]} Emission'):
             return({"success": False, "Error": f"Wrong name for emission NFT {emissionNFT['name']}"})
         if (emissionNFT["emissionAmount"]>1):
             return({"success": False, "Error": f"There should only be one {emissionNFT['name']}"})
 
-        stakeTokenID = getTokenInfo(req.stakeTokenID)
+        stakeTokenID = await getTokenInfo(req.stakeTokenID)
         if (stakeTokenID["name"] != f'{stakedToken["name"]} Stake Token'):
             return({"success": False, "Error": f"Wrong name for stake token {stakeTokenID['name']}"})
         if (stakeTokenID["emissionAmount"]<1000000000):
@@ -861,13 +756,14 @@ async def bootstrapStaking(req: BootstrapRequest):
         return(res)
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
 
-@r.post("/{project}/stake/", name="staking:stake-v2")
+@r.post("/{project}/stake", name="staking:stake-v2")
 async def stakeV2(project: str, req: StakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     config = stakingConfigs[project](appKit)
     assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals))
@@ -881,7 +777,7 @@ async def stakeV2(project: str, req: StakeRequest):
         cache.set(f'ergopay_signing_request_{stakeProxyTx.unsignedTx.getId()}',stakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
 
-@r.post("/{project}/unstake/", name="staking:unstake-v2")
+@r.post("/{project}/unstake", name="staking:unstake-v2")
 async def unstakev2(project: str, req: UnstakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -899,7 +795,7 @@ async def unstakev2(project: str, req: UnstakeRequest):
         cache.set(f'ergopay_signing_request_{unstakeProxyTx.unsignedTx.getId()}',unstakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
 
-@r.post("/{project}/addstake/", name="staking:addstake-v2")
+@r.post("/{project}/addstake", name="staking:addstake-v2")
 async def addstake(project: str, req: UnstakeRequest):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -917,7 +813,7 @@ async def addstake(project: str, req: UnstakeRequest):
         cache.set(f'ergopay_signing_request_{addStakeProxyTx.unsignedTx.getId()}',addStakeProxyTx.ergoPaySigningRequest)
         return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
 
-@r.get("/{project}/status/", name="staking:status-v2")
+@r.get("/{project}/status", name="staking:status-v2")
 def stakingStatus(project: str):
     try:
         if project not in stakingConfigs:
@@ -953,13 +849,14 @@ def stakingStatus(project: str):
         return ret
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
-@r.post("/{project}/staked/", name="staking:staked-v2")
+@r.post("/{project}/staked", name="staking:staked-v2")
 async def stakedv2(project: str, req: AddressList):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+
     CACHE_TTL = 600 # 10 mins
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     config = stakingConfigs[project](appKit)
@@ -998,7 +895,7 @@ async def stakedv2(project: str, req: AddressList):
         if cached:
             checkBoxes = cached
         else:
-            checkBoxes = getUnspentStakeBoxes(config.stakeTokenId,config.stakeContract.contract.toAddress().toString(),True)
+            checkBoxes = await getUnspentStakeBoxes(config.stakeTokenId,config.stakeContract.contract.toAddress().toString(),True)
             cache.set(f"get_staking_staked_token_boxes_{config.stakeTokenId}", checkBoxes, CACHE_TTL)
         for box in checkBoxes:
             if box["assets"][0]["tokenId"]==config.stakeTokenId:
@@ -1023,9 +920,8 @@ async def stakedv2(project: str, req: AddressList):
         }
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
-
+        logger.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine stake amount, try again shortly or contact support if error continues.')
 
 @r.post("/staked-v2/", name="staking:all-staked-v2")
 async def allstakedv2(req: AddressList):
@@ -1034,7 +930,7 @@ async def allstakedv2(req: AddressList):
         u_hash = "hash_" + str(sum(list(map(lambda address: int(get_md5_hash(address), 16), set(req.addresses)))))
         cached = cache.get(f"get_staking_staked_v2_{u_hash}")
         if cached:
-            logging.info(f"INFO:{myself()}: cache hit")
+            logger.info(f"INFO:{myself()}: cache hit")
             return cached
 
         ret = []
@@ -1048,9 +944,8 @@ async def allstakedv2(req: AddressList):
         cache.set(f"get_staking_staked_v2_{u_hash}", ret)
         return ret
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}::{str(e)}')
-
 
 ########################################
 ########## STAKING CONFIG CMS ##########
@@ -1070,7 +965,6 @@ async def staking_config_list_cms(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
 
-
 @r.get("/config/{project}", response_model_exclude_none=True, name="staking-cms:config")
 async def staking_config_cms(
     project: str,
@@ -1085,7 +979,6 @@ async def staking_config_cms(
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
-
 
 @r.post("/config", response_model_exclude_none=True, name="staking-cms:create-config")
 async def staking_config_create_cms(
@@ -1103,7 +996,6 @@ async def staking_config_create_cms(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
 
-
 @r.put("/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config")
 async def staking_config_edit_cms(
     id: int,
@@ -1120,7 +1012,6 @@ async def staking_config_edit_cms(
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST, content=f"{str(e)}"
         )
-
 
 @r.delete(
     "/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config"
