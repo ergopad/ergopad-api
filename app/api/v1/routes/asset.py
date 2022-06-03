@@ -112,7 +112,7 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
         price = None
 
         logger.warning('find price from ergodex')
-        ret = getErgodexTokenPriceByTokenId(tokenId)
+        ret = await getErgodexTokenPriceByTokenId(tokenId)
         if (ret["status"] == "success"):
             price = ret["price"]
 
@@ -151,7 +151,6 @@ async def get_asset_current_price(coin: str = None):
         price = None
 
         # SigUSD/SigRSV
-        logger.log(LEIF, 1)
         if coin in ("sigusd", "sigrsv"):
             # res = requests.get(ergo_watch_api).json()
             async with Req() as r:
@@ -190,10 +189,9 @@ async def get_asset_current_price(coin: str = None):
                         ) / peg_rate_nano  # SigRSV/USD
         # ...all other prices
         else:
-            logger.log(LEIF, 2)
             # first check ergodex
             logger.warning("find price from ergodex")
-            ret = getErgodexTokenPrice(coin)
+            ret = await getErgodexTokenPrice(coin)
             if ret["status"] == "success":
                 price = ret["price"]
             else:
@@ -201,7 +199,6 @@ async def get_asset_current_price(coin: str = None):
 
             # check local database storage for price
             if price == None:
-                logger.log(LEIF, 3)
                 logger.warning("find price from aggregator...")
                 sqlFindLatestPrice = ''
                 try:
@@ -228,7 +225,6 @@ async def get_asset_current_price(coin: str = None):
 
             # if not in local database, ask for online value
             if price == None:
-                logger.log(LEIF, 4)
                 logger.warning("fallback to price from exchange")
                 try:
                     # res = requests.get(f"{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}")
@@ -237,17 +233,15 @@ async def get_asset_current_price(coin: str = None):
                     price = res.json()[coin][currency]
                 except Exception as e:
                     logger.warning(f"invalid coingecko price: {str(e)}")
-        logger.log(LEIF, 5)
+
         # return value
         ret = {"status": "unavailable", "name": coin, "price": price}
 
         # do not cache if the api call failed
         if price:
-            logger.log(LEIF, 6)
             ret["status"] = "ok"
             cache.set(f"get_api_asset_price_{coin}", ret)
 
-        logger.log(LEIF, 7)
         return ret
 
     except Exception as e:

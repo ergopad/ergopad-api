@@ -193,25 +193,27 @@ def getTokenName(tokenId, prices):
 
 async def getErgodexPoolBox():
     cached = cache.get(f"ergodex_pool_{POOL_SAMPLE}")
-    if cached:
+    if False: # cached:
         return cached
     res = {"items": []}
     try:
         # res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
         async with Req() as r:
-            res = await r.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
-        cache.set(f"ergodex_pool_{POOL_SAMPLE}", res)
-    except:
-        logger.error(f"ERR:getErgodexPoolBox: unable to find box")
+            res = await r.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/")
+        
+        cache.set(f"ergodex_pool_{POOL_SAMPLE}", res.json())
 
-    return res
+    except Exception as e:
+        logger.error(f"ERR:getErgodexPoolBox: {e}")
+
+    return res.json()
 
 
 # MAIN EXPORTS
-def getErgodexTokenPrice(tokenName: str):
+async def getErgodexTokenPrice(tokenName: str):
     tokenName = tokenName.lower()
     try:
-        res = getErgodexPoolBox()
+        res = await getErgodexPoolBox()
         boxes = list(map(explorerToErgoBox, res["items"]))
         pools = parseValidPools(boxes)
         prices = [pool.getCalculatedPrice() for pool in pools]
@@ -229,9 +231,9 @@ def getErgodexTokenPrice(tokenName: str):
         return {"id": "0xdead", "name": tokenName, "price": 0.0, "status": "error"}
 
 
-def getErgodexTokenPriceByTokenId(tokenId: str):
+async def getErgodexTokenPriceByTokenId(tokenId: str):
     try:
-        res = getErgodexPoolBox()
+        res = await getErgodexPoolBox()
         boxes = list(map(explorerToErgoBox, res["items"]))
         pools = parseValidPools(boxes)
         prices = [pool.getCalculatedPrice() for pool in pools]

@@ -52,6 +52,11 @@ Config = {
     'ergopadToken'      : os.getenv('ERGOPAD_TOKEN'),
     'buyerApiKey'       : os.getenv('BUYER_APIKEY'),
     'validateMe'        : os.getenv('VALIDATE_ME'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
+    'emailUsername'     : os.getenv('EMAIL_ERGOPAD_USERNAME'),
+    'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
+    'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
+    'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
     'minTx'             : 1e7, # required
     'txFee'             : 1e6, # tips welcome
     'nanoergsInErg'     : 1e9, # 1e9
@@ -84,6 +89,11 @@ Config = {
     'ergopadTokenId'    : os.getenv('ERGOPAD_TOKENID'),
     'ergopadWallet'     : os.getenv('ERGOPAD_WALLET'),
     'validateMe'        : os.getenv('VALIDATE_ME'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
+    'emailUsername'     : os.getenv('EMAIL_ERGOPAD_USERNAME'),
+    'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
+    'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
+    'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
     'minTx'             : 1e7, # required
     'txFee'             : 1e6, # tips welcome
     'nanoergsInErg'     : 1e9, # 1e9
