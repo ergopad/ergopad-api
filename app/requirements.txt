@@ -14,8 +14,6 @@ amqp==5.0.9
     # via kombu
 asgi-lifespan==1.0.1
     # via -r requirements.in
-asyncpg==0.25.0
-    # via databases
 atomicwrites==1.4.0
     # via pytest
 attrs==21.4.0
@@ -199,3 +197,5 @@ websockets==8.1
 ergo-python-appkit==0.1.0
 paideia-contracts==1.0.0
 databases[asyncpg]
+asyncpg==0.24.0
+
