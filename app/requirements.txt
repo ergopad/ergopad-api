@@ -43,7 +43,7 @@ uvicorn
 gunicorn
 websockets
 ergo-python-appkit==0.1.0
-paideia-contracts==0.3.0
+paideia-contracts==1.0.0
 sqlmodel
 colorlog
 
