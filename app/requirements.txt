@@ -89,11 +89,11 @@ mako==1.1.6
     # via alembic
 markupsafe==2.0.1
     # via mako
-numpy==1.22.2
+# numpy==1.22.2
     # via pandas
 packaging==21.3
     # via pytest
-pandas==1.4.1
+# pandas==1.4.1
     # via -r requirements.in
 passlib[bcrypt]==1.7.2
     # via -r requirements.in
@@ -198,3 +198,4 @@ websockets==8.1
 # setuptools
 ergo-python-appkit==0.1.0
 paideia-contracts==1.0.0
+databases[asyncpg]
