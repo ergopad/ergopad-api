@@ -346,6 +346,7 @@ async def staked(req: AddressList):
                     totalStaked += box["assets"][1]["amount"]/10**2
                     stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**2
 
+        logging.debug({'totalStaked': totalStaked, 'addresses': stakePerAddress})
         return {
             'totalStaked': totalStaked,
             'addresses': stakePerAddress

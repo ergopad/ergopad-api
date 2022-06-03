@@ -171,57 +171,64 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
             rJson = res.json()
             logging.info(rJson['total'])
             for box in rJson['items']:
-                if len(inBoxes) >= numBoxes:
-                    redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
-                    inBoxes = []
-                    outBoxes = []
-                    txBoxTotal_nerg = 0
-                    sleep(10)
-                redeemPeriod = int(box['additionalRegisters']['R5']['renderedValue'])
-                redeemAmount = int(box['additionalRegisters']['R6']['renderedValue'])
-                vestingStart = int(box['additionalRegisters']['R7']['renderedValue'])
-                totalVested = int(box['additionalRegisters']['R8']['renderedValue'])
-                timeVested = int(currentTime - vestingStart)
-                periods = int(timeVested/redeemPeriod)
-                redeemed = totalVested - box['assets'][0]['amount']
-                totalRedeemable = periods * redeemAmount
-                redeemableTokens = totalVested - redeemed if (totalVested-totalRedeemable) < redeemAmount else totalRedeemable - redeemed
-                if redeemableTokens > 0:
-                    nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
-                    buyerAddress = nodeRes['address']
-                    if (totalVested-(redeemableTokens+redeemed))>0:
+                try: 
+                    assert 'R5' in box['additionalRegisters']
+                    # logging.warning(f'''REDEEM 1: {box['index']}''')
+                    if len(inBoxes) >= numBoxes:
+                        redeemTX(inBoxes,outBoxes,txBoxTotal_nerg,txFee_nerg)
+                        inBoxes = []
+                        outBoxes = []
+                        txBoxTotal_nerg = 0
+                        sleep(10)
+                    redeemPeriod = int(box['additionalRegisters']['R5']['renderedValue'])
+                    redeemAmount = int(box['additionalRegisters']['R6']['renderedValue'])
+                    vestingStart = int(box['additionalRegisters']['R7']['renderedValue'])
+                    totalVested = int(box['additionalRegisters']['R8']['renderedValue'])
+                    timeVested = int(currentTime - vestingStart)
+                    periods = int(timeVested/redeemPeriod)
+                    redeemed = totalVested - box['assets'][0]['amount']
+                    totalRedeemable = periods * redeemAmount
+                    redeemableTokens = totalVested - redeemed if (totalVested-totalRedeemable) < redeemAmount else totalRedeemable - redeemed
+                    if redeemableTokens > 0:
+                        nodeRes = requests.get(f"{CFG.node}/utils/ergoTreeToAddress/{box['additionalRegisters']['R4']['renderedValue']}").json()
+                        buyerAddress = nodeRes['address']
+                        if (totalVested-(redeemableTokens+redeemed))>0:
+                            outBox = {
+                                'address': box['address'],
+                                'value': box['value'],
+                                'registers': {
+                                    'R4': box['additionalRegisters']['R4']['serializedValue'],
+                                    'R5': box['additionalRegisters']['R5']['serializedValue'],
+                                    'R6': box['additionalRegisters']['R6']['serializedValue'],
+                                    'R7': box['additionalRegisters']['R7']['serializedValue'],
+                                    'R8': box['additionalRegisters']['R8']['serializedValue'],
+                                    'R9': box['additionalRegisters']['R9']['serializedValue']
+                                },
+                                'assets': [{
+                                    'tokenId': box['assets'][0]['tokenId'],
+                                    'amount': (totalVested-(redeemableTokens+redeemed))
+                                }]
+                            }
+                            txBoxTotal_nerg += box['value']
+                            outBoxes.append(outBox)
                         outBox = {
-                            'address': box['address'],
-                            'value': box['value'],
-                            'registers': {
-                                'R4': box['additionalRegisters']['R4']['serializedValue'],
-                                'R5': box['additionalRegisters']['R5']['serializedValue'],
-                                'R6': box['additionalRegisters']['R6']['serializedValue'],
-                                'R7': box['additionalRegisters']['R7']['serializedValue'],
-                                'R8': box['additionalRegisters']['R8']['serializedValue'],
-                                'R9': box['additionalRegisters']['R9']['serializedValue']
-                            },
+                            'address': str(buyerAddress),
+                            'value': txFee_nerg,
                             'assets': [{
                                 'tokenId': box['assets'][0]['tokenId'],
-                                'amount': (totalVested-(redeemableTokens+redeemed))
-                            }]
+                                'amount': redeemableTokens
+                        }],
+                        'registers': {
+                            'R4': box['additionalRegisters']['R9']['serializedValue']
                         }
-                        txBoxTotal_nerg += box['value']
+                        }
                         outBoxes.append(outBox)
-                    outBox = {
-                        'address': str(buyerAddress),
-                        'value': txFee_nerg,
-                        'assets': [{
-                            'tokenId': box['assets'][0]['tokenId'],
-                            'amount': redeemableTokens
-                    }],
-                    'registers': {
-                        'R4': box['additionalRegisters']['R9']['serializedValue']
-                    }
-                    }
-                    outBoxes.append(outBox)
-                    txBoxTotal_nerg += txFee_nerg
-                    inBoxes.append(box['boxId'])
+                        txBoxTotal_nerg += txFee_nerg
+                        inBoxes.append(box['boxId'])
+
+                except Exception as e:
+                    logging.warning(f'missing R5 from box: {box}')
+                    pass
 
             if len(res.json()['items']) == 500 and len(inBoxes) < 200:
                 offset += 500
@@ -264,29 +271,34 @@ def findVestingTokens(wallet:str):
         while res.ok:
             # returns array of dicts
             for box in res.json()["items"]:
-                if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
-                    tokenId = box["assets"][0]["tokenId"]
-                    if tokenId not in result:
-                        result[tokenId] = {}
-                        result[tokenId]['name'] = box["assets"][0]["name"]
-                        result[tokenId]['totalVested'] = 0.0
-                        result[tokenId]['outstanding'] = {}
-                    tokenDecimals = 10**box["assets"][0]["decimals"]
-                    initialVestedAmount = int(box["additionalRegisters"]["R8"]["renderedValue"])/tokenDecimals
-                    nextRedeemAmount = int(box["additionalRegisters"]["R6"]["renderedValue"])/tokenDecimals
-                    remainingVested = int(box["assets"][0]["amount"])/tokenDecimals
-                    result[tokenId]['totalVested'] += remainingVested
-                    nextRedeemTimestamp = (((initialVestedAmount-remainingVested)/nextRedeemAmount+1)*int(box["additionalRegisters"]["R5"]["renderedValue"])+int(box["additionalRegisters"]["R7"]["renderedValue"]))/1000.0
-                    nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
-                    while remainingVested > 0:
-                        if nextRedeemDate not in result[tokenId]['outstanding']:
-                            result[tokenId]['outstanding'][nextRedeemDate] = {}
-                            result[tokenId]['outstanding'][nextRedeemDate]['amount'] = 0.0
-                        redeemAmount = nextRedeemAmount if remainingVested >= 2*nextRedeemAmount else remainingVested
-                        result[tokenId]['outstanding'][nextRedeemDate]['amount'] += round(redeemAmount,int(box["assets"][0]["decimals"]))
-                        remainingVested -= redeemAmount
-                        nextRedeemTimestamp += int(box["additionalRegisters"]["R5"]["renderedValue"])/1000.0
+                try: 
+                    assert "R4" in box["additionalRegisters"]
+                    if box["additionalRegisters"]["R4"]["renderedValue"] == userErgoTree:
+                        tokenId = box["assets"][0]["tokenId"]
+                        if tokenId not in result:
+                            result[tokenId] = {}
+                            result[tokenId]['name'] = box["assets"][0]["name"]
+                            result[tokenId]['totalVested'] = 0.0
+                            result[tokenId]['outstanding'] = {}
+                        tokenDecimals = 10**box["assets"][0]["decimals"]
+                        initialVestedAmount = int(box["additionalRegisters"]["R8"]["renderedValue"])/tokenDecimals
+                        nextRedeemAmount = int(box["additionalRegisters"]["R6"]["renderedValue"])/tokenDecimals
+                        remainingVested = int(box["assets"][0]["amount"])/tokenDecimals
+                        result[tokenId]['totalVested'] += remainingVested
+                        nextRedeemTimestamp = (((initialVestedAmount-remainingVested)/nextRedeemAmount+1)*int(box["additionalRegisters"]["R5"]["renderedValue"])+int(box["additionalRegisters"]["R7"]["renderedValue"]))/1000.0
                         nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
+                        while remainingVested > 0:
+                            if nextRedeemDate not in result[tokenId]['outstanding']:
+                                result[tokenId]['outstanding'][nextRedeemDate] = {}
+                                result[tokenId]['outstanding'][nextRedeemDate]['amount'] = 0.0
+                            redeemAmount = nextRedeemAmount if remainingVested >= 2*nextRedeemAmount else remainingVested
+                            result[tokenId]['outstanding'][nextRedeemDate]['amount'] += round(redeemAmount,int(box["assets"][0]["decimals"]))
+                            remainingVested -= redeemAmount
+                            nextRedeemTimestamp += int(box["additionalRegisters"]["R5"]["renderedValue"])/1000.0
+                            nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
+                except Exception as e:
+                    logging.debug(f'VESTED: Missing R4 key in box: {box}')
+                    pass
             if len(res.json()['items']) == 500:
                 offset += 500
                 res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={0}&limit=500', headers=dict(headers), timeout=2)
