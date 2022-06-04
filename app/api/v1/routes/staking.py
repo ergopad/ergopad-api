@@ -784,6 +784,9 @@ async def unstakev2(project: str, req: UnstakeRequest):
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     config = stakingConfigs[project](appKit)
     stakeInput = appKit.getBoxesById([req.stakeBox])[0]
+    remaining = stakeInput.getTokens()[0].getValue() - int(req.amount*10**config.stakedTokenDecimals)
+    if remaining > 0 and remaining < 1000:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'A partial unstake needs to leave at least {remaining/10**config.stakedTokenDecimals} tokens remaining')
     assetsRequired = CreateUnstakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
     userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
     unstakeProxyTx = CreateUnstakeProxyTransaction(userInputs,stakeInput,config,req.amount*10**config.stakedTokenDecimals,req.address)
