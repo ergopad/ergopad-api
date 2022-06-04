@@ -868,56 +868,71 @@ async def bootstrapStaking(req: BootstrapRequest):
 
 @r.post("/{project}/stake/", name="staking:stake-v2")
 async def stakeV2(project: str, req: StakeRequest):
-    if project not in stakingConfigs:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
-    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
-    config = stakingConfigs[project](appKit)
-    assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals))
-    userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
-    stakeProxyTx = CreateStakeProxyTransaction(userInputs,config,int(req.amount*10**config.stakedTokenDecimals),req.wallet)
+    try:
+        if project not in stakingConfigs:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+        config = stakingConfigs[project](appKit)
+        assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals))
+        userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
+        stakeProxyTx = CreateStakeProxyTransaction(userInputs,config,int(req.amount*10**config.stakedTokenDecimals),req.wallet)
 
-    if req.txFormat == TXFormat.EIP_12:
-        return stakeProxyTx.eip12
-        
-    if req.txFormat == TXFormat.ERGO_PAY:
-        cache.set(f'ergopay_signing_request_{stakeProxyTx.unsignedTx.getId()}',stakeProxyTx.ergoPaySigningRequest)
-        return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
+        if req.txFormat == TXFormat.EIP_12:
+            return stakeProxyTx.eip12
+            
+        if req.txFormat == TXFormat.ERGO_PAY:
+            cache.set(f'ergopay_signing_request_{stakeProxyTx.unsignedTx.getId()}',stakeProxyTx.ergoPaySigningRequest)
+            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.post("/{project}/unstake/", name="staking:unstake-v2")
 async def unstakev2(project: str, req: UnstakeRequest):
-    if project not in stakingConfigs:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
-    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
-    config = stakingConfigs[project](appKit)
-    stakeInput = appKit.getBoxesById([req.stakeBox])[0]
-    assetsRequired = CreateUnstakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
-    userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
-    unstakeProxyTx = CreateUnstakeProxyTransaction(userInputs,stakeInput,config,req.amount*10**config.stakedTokenDecimals,req.address)
+    try:
+        if project not in stakingConfigs:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+        config = stakingConfigs[project](appKit)
+        stakeInput = appKit.getBoxesById([req.stakeBox])[0]
+        assetsRequired = CreateUnstakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
+        userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
+        unstakeProxyTx = CreateUnstakeProxyTransaction(userInputs,stakeInput,config,req.amount*10**config.stakedTokenDecimals,req.address)
 
-    if req.txFormat == TXFormat.EIP_12:
-        return unstakeProxyTx.eip12
-        
-    if req.txFormat == TXFormat.ERGO_PAY:
-        cache.set(f'ergopay_signing_request_{unstakeProxyTx.unsignedTx.getId()}',unstakeProxyTx.ergoPaySigningRequest)
-        return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
+        if req.txFormat == TXFormat.EIP_12:
+            return unstakeProxyTx.eip12
+            
+        if req.txFormat == TXFormat.ERGO_PAY:
+            cache.set(f'ergopay_signing_request_{unstakeProxyTx.unsignedTx.getId()}',unstakeProxyTx.ergoPaySigningRequest)
+            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.post("/{project}/addstake/", name="staking:addstake-v2")
 async def addstake(project: str, req: UnstakeRequest):
-    if project not in stakingConfigs:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
-    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
-    config = stakingConfigs[project](appKit)
-    stakeInput = appKit.getBoxesById([req.stakeBox])[0]
-    assetsRequired = CreateAddStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
-    userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
-    addStakeProxyTx = CreateAddStakeProxyTransaction(userInputs,stakeInput,config,int(req.amount*10**config.stakedTokenDecimals),req.address)
+    try:
+        if project not in stakingConfigs:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+        config = stakingConfigs[project](appKit)
+        stakeInput = appKit.getBoxesById([req.stakeBox])[0]
+        assetsRequired = CreateAddStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
+        userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
+        addStakeProxyTx = CreateAddStakeProxyTransaction(userInputs,stakeInput,config,int(req.amount*10**config.stakedTokenDecimals),req.address)
 
-    if req.txFormat == TXFormat.EIP_12:
-        return addStakeProxyTx.eip12
-        
-    if req.txFormat == TXFormat.ERGO_PAY:
-        cache.set(f'ergopay_signing_request_{addStakeProxyTx.unsignedTx.getId()}',addStakeProxyTx.ergoPaySigningRequest)
-        return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
+        if req.txFormat == TXFormat.EIP_12:
+            return addStakeProxyTx.eip12
+            
+        if req.txFormat == TXFormat.ERGO_PAY:
+            cache.set(f'ergopay_signing_request_{addStakeProxyTx.unsignedTx.getId()}',addStakeProxyTx.ergoPaySigningRequest)
+            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to add stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.get("/{project}/status/", name="staking:status-v2")
 def stakingStatus(project: str):
@@ -1028,7 +1043,6 @@ async def stakedv2(project: str, req: AddressList):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
 
-
 @r.post("/staked-v2/", name="staking:all-staked-v2")
 async def allstakedv2(req: AddressList):
     try:
@@ -1049,10 +1063,10 @@ async def allstakedv2(req: AddressList):
 
         cache.set(f"get_staking_staked_v2_{u_hash}", ret)
         return ret
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}::{str(e)}')
-
 
 ########################################
 ########## STAKING CONFIG CMS ##########

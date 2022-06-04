@@ -15,7 +15,7 @@ from db.schemas.whitelistEvents import CreateWhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
-from api.utils.db import dbErgopad, dbExplorer
+from utils.db import dbErgopad, dbExplorer
 
 CFG = Config[Network]
 
