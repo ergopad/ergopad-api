@@ -355,7 +355,7 @@ async def staked(req: AddressList):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.get("/status/", name="staking:status")
 def stakingStatus():
@@ -873,13 +873,11 @@ async def stakeV2(project: str, req: StakeRequest):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
         config = stakingConfigs[project](appKit)
-        assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals))
         tokenAmount = round(req.amount*10**config.stakedTokenDecimals)
         assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,tokenAmount)
         userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
-        stakeProxyTx = CreateStakeProxyTransaction(userInputs,config,int(req.amount*10**config.stakedTokenDecimals),req.wallet)
         stakeProxyTx = CreateStakeProxyTransaction(userInputs,config,tokenAmount,req.wallet)
-        
+
         if req.txFormat == TXFormat.EIP_12:
             return stakeProxyTx.eip12
             
@@ -985,6 +983,7 @@ def stakingStatus(project: str):
 async def stakedv2(project: str, req: AddressList):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+
     CACHE_TTL = 600 # 10 mins
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     config = stakingConfigs[project](appKit)
@@ -1049,7 +1048,7 @@ async def stakedv2(project: str, req: AddressList):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determin stake amount, try again shortly or contact support if error continues.')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.post("/staked-v2/", name="staking:all-staked-v2")
 async def allstakedv2(req: AddressList):
@@ -1067,6 +1066,9 @@ async def allstakedv2(req: AddressList):
             if type(staked) == JSONResponse:
                 # error
                 return staked
+            if staked["totalStaked"] == 0:
+                # filter 0 values
+                continue
             ret.append(staked)
 
         cache.set(f"get_staking_staked_v2_{u_hash}", ret)
@@ -1074,7 +1076,7 @@ async def allstakedv2(req: AddressList):
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}::{str(e)}')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 ########################################
 ########## STAKING CONFIG CMS ##########

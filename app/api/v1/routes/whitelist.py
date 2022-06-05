@@ -1,6 +1,6 @@
 import inspect
 import logging
-# import pandas as pd
+import pandas as pd
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
 from fastapi import APIRouter, Depends, status, Request
@@ -15,7 +15,6 @@ from db.schemas.whitelistEvents import CreateWhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
-from utils.db import dbErgopad, dbExplorer
 
 CFG = Config[Network]
 
@@ -153,89 +152,74 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         if whitelist.sigValue <= 0:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"Invalid SigUSD value.")
 
-         # continue with signup
-        sqlFindWallet = f"select id from wallets where address = :address"
-        resFindWallet = await dbErgopad.fetch_all(sqlFindWallet, {'address': whitelist.ergoAddress})
-        logging.debug(f'find wallet: {resFindWallet}')
+        # find wallet
+        # logging.debug(f'connecting to: {CFG.connectionString}')
+        con = create_engine(DATABASE)
+        logging.debug('connected to database...')
+        pd.options.mode.chained_assignment = None  # default='warn'
+        df = pd.DataFrame(jsonable_encoder(whitelist), index=[0])
+        logging.debug(f'dataframe: {df}')
+        sqlFindWallet = f"select id from wallets where address = {whitelist.ergoAddress!r}"
+        logging.debug(sqlFindWallet)
+        res = con.execute(sqlFindWallet)
 
-# does wallet exist, or do we need to create it?
-        if len(resFindWallet) == 0:
-            sql = f'''
-                insert into wallets(address, email, "blockChainId", network, "walletPass", mneumonic, "socialHandle", "socialPlatform", "chatHandle", "chatPlatform", created_dtz, "lastSeen_dtz", "twitterHandle", "discordHandle", "telegramHandle")
-	            values (
-                    :address -- address
-                    , null -- email
-                    , null -- blockChainId
-                    , :network -- network
-                    , null, null -- walletPass, mneumonic
-                    , null, null -- socials                    
-                    , null, null -- chat                    
-                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- created_dtz
-                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- lastSeen_dtz
-                    , null, null, null -- twitter, discord, telegram
-                );
-            '''
-            logger.debug(sql)
-            res = await dbErgopad.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
-            resFindWallet = await dbErgopad.fetch_all(sqlFindWallet, {'address': whitelist.ergoAddress})
-            logger.debug(f'find wallet: {resFindWallet}')
+        # create wallet if it doesn't exist
+        if res.rowcount == 0:
+            dfWallet = df[['ergoAddress', 'email']]
+            dfWallet['network'] = Network
+            dfWallet['lastSeen_dtz'] = dt.fromtimestamp(
+                NOW).strftime(DATEFORMAT)
+            dfWallet['created_dtz'] = dt.fromtimestamp(
+                NOW).strftime(DATEFORMAT)
+            dfWallet = dfWallet.rename(columns={'ergoAddress': 'address'})
+            logging.debug(f'save wallet: {dfWallet}')
+            dfWallet.to_sql('wallets', con=con,
+                            if_exists='append', index=False)
 
-        # found or created, get wallet address
-        walletId = resFindWallet[0]['id']
-        logger.warning(f'WALLET_ID: {walletId}')
+        # check this wallet has not already registered for this event
+        res = con.execute(sqlFindWallet).fetchone()
+        walletId = res['id']
+        sqlAlreadyWhitelisted = f'select id from "whitelist" where "walletId" = {walletId!r} and "eventId" = {eventId!r}'
+        res = con.execute(sqlAlreadyWhitelisted)
+        if res.rowcount == 0:
+            # add whitelist entry
+            # TODO: clean up logic
+            logging.debug(f'found id: {walletId}')
+            dfWhitelist = df[['sigValue']]
+            dfWhitelist['walletId'] = walletId
+            dfWhitelist['eventId'] = eventId
+            dfWhitelist['isWhitelist'] = 1
+            dfWhitelist['created_dtz'] = dt.fromtimestamp(
+                NOW).strftime(DATEFORMAT)
+            dfWhitelist = dfWhitelist.rename(
+                columns={'sigValue': 'allowance_sigusd'})
+            # dfWhitelist['allowance_sigusd'] = 20000
+            dfWhitelist.to_sql('whitelist', con=con,
+                               if_exists='append', index=False)
 
-        # already whitelisted
-        sqlCheckSignup = f'''
-            select id 
-            from "whitelist" 
-            where "walletId" = :walletId 
-                and "eventId" = :eventId
-        '''
-        # logger.warning(f'check signup: {sqlCheckSignup}')
-        resCheckSignup = await dbErgopad.fetch_one(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId})
-        logger.debug(f'check signup: {resCheckSignup}')
-
-        # already signed up?
-        if len(resCheckSignup) == 0:
-            sqlSignup = f'''
-                insert into whitelist("walletId", "eventId", created_dtz, allowance_sigusd, spent_sigusd, "isAvailable", "lastAssemblerId", "lastAssemblerStatus", "isWhitelist")
-	            values (
-                      :walletId -- walletId
-                    , :eventId -- eventId
-                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- created_dtz
-                    , :allowance_sigusd -- allowance_sigusd
-                    , 0 -- spent_sigusd
-                    , 1 -- isAvailable
-                    , null, null -- lastAssemblerId, lastAssemblerStatus
-                    , 1 -- isWhitelist
-                );
-            '''
-            resSignup = await dbErgopad.fetch_one(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
-            logger.debug(f'signup: {resSignup}')
-
-            # use obfuscated identifier to prevent bots
+            # log ip hash for analytics and backend filtering
+            # secure bcrypt one way hash
             ipHash = get_md5_hash(request.client.host)
-            sqlIpHash = f'''
-                insert into "eventsIp" ("walletId", "eventId", "ipHash")
-                values (
-                      :walletId -- walletId
-                    , :eventId -- eventId
-                    , :ipHash -- ipHash
-                )
-            '''
-            # logger.warning(f'ip hash: {sqlIpHash}')
-            resIpHash = await dbErgopad.fetch_one(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
-            logger.debug(f'ip hash: {resIpHash}')
+            dfEventsIp = pd.DataFrame({
+                "walletId": [walletId],
+                "eventId": [eventId],
+                "ipHash": [ipHash]
+            })
+            logging.debug(f'save ipHash: {dfEventsIp}')
+            dfEventsIp.to_sql('eventsIp', con=con,
+                              if_exists='append', index=False)
 
+            # whitelist success
             return {'status': 'success', 'detail': f'added to whitelist: {whitelist.sigValue} SigUSD.'}
 
-        # already signed up
+        # already whitelisted
         else:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'wallet already signed up for this event')
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
+
 
 async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db())):
     whitelistEvent = get_whitelist_event_by_event_id(db, eventId)
