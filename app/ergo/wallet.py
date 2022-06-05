@@ -5,15 +5,19 @@ from base64 import b64encode
 from pyblake2 import blake2b
 from ecdsa import SECP256k1
 from config import dotdict, Network, Config
-from api.utils.logger import logger, myself, LEIF
+
+### LOGGING
+import logging
+level = logging.DEBUG # TODO: set from .env
+logging.basicConfig(format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s", datefmt='%m-%d %H:%M', level=level)
 
 ### INIT
 curve = SECP256k1
 CFG = Config[Network]
 
 NetworkEnvironment = {
-  'mainnet': 0 << 4,
-  'testnet': 1 << 4,
+  'Mainnet': 0 << 4,
+  'Testnet': 1 << 4,
 }
 
 WalletKind = dotdict({
@@ -35,29 +39,12 @@ class Wallet:
     if self.getType() == WalletKind.P2PK:
       return (b'\x00\x08\xcd' + self.publicKey()).hex()
     else:
-      return self.addrBytes[:len(self.addrBytes) - 4].hex()
-
-  def bs64(self):
-    return b64encode(self.ergoTree().encode('utf-8')).decode('utf-8')
+      return self.addrBytes[:self.addrBytes.length - 4].hex()
 
   def b64(self):
-    return b64encode(bytes.fromhex(self.ergoTree())).decode()
+      b64encode(bytes.fromhex(self.ergoTree())).decode()
 
-  def vlq(self):
-    vlq = lambda x: int("".join(bin(a|128)[3:] for a in x), 2)
-    return vlq([int(x) for x in str(int(self.ergoTree(), 16))])
-
-  def hex2vlq(self, hexString):
-    vlq = lambda x: int("".join(bin(a|128)[3:] for a in x), 2)
-    return vlq([int(x) for x in str(int(hexString, 16))])
-
-  def int2vlq(self, intString):
-    # hexString2intArray = [int(x) for x in str(int(e, 16))]
-    vlq = lambda x: int("".join(bin(a|128)[3:] for a in x), 2)
-    return vlq([int(x) for x in intString])
-
-  @staticmethod
-  def fromErgoTree(ergoTree, network):
+  def fromErgoTree(self, ergoTree, network):
     if ergoTree[:6] == '0008cd':
       prefixByte = chr(network + WalletKind.P2PK).encode("utf-8")
       pk = ergoTree[6:72]
@@ -86,7 +73,7 @@ class Wallet:
   def fromBase58(self, address):
     addr = Wallet(address)
     if (not addr.isValid()):
-      logger.warning(f'Invalid Ergo address ${address}')
+      logging.error(f'Invalid Ergo address ${address}')
     return addr
 
   def fromBytes(self, bytes):
@@ -140,7 +127,7 @@ if __name__ == '__main__':
   pk = tree[6:72]
   fromPk = Wallet.fromPk(pk, network).publicKey()
   isValid = Wallet.isValid()
-  logger.info(f"""Validation:
+  logging.info(f"""Validation:
     Wallet: {Wallet.Wallet}
     tree: {tree}
     fromTree: {fromTree}

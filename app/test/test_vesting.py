@@ -1,13 +1,11 @@
-import java
-
 from hashlib import blake2b
+import logging
 import pytest
 from config import Config, Network
-from api.utils.logger import logger, myself, LEIF
-
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from sigmastate.lang.exceptions import InterpreterException
 from org.ergoplatform.appkit import Address, CoveringBoxes, ErgoToken
+import java
 
 CFG = Config[Network]
 DEBUG = True # CFG.DEBUG

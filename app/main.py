@@ -4,9 +4,8 @@ import time, os
 from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-# from fastapi.openapi.utils import get_openapi
 
-from api.utils.logger import logger, myself, LEIF
+from utils.logger import logger, myself, LEIF
 
 from api.v1.routes.users         import users_router
 from api.v1.routes.auth          import auth_router
@@ -26,7 +25,7 @@ from api.v1.routes.tutorials     import tutorial_router
 from api.v1.routes.faq           import faq_router
 from api.v1.routes.notifications import notification_router
 
-from api.utils.db import dbExplorer, dbErgopad
+from utils.db import dbExplorer, dbErgopad
 
 from core import config
 from core.auth import get_current_active_user

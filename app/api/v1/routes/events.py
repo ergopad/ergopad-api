@@ -1,15 +1,27 @@
-import requests
+import requests, json, os
 
 from starlette.responses import JSONResponse 
-from fastapi import APIRouter, status #, Request
+from sqlalchemy import create_engine
+from fastapi import APIRouter, Response, status #, Request
 from time import time
+from datetime import datetime as dt
 from config import Config, Network # api specific config
-from api.utils.logger import logger, myself, LEIF
-from api.utils.db import dbErgopad, dbExplorer
-
 CFG = Config[Network]
 
 events_router = r = APIRouter()
+
+#region BLOCKHEADER
+"""
+Events API
+---------
+Created: vikingphoenixconsulting@gmail.com
+On: 20220113
+Purpose: allow wallets to be whitelisted
+Contributor(s): https://github.com/Luivatra
+
+Notes: 
+"""
+#endregion BLOCKHEADER
 
 #region INIT
 DEBUG = CFG.debug
@@ -22,6 +34,15 @@ NOW = int(time())
 DEBUG = True
 st = time() # stopwatch
 #endregion INIT
+
+#region LOGGING
+import logging
+levelname = (logging.WARN, logging.DEBUG)[DEBUG]
+logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
+
+import inspect
+myself = lambda: inspect.stack()[1][3]
+#endregion LOGGING
 
 @r.get("/summary/{eventName}")
 def summary(eventName):
@@ -49,23 +70,26 @@ def summary(eventName):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid events request ({res.text})')
 
     except Exception as e:
-        logger.error(f'ERR:{myself()}: events info {e}')
+        logging.error(f'ERR:{myself()}: events info {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')
 
 @r.get("/info/{eventName}")
-async def events(eventName):
+def events(eventName):
     # return {'hello': 'world'}
     try:
-        where = ''
         if eventName != '_':
-            where = f"where name = :eventName"
-            
+            where = f"where name = {eventName!r}"
+        else:
+            where = ''
+        con = create_engine(DATABASE)
         sql = f"""
             select id, name, description, total_sigusd, buffer_sigusd, "walletId", "individualCap", "vestedTokenId", "vestingPeriods", "vestingPeriodDuration", "vestingPeriodType", "tokenPrice", "isWhitelist", start_dtz, end_dtz
             from events
             {where}
         """
-        res = await dbErgopad.fetch_all(sql, {'eventName': eventName})
+        # logging.debug(sql)
+        res = con.execute(sql)
+        # logging.debug(res)
         events = []
         for r in res:
             events.append({
@@ -88,5 +112,5 @@ async def events(eventName):
         return events
 
     except:
-        logger.error(f'ERR:{myself()}: events info {e}')
+        logging.error(f'ERR:{myself()}: events info {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')

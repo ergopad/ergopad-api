@@ -1,17 +1,36 @@
+import requests, json, os
+import math
+import uuid
+
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
-from api.utils.wallet import Wallet
+from wallet import Wallet, NetworkEnvironment # ergopad.io library
 from fastapi import APIRouter, status
 from typing import Optional
 from pydantic import BaseModel
-from time import time
+from time import time, ctime
+from api.v1.routes.asset import get_asset_current_price
+from base64 import b64encode
+from ergo.updateAllowance import handleAllowance
+from ergo.util import encodeLong, encodeString
 from config import Config, Network # api specific config
-from api.utils.logger import logger, myself, LEIF
-from api.utils.db import dbErgopad, dbExplorer
-
 CFG = Config[Network]
 
 purchase_router = r = APIRouter()
+
+#region BLOCKHEADER
+"""
+Purchase API
+---------
+Created: vikingphoenixconsulting@gmail.com
+On: 20211009
+Purpose: allow purchase/redeem tokens locked by ergopad scripts
+Contributor(s): https://github.com/Luivatra
+
+Notes:
+=======
+"""
+#endregion BLOCKHEADER
 
 #region INIT
 DEBUG = CFG.debug
@@ -28,26 +47,36 @@ class TokenPurchase(BaseModel):
 nodeWallet  = Wallet(CFG.ergopadWallet) # contains ergopad tokens (xerg10M)
 #endregion INIT
 
+#region LOGGING
+import logging
+levelname = (logging.WARN, logging.DEBUG)[DEBUG]
+logging.basicConfig(format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
+
+import inspect
+myself = lambda: inspect.stack()[1][3]
+#endregion LOGGING
+
 @r.get("/allowance/{wallet}", name="blockchain:whitelist")
 async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201wl'):
     NOW = int(time())
 
     try:
+        con = create_engine(DATABASE)
         sql = f"""
             with evt as (
                 select id
                 from events
-                where name = :eventName
+                where name = {eventName!r}
             )
             , wal as (
                 select id, address
                 from wallets
-                where address = :wallet
+                where address = {wallet!r}
             )
             , pur as (
                 select "walletAddress", sum(coalesce("sigusdAmount", 0.0)) as "sigusdAmount"
                 from purchases
-                where "walletAddress" = :wallet
+                where "walletAddress" = {wallet!r}
                     and "assemblerStatus" = 'success'
                 group by "walletAddress"
             )
@@ -59,9 +88,11 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
                 left outer join pur on pur."walletAddress" = wal.address
             where wht."isWhitelist" = 1    
         """
-        res = await dbErgopad.fetch_one(sql, {'eventName': eventName, 'wallet': wallet})
+        logging.debug(sql)
+        res = con.execute(sql).fetchone()
+        logging.debug(res)
         remainingSigusd = res['remaining_sigusd']
-        logger.info(f'sigusd: {remainingSigusd} remaining')
+        logging.info(f'sigusd: {remainingSigusd} remaining')
         if remainingSigusd == None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid wallet or allowance; wallet may not exist or remaining value is non-numeric')
         else:
@@ -73,5 +104,12 @@ async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201w
             }
 
     except Exception as e:
-        logger.error(f'ERR:{myself()}: allowance remaining ({e})')
+        logging.error(f'ERR:{myself()}: allowance remaining ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: allowance remaining ({e})')
+
+    logging.info(f'sigusd: 0 (not found)')
+    return {'wallet': wallet, 'sigusd': 0.0, 'message': 'not found'}
+
+### MAIN
+if __name__ == '__main__':
+    print('API routes: ...')

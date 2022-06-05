@@ -1,55 +1,51 @@
-from base58 import b58encode, b58decode #, XRP_ALPHABET
-# from base58 import b58encode_check, b58decode_check
-from base64 import b64encode, b64decode
+import requests
+
+from base58 import b58encode, b58decode #, XRP_ALPHABET, b58encode_check, b58decode_check
+from base64 import b64encode
 from pyblake2 import blake2b
 from ecdsa import SECP256k1
-from types import SimpleNamespace
-
-class dotdict(SimpleNamespace):
-    def __init__(self, dictionary, **kwargs):
-        super().__init__(**kwargs)
-        for key, value in dictionary.items():
-            if isinstance(value, dict):
-                self.__setattr__(key, dotdict(value))
-            else:
-                self.__setattr__(key, value)
+from config import dotdict, Network, Config
 
 ### LOGGING
 import logging
-level = logging.INFO # TODO: set from .env
+level = logging.DEBUG # TODO: set from .env
 logging.basicConfig(format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s", datefmt='%m-%d %H:%M', level=level)
 
 ### INIT
 curve = SECP256k1
+CFG = Config[Network]
 
-Network = {
-  'Mainnet': 0 << 4,
-  'Testnet': 1 << 4,
+NetworkEnvironment = {
+  'mainnet': 0 << 4,
+  'testnet': 1 << 4,
 }
 
-AddressKind = {
+WalletKind = dotdict({
   'P2PK': 1,
   'P2SH': 2,
   'P2S': 3,
-}
+})
 
-class Address:
+### CLASSES
+class Wallet:
   def __init__(self, address):
     self.address = address
-    self.addrBytes = b58decode(address)
+    self.addrBytes = b58decode(self.address)
 
   def publicKey(self):
     return self.addrBytes[1:34]
 
   def ergoTree(self):
-    if self.getType() == AddressKind['P2PK']:
-      # return (b'\x00\x08\xcd' + self.publicKey()).hex()
-      return (self.publicKey()).hex()
+    if self.getType() == WalletKind.P2PK:
+      return (b'\x00\x08\xcd' + self.publicKey()).hex()
     else:
-      return (self.addrBytes[:len(self.addrBytes) - 4]).hex()
+      return self.addrBytes[:len(self.addrBytes) - 4].hex()
 
   def bs64(self):
     return b64encode(self.ergoTree().encode('utf-8')).decode('utf-8')
+
+  def b64(self):
+    return b64encode(bytes.fromhex(self.ergoTree())).decode()
 
   def vlq(self):
     vlq = lambda x: int("".join(bin(a|128)[3:] for a in x), 2)
@@ -64,40 +60,42 @@ class Address:
     vlq = lambda x: int("".join(bin(a|128)[3:] for a in x), 2)
     return vlq([int(x) for x in intString])
 
-  def fromErgoTree(self, ergoTree, network):
+  @staticmethod
+  def fromErgoTree(ergoTree, network):
     if ergoTree[:6] == '0008cd':
-      prefixByte = chr(network + AddressKind['P2PK']).encode("utf-8")
+      prefixByte = chr(network + WalletKind.P2PK).encode("utf-8")
       pk = ergoTree[6:72]
       contentBytes = str.encode(pk)
       checksum =  blake2b((prefixByte + contentBytes), key=b'', digest_size=32).hexdigest().encode("utf-8")
       address = (prefixByte + contentBytes + checksum)[:38]
     else:
-      prefixByte = chr(network + AddressKind.P2S).encode("utf-8")
+      prefixByte = chr(network + WalletKind.P2S).encode("utf-8")
       contentBytes = ergoTree.hex()
       hash = blake2b((prefixByte + contentBytes), key=b'', digest_size=32).hexdigest()
       checksum = str.encode(hash[:4])
       address = prefixByte + contentBytes + checksum
-    return Address(b58encode(address))
+    return Wallet(b58encode(address))
 
   def fromPk(self, pk, network):
-    prefixByte = chr(network + AddressKind['P2PK']).encode("utf-8")
+    prefixByte = chr(network + WalletKind.P2PK).encode("utf-8")
     contentBytes = str.encode(pk)
     checksum = blake2b((prefixByte + contentBytes), key=b'', digest_size=32).hexdigest().encode("utf-8")
     address = (prefixByte + contentBytes + checksum)[:38]
-    return Address(b58encode(address))
+    return Wallet(b58encode(address))
 
   def fromSk(self, sk, network):
     pk = curve.g.mul(sk).encodeCompressed()
     return self.fromPk(pk, network)
 
   def fromBase58(self, address):
-    addr = Address(address)
+    addr = Wallet(address)
     if (not addr.isValid()):
       logging.error(f'Invalid Ergo address ${address}')
     return addr
 
-  def fromBytes(self, bytes):    
-    return self.fromBase58(b58encode(bytes))
+  def fromBytes(self, bytes):
+    address = b58encode(bytes)
+    return Wallet.fromBase58(address)
 
   def isValid(self):
     size = len(self.addrBytes)
@@ -115,27 +113,41 @@ class Address:
   def headByte(self):
     return self.addrBytes[0]
 
+  # send payment if defined in config; this may be inalid in production
+  def sendPayment(self, address, value, assets):
+    sendMe = [{
+      'address': address,
+      'value': value,
+      'assets': assets,
+    }]
+    try:
+      pay = requests.post(f'{CFG.wallet}/payment/send', headers={'Content-Type': 'application/json', 'api_key': CFG.walletApiKey}, json=sendMe)        
+      if pay.ok:
+        return pay.json() # dict
+      else: 
+        return {
+          'status': pay.status_code, 
+          'message': pay.content
+        }
+    except:
+      return {
+        'status': 'wallet error', 
+        'message': 'wallet config does not exist or invalid.'
+      }
+
+### MAIN
 if __name__ == '__main__':
-  network = Network['Mainnet']
-  address = Address('3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN')
-  # address = Address('9fRAWhdxEsTcdb8PhGNrZfwqa65zfkuYHAMmkQLcic1gdLSV5vA')
-  
-  Krowten = dict([(v, k) for k, v in Network.items()])
-  Dnik = dict([(v, k) for k, v in AddressKind.items()])
-  tree = address.ergoTree()
-  
-  # fromBytes: {address.fromBytes(address.addrBytes)}
+  network = NetworkEnvironment[Network]
+  Wallet = Wallet('9iD7JfYYemJgVz7nTGg9gaHuWg7hBbHo2kxrrJawyz4BD1r9fLS')
+  tree = Wallet.ergoTree()
+  fromTree = Wallet.fromErgoTree(tree, network).publicKey()
+  pk = tree[6:72]
+  fromPk = Wallet.fromPk(pk, network).publicKey()
+  isValid = Wallet.isValid()
   logging.info(f"""Validation:
-    address: {address.address}
-    addressBytes: {address.addrBytes}
-    ergoTree: {address.ergoTree()}
-    b64_ergoTree: {address.bs64()}
-    fromTree: {address.fromErgoTree(tree, network).publicKey()}
-    fromPk: {address.fromPk(tree[6:72], network).publicKey()}
-    fromBase58: {address.fromBase58(address.address).address}
-    fromBytes: {address.fromBytes(address.addrBytes).address.decode('utf-8')}
-    isValid: {address.isValid()}
-    getNetwork: {address.getNetwork()} ({Krowten[address.getNetwork()]})
-    getType: {address.getType()} ({Dnik[address.getType()]})
-    headByte: {address.headByte()}
+    Wallet: {Wallet.Wallet}
+    tree: {tree}
+    fromTree: {fromTree}
+    fromPk: {fromPk}
+    isValid: {isValid}
   """)

@@ -52,6 +52,7 @@ Config = {
     'ergopadToken'      : os.getenv('ERGOPAD_TOKEN'),
     'buyerApiKey'       : os.getenv('BUYER_APIKEY'),
     'validateMe'        : os.getenv('VALIDATE_ME'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
     'minTx'             : 1e7, # required
     'txFee'             : 1e6, # tips welcome
     'nanoergsInErg'     : 1e9, # 1e9
@@ -59,8 +60,8 @@ Config = {
     'vestingPeriods_1'  : 9,
     'vestingDuration_1' : 30, # days
     'connectionString'  : f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DBNM')}",
-    'csErgopad'         : f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DBNM')}",
     'csExplorer'        : f"postgresql://{os.getenv('EXPLORER_USER')}:{os.getenv('EXPLORER_PASSWORD')}@{os.getenv('EXPLORER_HOST')}:{os.getenv('EXPLORER_PORT')}/{os.getenv('EXPLORER_DBNM')}",
+    'csErgopad'         : f"postgresql+asyncpg://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DBNM')}",
     'redisHost'         : os.getenv('REDIS_HOST'),
     'redisPort'         : os.getenv('REDIS_PORT'),
     'jwtSecret'         : os.getenv('JWT_SECRET_KEY'),
@@ -85,6 +86,11 @@ Config = {
     'ergopadTokenId'    : os.getenv('ERGOPAD_TOKENID'),
     'ergopadWallet'     : os.getenv('ERGOPAD_WALLET'),
     'validateMe'        : os.getenv('VALIDATE_ME'),
+    'validEmailApply'   : {os.getenv('PAGE_APPLY'): True},
+    'emailUsername'     : os.getenv('EMAIL_ERGOPAD_USERNAME'),
+    'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
+    'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
+    'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
     'minTx'             : 1e7, # required
     'txFee'             : 1e6, # tips welcome
     'nanoergsInErg'     : 1e9, # 1e9
@@ -92,8 +98,8 @@ Config = {
     'vestingPeriods_1'  : 9,
     'vestingDuration_1' : 30, # days
     'connectionString'  : f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DBNM')}",
+    'csExplorer'        : f"postgresql://{os.getenv('EXPLORER_USER')}:{os.getenv('EXPLORER_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('EXPLORER_DBNM')}",
     'csErgopad'         : f"postgresql+asyncpg://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DBNM')}",
-    'csExplorer'        : f"postgresql+asyncpg://{os.getenv('EXPLORER_USER')}:{os.getenv('EXPLORER_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('EXPLORER_DBNM')}",
     'redisHost'         : os.getenv('REDIS_HOST'),
     'redisPort'         : os.getenv('REDIS_PORT'),
     'jwtSecret'         : os.getenv('JWT_SECRET_KEY'),
