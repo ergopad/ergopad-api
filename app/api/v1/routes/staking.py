@@ -874,9 +874,12 @@ async def stakeV2(project: str, req: StakeRequest):
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
         config = stakingConfigs[project](appKit)
         assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals))
+        tokenAmount = round(req.amount*10**config.stakedTokenDecimals)
+        assetsRequired = CreateStakeProxyTransaction.assetsRequired(config,tokenAmount)
         userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
         stakeProxyTx = CreateStakeProxyTransaction(userInputs,config,int(req.amount*10**config.stakedTokenDecimals),req.wallet)
-
+        stakeProxyTx = CreateStakeProxyTransaction(userInputs,config,tokenAmount,req.wallet)
+        
         if req.txFormat == TXFormat.EIP_12:
             return stakeProxyTx.eip12
             
@@ -896,7 +899,11 @@ async def unstakev2(project: str, req: UnstakeRequest):
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
         config = stakingConfigs[project](appKit)
         stakeInput = appKit.getBoxesById([req.stakeBox])[0]
-        assetsRequired = CreateUnstakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
+        tokenAmount = round(req.amount*10**config.stakedTokenDecimals)
+        remaining = stakeInput.getTokens()[0].getValue() - tokenAmount
+        if remaining > 0 and remaining < 1000:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'A partial unstake needs to leave at least {remaining/10**config.stakedTokenDecimals} tokens remaining')
+        assetsRequired = CreateUnstakeProxyTransaction.assetsRequired(config,tokenAmount,stakeInput)
         userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
         unstakeProxyTx = CreateUnstakeProxyTransaction(userInputs,stakeInput,config,req.amount*10**config.stakedTokenDecimals,req.address)
 
@@ -919,9 +926,10 @@ async def addstake(project: str, req: UnstakeRequest):
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
         config = stakingConfigs[project](appKit)
         stakeInput = appKit.getBoxesById([req.stakeBox])[0]
-        assetsRequired = CreateAddStakeProxyTransaction.assetsRequired(config,int(req.amount*10**config.stakedTokenDecimals),stakeInput)
+        tokenAmount = round(req.amount*10**config.stakedTokenDecimals)
+        assetsRequired = CreateAddStakeProxyTransaction.assetsRequired(config,tokenAmount,stakeInput)
         userInputs = appKit.boxesToSpendFromList(req.addresses,assetsRequired.nErgRequired,assetsRequired.tokensRequired)
-        addStakeProxyTx = CreateAddStakeProxyTransaction(userInputs,stakeInput,config,int(req.amount*10**config.stakedTokenDecimals),req.address)
+        addStakeProxyTx = CreateAddStakeProxyTransaction(userInputs,stakeInput,config,tokenAmount,req.address)
 
         if req.txFormat == TXFormat.EIP_12:
             return addStakeProxyTx.eip12
