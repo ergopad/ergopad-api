@@ -12,4 +12,4 @@ def test_always_passes():
 @pytest.mark.asyncio
 async def test_ping():
     res = await ping()
-    assert res["hello"] == "world"
+    assert res["hello,"] == "is it me you're looking for?"
