@@ -1067,9 +1067,12 @@ async def allstakedv2(req: AddressList):
             if type(staked) == JSONResponse:
                 # error
                 return staked
+            if staked["totalStaked"] == 0:
+                # filter 0 values
+                continue
             ret.append(staked)
 
-        cache.set(f"get_staking_staked_v2_{u_hash}", ret)
+        cache.set(f"get_staking_staked_v2_{u_hash}", ret, 300)
         return ret
 
     except Exception as e:
