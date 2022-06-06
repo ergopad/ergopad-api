@@ -23,15 +23,12 @@ services:
     volumes: 
      - ./app:/app
     networks:
-      - ergopad-data_net
-      - ergopad-node_net
+      - ergopad-net
     command: uvicorn main:app --reload --workers 4 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '52.72.64.235'
     # command: uvicorn main:app --workers 4 --host 0.0.0.0 --port ${API_PORT}
 
 networks:
-  ergopad-data_net:
-    external: true
-  ergopad-node_net:
+  ergopad-net:
     external: true
   net:
     driver: bridge
