@@ -1,7 +1,3 @@
-import requests, json, os
-import math
-import uuid
-
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine
 from wallet import Wallet, NetworkEnvironment # ergopad.io library
@@ -11,26 +7,12 @@ from pydantic import BaseModel
 from time import time, ctime
 from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
-from ergo.updateAllowance import handleAllowance
 from ergo.util import encodeLong, encodeString
 from config import Config, Network # api specific config
+
 CFG = Config[Network]
 
 purchase_router = r = APIRouter()
-
-#region BLOCKHEADER
-"""
-Purchase API
----------
-Created: vikingphoenixconsulting@gmail.com
-On: 20211009
-Purpose: allow purchase/redeem tokens locked by ergopad scripts
-Contributor(s): https://github.com/Luivatra
-
-Notes:
-=======
-"""
-#endregion BLOCKHEADER
 
 #region INIT
 DEBUG = CFG.debug

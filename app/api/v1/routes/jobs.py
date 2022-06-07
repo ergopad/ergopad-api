@@ -1,5 +1,6 @@
-from fastapi import APIRouter, status, Depends
 import typing as t
+
+from fastapi import APIRouter, status, Depends
 from starlette.responses import JSONResponse
 
 from db.session import get_db
@@ -14,7 +15,6 @@ from db.schemas.jobs import CreateAndUpdateJob, Job
 from core.auth import get_current_active_user
 
 jobs_router = r = APIRouter()
-
 
 @r.get(
     "/",
