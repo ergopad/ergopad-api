@@ -1,6 +1,8 @@
+import uvicorn
+
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+from core.auth import get_current_active_user
 
 from api.v1.routes.users import users_router
 from api.v1.routes.auth import auth_router
@@ -12,7 +14,6 @@ from api.v1.routes.vesting import vesting_router
 from api.v1.routes.whitelist import whitelist_router
 from api.v1.routes.contribution import contribution_router
 from api.v1.routes.events import events_router
-# from api.v1.routes.assembler import assembler_router
 from api.v1.routes.purchase import purchase_router
 from api.v1.routes.jobs import jobs_router
 from api.v1.routes.staking import staking_router
@@ -20,39 +21,30 @@ from api.v1.routes.announcements import announcement_router
 from api.v1.routes.tutorials import tutorial_router
 from api.v1.routes.faq import faq_router
 from api.v1.routes.notifications import notification_router
-# from api.v1.routes.wallets import wallets_router
-# from api.v1.routes.tokens import tokens_router
-
-from core import config
-# from app.db.session import SessionLocal
-from core.auth import get_current_active_user
-from core.celery_app import celery_app
-from worker import tasks
 
 app = FastAPI(
-    title=config.PROJECT_NAME,
+    title="ErgoPad",
     docs_url="/api/docs",
     openapi_url="/api"
 )
 
 #region Routers
-app.include_router(users_router,      prefix="/api/users",      tags=["users"], dependencies=[Depends(get_current_active_user)])
-app.include_router(auth_router,       prefix="/api/auth",       tags=["auth"])
-app.include_router(asset_router,      prefix="/api/asset",      tags=["asset"])
-app.include_router(blockchain_router, prefix="/api/blockchain", tags=["blockchain"])
-app.include_router(projects_router,   prefix="/api/projects",   tags=["projects"])
-app.include_router(util_router,       prefix="/api/util",       tags=["util"])
-app.include_router(vesting_router,    prefix="/api/vesting",    tags=["vesting"])
-app.include_router(whitelist_router,  prefix="/api/whitelist",  tags=["whitelist"])
+app.include_router(users_router,        prefix="/api/users",         tags=["users"], dependencies=[Depends(get_current_active_user)])
+app.include_router(auth_router,         prefix="/api/auth",          tags=["auth"])
+app.include_router(asset_router,        prefix="/api/asset",         tags=["asset"])
+app.include_router(blockchain_router,   prefix="/api/blockchain",    tags=["blockchain"])
+app.include_router(projects_router,     prefix="/api/projects",      tags=["projects"])
+app.include_router(util_router,         prefix="/api/util",          tags=["util"])
+app.include_router(vesting_router,      prefix="/api/vesting",       tags=["vesting"])
+app.include_router(whitelist_router,    prefix="/api/whitelist",     tags=["whitelist"])
 app.include_router(contribution_router, prefix="/api/contribution",  tags=["contribution"])
-app.include_router(events_router,     prefix="/api/events",     tags=["events"])
-app.include_router(purchase_router,   prefix="/api/purchase",   tags=["purchase"])
-# app.include_router(assembler_router,  prefix="/api/assembler",  tags=["assembler"])
-app.include_router(jobs_router,       prefix="/api/jobs",       tags=["jobs"])
-app.include_router(staking_router,    prefix="/api/staking",    tags=["staking"])
-app.include_router(tutorial_router, prefix="/api/tutorials", tags=["tutorials"])
+app.include_router(events_router,       prefix="/api/events",        tags=["events"])
+app.include_router(purchase_router,     prefix="/api/purchase",      tags=["purchase"])
+app.include_router(jobs_router,         prefix="/api/jobs",          tags=["jobs"])
+app.include_router(staking_router,      prefix="/api/staking",       tags=["staking"])
+app.include_router(tutorial_router,     prefix="/api/tutorials",     tags=["tutorials"])
 app.include_router(announcement_router, prefix="/api/announcements", tags=["announcements"])
-app.include_router(faq_router,        prefix="/api/faq",        tags=["faq"])
+app.include_router(faq_router,          prefix="/api/faq",           tags=["faq"])
 app.include_router(notification_router, prefix="/api/notifications", tags=["notifications"])
 #endregion Routers
 
@@ -80,16 +72,9 @@ app.add_middleware(
 # async def catch_all(request: Request, path_name: str):
 #     return {"request_method": request.method, "path_name": path_name}
 
-
 @app.get("/api/ping")
 async def ping():
     return {"hello": "world"}
-
-
-@app.get("/api/task")
-async def example_task():
-    celery_app.send_task("tasks.example_task", args=["Hello World"])
-    return {"message": "success"}
 
 # MAIN
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, status
 import typing as t
-from starlette.responses import JSONResponse
 
+from fastapi import APIRouter, Depends, status
+from starlette.responses import JSONResponse
 from db.session import get_db
 from db.crud.tutorials import (
     get_tutorials,
@@ -14,7 +14,6 @@ from db.schemas.tutorials import CreateAndUpdateTutorial, Tutorial
 from core.auth import get_current_active_user
 
 tutorial_router = r = APIRouter()
-
 
 @r.get(
     "/",

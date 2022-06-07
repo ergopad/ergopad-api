@@ -10,19 +10,6 @@ CFG = Config[Network]
 
 events_router = r = APIRouter()
 
-#region BLOCKHEADER
-"""
-Events API
----------
-Created: vikingphoenixconsulting@gmail.com
-On: 20220113
-Purpose: allow wallets to be whitelisted
-Contributor(s): https://github.com/Luivatra
-
-Notes: 
-"""
-#endregion BLOCKHEADER
-
 #region INIT
 DEBUG = CFG.debug
 st = time() # stopwatch
