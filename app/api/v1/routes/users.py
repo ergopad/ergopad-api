@@ -1,4 +1,5 @@
 import typing as t
+
 from fastapi import APIRouter, Request, Depends, Response, status
 from starlette.responses import JSONResponse
 from db.session import get_db
@@ -13,7 +14,6 @@ from db.schemas.users import UserCreate, UserEdit, User
 from core.auth import get_current_active_user, get_current_active_superuser
 
 users_router = r = APIRouter()
-
 
 @r.get(
     "/",

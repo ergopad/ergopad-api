@@ -1,7 +1,8 @@
-from decimal import Decimal
 import requests, json, os
 import fractions
 import re
+
+from decimal import Decimal
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
 from api.v1.routes.staking import AddressList
@@ -16,11 +17,9 @@ from datetime import date, datetime, timezone, timedelta
 from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
 from ergo.util import encodeLong, encodeString
-import uuid
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
-
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoClientException, InputBox
 from sigmastate.Values import ErgoTree

@@ -20,34 +20,6 @@ CFG = Config[Network]
 
 asset_router = r = APIRouter()
 
-# region BLOCKHEADER
-"""
-Asset API
----------
-Created: vikingphoenixconsulting@gmail.com
-On: 20211009
-Purpose: Returns coin and token values by user, coin or wallet.
-
-Notes: 
-. Developed for ErgoHack II, October 2021
-. TODO: intended to use reducers/redux model to improve testability/stability
-. Replace APIs with database calls once data is populated (need supporting import scripts to maintain)
-  - if keeping API calls, replace requests with async (i.e. httpx or aiohttp) to avoid blocking (requests is synchronous)
-. ?? is this SigRSV? 003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0
-
-Examples:
-> http://localhost:8000/api/asset/user/hello
-> http://localhost:8000/api/asset/price/cardano
-> http://localhost:8000/api/asset/price/sigusd
-> http://localhost:8000/api/asset/balance/9iD7JfYYemJgVz7nTGg9gaHuWg7hBbHo2kxrrJawyz4BD1r9fLS
-> http://localhost:8000/api/asset/price/history/ergo/3
-
-testnet: 3WwjaerfwDqYvFwvPRVJBJx2iUvCjD2jVpsL82Zho1aaV5R95jsG
-mainnet: 9iD7JfYYemJgVz7nTGg9gaHuWg7hBbHo2kxrrJawyz4BD1r9fLS
-
-"""
-# endregion BLOCKHEADER
-
 # region INIT
 DEBUG = CFG.debug
 st = time()  # stopwatch
@@ -407,13 +379,13 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
 async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     pair = pair.lower()
     # check cache
-    cached = cache.get(
-        f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
+    cached = cache.get(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
     if cached:
         return cached
 
     if pair not in ("ergopad_erg", "ergopad_sigusd"):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: trading pair not supported')
+        
     # aggregator stores at 5 min resolution
     timeMap = {
         "h": 10,

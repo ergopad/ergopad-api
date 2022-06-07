@@ -1,15 +1,13 @@
+import typing as t
+import datetime
+import os
+
 from fastapi import APIRouter, Depends, status
 from fastapi.datastructures import UploadFile
 from fastapi.exceptions import HTTPException
 from fastapi.param_functions import File
 from starlette.responses import JSONResponse
-
-import typing as t
-import datetime
-import os
-
 from core.auth import get_current_active_user
-
 from db.session import get_db
 from db.crud.projects import (
     get_projects,
@@ -19,11 +17,9 @@ from db.crud.projects import (
     delete_project
 )
 from db.schemas.projects import CreateAndUpdateProject, Project
-
 from aws.s3 import AWS_REGION, S3, S3_BUCKET, S3_KEY
 
 projects_router = r = APIRouter()
-
 
 @r.get(
     "/",

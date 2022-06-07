@@ -15,7 +15,6 @@ from db.schemas.notifications import CreateAndUpdateNotification, Notification
 
 notification_router = r = APIRouter()
 
-
 @r.get(
     "/{walletAddress}",
     response_model=t.List[Notification],
