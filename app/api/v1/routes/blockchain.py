@@ -224,7 +224,7 @@ def ergopadInCirculation():
     try:
         # check cache
         cached = cache.get("get_api_blockchain_ergopad_in_circulation")
-        if False: # cached:
+        if cached:
             return cached
 
         ergopad_token_id = 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413'
@@ -269,7 +269,7 @@ def ergopadInCirculation():
 def totalSupply(tokenId):
     # check cache
     cached = cache.get(f"get_api_blockchain_total_supply_{tokenId}")
-    if False: # cached:
+    if cached:
         return cached
     try:
         # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)
