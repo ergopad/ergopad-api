@@ -1,7 +1,6 @@
 import requests
 import asyncio
 
-from ast import literal_eval
 from starlette.responses import JSONResponse
 from wallet import Wallet
 from config import Config, Network # api specific config
@@ -341,20 +340,29 @@ async def staked(req: AddressList):
                 pass
 
             if box["assets"][0]["tokenId"]==CFG.stakeTokenID:
-                reg = literal_eval(box["additionalRegisters"])
+                reg = box["additionalRegisters"]
+                # logging.debug(reg)
                 if 'R5' not in reg:
                     logging.warning(f'ERR:{myself()}: Missing R5 in box: {boxId}')
                 else:                
                     if reg["R5"]["renderedValue"] in stakeKeys.keys():
+                        stakeBoxR4 = reg["R4"]["renderedValue"]
+
                         if stakeKeys[reg["R5"]["renderedValue"]] not in stakePerAddress:
                             stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
-                        stakeBoxR4 = literal_eval(reg["R4"]["renderedValue"])
+
+                        if isinstance(stakeBoxR4, int):
+                            stakeBoxR4 = int(stakeBoxR4)
+                        else:
+                            logging.warning(f'ERR:{myself()}: Stake Box R4 is not a valid integer: {stakeBoxR4}')
+                            stakeBoxR4 = 0
+
                         cleanedBox = {
                             'boxId': box["boxId"],
                             'stakeKeyId': reg["R5"]["renderedValue"],
                             'stakeAmount': box["assets"][1]["amount"]/10**2,
-                            'penaltyPct': validPenalty(stakeBoxR4[1]),
-                            'penaltyEndTime': int(stakeBoxR4[1]+8*week)
+                            'penaltyPct': validPenalty(stakeBoxR4),
+                            'penaltyEndTime': int(stakeBoxR4+8*week)
                         }
                         stakePerAddress[stakeKeys[reg["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
                         totalStaked += box["assets"][1]["amount"]/10**2
