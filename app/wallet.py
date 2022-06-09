@@ -6,12 +6,6 @@ from pyblake2 import blake2b
 from ecdsa import SECP256k1
 from config import dotdict, Network, Config
 
-### LOGGING
-import logging
-level = logging.DEBUG # TODO: set from .env
-logging.basicConfig(format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s", datefmt='%m-%d %H:%M', level=level)
-
-### INIT
 curve = SECP256k1
 CFG = Config[Network]
 
@@ -90,7 +84,7 @@ class Wallet:
   def fromBase58(self, address):
     addr = Wallet(address)
     if (not addr.isValid()):
-      logging.error(f'Invalid Ergo address ${address}')
+      return None
     return addr
 
   def fromBytes(self, bytes):
@@ -144,7 +138,7 @@ if __name__ == '__main__':
   pk = tree[6:72]
   fromPk = Wallet.fromPk(pk, network).publicKey()
   isValid = Wallet.isValid()
-  logging.info(f"""Validation:
+  print(f"""Validation:
     Wallet: {Wallet.Wallet}
     tree: {tree}
     fromTree: {fromTree}
