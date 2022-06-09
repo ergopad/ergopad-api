@@ -2,6 +2,7 @@ import inspect
 import logging
 import requests
 import ssl
+import typing as t
 
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Request, Depends, status
@@ -116,9 +117,13 @@ def compileErgoscript(ergoscript: Ergoscript):
 
 
 class InvalidateCacheRequest(BaseModel):
-    key: str
-
+    keys: t.List[str]
 
 @r.post("/forceInvalidateCache", name="cache:invalidate")
-def forceInvalidateCache(req: InvalidateCacheRequest, current_user=Depends(get_current_active_superuser)):
-    return {'status': 'success', 'detail': cache.invalidate(req.key)}
+def forceInvalidateCache(req: InvalidateCacheRequest, current_user = Depends(get_current_active_superuser)):
+    try:
+        invalidation_count = sum(map(lambda key : cache.invalidate(key), req.keys))
+        return {'status': 'success', 'invalidation_count': invalidation_count}
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: unable to invalidate cache ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'({str(e)})')

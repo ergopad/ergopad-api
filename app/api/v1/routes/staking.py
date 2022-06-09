@@ -980,13 +980,22 @@ def stakingStatus(project: str):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
+#
+# Need to invalidate cache intelligently here to reduce wait times
+# Response is cached twice, once at address level
+# and the second at stake token id level
+# so need to invalidate two keys when a transaction is detected
+# 1. get_staking_staked_addresses_{address}_balance_confirmed
+# 2. get_staking_staked_token_boxes_{config.stakeTokenId}
+# can use the POST /api/util/forceInvalidateCache endpoint for this
+#
 @r.post("/{project}/staked/", name="staking:staked-v2")
 async def stakedv2(project: str, req: AddressList):
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
 
-    CACHE_TTL = 600 # 10 mins
-    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+    CACHE_TTL = 600 # 10 mins probably can increase this if cache invalidation is working
+    appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
     config = stakingConfigs[project](appKit)
     try:
         stakeKeys = {}
@@ -996,6 +1005,7 @@ async def stakedv2(project: str, req: AddressList):
             data = None
             cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
             if cached:
+                logging.debug(f'DEBUG:{myself()}: (cache_hit_for_{address})')
                 ok = True
                 data = cached
             else:
@@ -1021,9 +1031,11 @@ async def stakedv2(project: str, req: AddressList):
         checkBoxes = []
         cached = cache.get(f"get_staking_staked_token_boxes_{config.stakeTokenId}")
         if cached:
+            logging.debug(f'DEBUG:{myself()}: (cache_hit_for_{config.stakeTokenId})')
             checkBoxes = cached
         else:
-            checkBoxes = getUnspentStakeBoxes(config.stakeTokenId,config.stakeContract.contract.toAddress().toString(),True)
+            # query explorer api or read from db and cache response
+            checkBoxes = getUnspentStakeBoxes(config.stakeTokenId, config.stakeContract.contract.toAddress().toString(), True)
             cache.set(f"get_staking_staked_token_boxes_{config.stakeTokenId}", checkBoxes, CACHE_TTL)
         for box in checkBoxes:
             if box["assets"][0]["tokenId"]==config.stakeTokenId:
@@ -1034,11 +1046,11 @@ async def stakedv2(project: str, req: AddressList):
                     cleanedBox = {
                         'boxId': box["boxId"],
                         'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
-                        'stakeAmount': round(box["assets"][1]["amount"]/10**config.stakedTokenDecimals,config.stakedTokenDecimals)
+                        'stakeAmount': round(box["assets"][1]["amount"] / 10**config.stakedTokenDecimals, config.stakedTokenDecimals)
                     }
                     stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
-                    totalStaked += round(box["assets"][1]["amount"]/10**config.stakedTokenDecimals,config.stakedTokenDecimals)
-                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += round(box["assets"][1]["amount"]/10**config.stakedTokenDecimals,config.stakedTokenDecimals)
+                    totalStaked += round(box["assets"][1]["amount"] / 10**config.stakedTokenDecimals, config.stakedTokenDecimals)
+                    stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += round(box["assets"][1]["amount"] / 10**config.stakedTokenDecimals, config.stakedTokenDecimals)
 
         return {
             'project': project,
@@ -1072,7 +1084,7 @@ async def allstakedv2(req: AddressList):
                 continue
             ret.append(staked)
 
-        cache.set(f"get_staking_staked_v2_{u_hash}", ret)
+        cache.set(f"get_staking_staked_v2_{u_hash}", ret, timeout=300) # 5 min
         return ret
 
     except Exception as e:
