@@ -259,15 +259,20 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
 # find vesting/vested tokens
 @r.get("/vested/{wallet}", name="vesting:findVestedTokens")
 def findVestingTokens(wallet:str):
+    CACHE_TTL = 1800 # 30 mins (this is only changed once per month)
     try:
-        #tokenId = CFG.ergopadTokenId
+        # check cache first
+        cached = cache.get(f"get_vesting_vested_ergopad_{wallet}")
+        if cached:
+            return cached
+        # tokenId = CFG.ergopadTokenId
         total = 0
         result = {}
         userWallet = Wallet(wallet)
         userErgoTree = userWallet.ergoTree()
         address = CFG.vestingContract
         offset = 0
-        res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers), timeout=2)
+        res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={offset}&limit=500', headers=dict(headers))
         while res.ok:
             # returns array of dicts
             for box in res.json()["items"]:
@@ -301,7 +306,7 @@ def findVestingTokens(wallet:str):
                     pass
             if len(res.json()['items']) == 500:
                 offset += 500
-                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={0}&limit=500', headers=dict(headers), timeout=2)
+                res = requests.get(f'{CFG.explorer}/boxes/unspent/byAddress/{address}?offset={0}&limit=500', headers=dict(headers))
             else:
                 break
         
@@ -314,13 +319,15 @@ def findVestingTokens(wallet:str):
             tokenResult['totalVested'] = value['totalVested']
             tokenResult['outstanding'] = []
             for redeemDate in sorted(value['outstanding'].keys()):
-                tokenResult['outstanding'].append({'date': redeemDate, 'amount': value['outstanding'][redeemDate]['amount']})
+                tokenResult['outstanding'].append({'date': str(redeemDate), 'amount': value['outstanding'][redeemDate]['amount']})
             resJson.append(tokenResult)
 
-        return({
-            'status': 'success', 
+        ret = {
+            'status': 'success',
             'vested': resJson
-        })
+        }
+        cache.set(f"get_vesting_vested_ergopad_{wallet}", ret, CACHE_TTL)
+        return ret
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to build vesting request ({e})')
