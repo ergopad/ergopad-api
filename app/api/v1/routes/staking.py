@@ -1065,6 +1065,7 @@ async def stakedv2(project: str, req: AddressList):
 
 @r.post("/staked-v2/", name="staking:all-staked-v2")
 async def allstakedv2(req: AddressList):
+    CACHE_TTL = 300 # 5 mins
     try:
         # creating a hash for the input that is independent of ordering
         u_hash = "hash_" + str(sum(list(map(lambda address: int(get_md5_hash(address), 16), set(req.addresses)))))
@@ -1084,7 +1085,7 @@ async def allstakedv2(req: AddressList):
                 continue
             ret.append(staked)
 
-        cache.set(f"get_staking_staked_v2_{u_hash}", ret, timeout=300) # 5 min
+        cache.set(f"get_staking_staked_v2_{u_hash}", ret, timeout=CACHE_TTL)
         return ret
 
     except Exception as e:
