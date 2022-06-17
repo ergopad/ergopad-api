@@ -49,6 +49,11 @@ async def login(
 
         return {"access_token": access_token, "token_type": "bearer", "permissions": permissions}
 
+    # fastapi recommendation
+    except HTTPException as e:
+        logger.error(f'ERR:{myself()}: Invalid token {e}')
+        raise HTTPException(status_code=400, detail="Invalid login.")
+
     except Exception as e:
         logger.error(f'ERR:{myself()}: {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Invalid token request.')
@@ -80,6 +85,11 @@ async def signup(
         )
 
         return {"access_token": access_token, "token_type": "bearer"}
+
+    # fastapi recommendation
+    except HTTPException as e:
+        logger.error(f'ERR:{myself()}: Invalid signup {e}')
+        raise HTTPException(status_code=400, detail="Invalid signup.")
 
     except Exception as e:
         logger.error(f'ERR:{myself()}: {e}')

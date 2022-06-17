@@ -490,4 +490,4 @@ async def get_all_assets(request: Request) -> None:
 
     except Exception as e:
         logger.error(f'ERR:{myself()}: unable to find all balances ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, detail=f'ERR:{myself()}: Unable to find all balances.')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find all balances.')
