@@ -1,5 +1,5 @@
 import requests
-import logging
+from utils.logger import logger
 from config import Config, Network  # api specific config
 from cache.cache import cache
 
@@ -198,7 +198,7 @@ def getErgodexPoolBox():
         res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
         cache.set(f"ergodex_pool_{POOL_SAMPLE}", res)
     except:
-        logging.error(f"ERR:getErgodexPoolBox: unable to find box")
+        logger.error(f"ERR:getErgodexPoolBox: unable to find box")
 
     return res
 
