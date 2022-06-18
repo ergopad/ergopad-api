@@ -45,7 +45,7 @@ class TXFormat(str, Enum):
 #region ROUTES
 # current node info (and more)
 @r.get("/info", name="blockchain:info")
-async def getInfo():
+def getInfo():
     try:
         st = time() # stopwatch
         nodeInfo = {}
@@ -77,7 +77,7 @@ async def getInfo():
         nodeInfo['ergopadTokenId'] = CFG.ergopadTokenId
 
         # nodeInfo['vestingBegin_ms'] = f'{ctime(1643245200)} UTC'
-        nodeInfo['sigUSD'] = await get_asset_current_price('sigusd')
+        nodeInfo['sigUSD'] = get_asset_current_price('sigusd')
         nodeInfo['inDebugMode'] = ('PROD', '!! DEBUG !!')[DEBUG]
 
         logger.debug(f'::TOOK {time()-st:0.4f}s')
@@ -130,7 +130,7 @@ def getEmmissionAmount(tokenId):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
 
 @r.get("/ergusdoracle", name="blockchain:ergusdoracle")
-async def ergusdoracle():
+def ergusdoracle():
     res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
     return json.loads(res.json())
 
@@ -633,7 +633,7 @@ class AirdropRequest(BaseModel):
     addresses: Dict[str,Decimal]
 
 @r.post("/airdrop", name="blockchain:airdrop")
-async def airdrop( 
+def airdrop( 
     req: AirdropRequest,
     current_user=Depends(get_current_active_superuser)
 ):
@@ -674,7 +674,7 @@ async def airdrop(
     return ErgoAppKit.unsignedTxToJson(unsignedTx)
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
-async def tvl(tokenId: str):
+def tvl(tokenId: str):
     try:
         cached = cache.get(f"get_tvl_{tokenId}")
         if cached:
@@ -688,11 +688,11 @@ async def tvl(tokenId: str):
             vestingBalanceC = get_asset_balance_from_address(vestingAddress)
             vestingWithNFTBalanceC = get_asset_balance_from_address(vestingWithNFTAddress)
 
-            stakingBalance = await stakingBalanceC
+            stakingBalance = stakingBalanceC
             logger.debug(f'stakingBalance: {stakingBalance}')
-            vestingBalance = await vestingBalanceC
+            vestingBalance = vestingBalanceC
             logger.debug(f'vestingBalance: {vestingBalance}')
-            vestingWithNFTBalance = await vestingWithNFTBalanceC
+            vestingWithNFTBalance = vestingWithNFTBalanceC
             logger.debug(f'vestingWithNFTBalance: {vestingWithNFTBalance}')
 
             stakingTVL = 0

@@ -49,7 +49,7 @@ class Whitelist(BaseModel):
 
 # region ROUTES
 @r.get("/checkIp")
-async def go(request: Request):
+def go(request: Request):
     # return {}
     logger.debug(request.client.host)
     return {
@@ -61,7 +61,7 @@ async def go(request: Request):
 # 1. Switch from pd.Dataframe().to_sql
 # 2. rewrite logic for max sigusd allowance
 @r.post("/signup", name="whitelist:signup")
-async def whitelistSignUp(whitelist: Whitelist, request: Request):
+def whitelistSignUp(whitelist: Whitelist, request: Request):
     NOW = time()
     try:
         eventName = whitelist.event
@@ -111,7 +111,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist funds complete.")
 
         # special checks
-        validation = await checkEventConstraints(eventId, whitelist)
+        validation = checkEventConstraints(eventId, whitelist)
         if not validation[0]:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup failed. {validation[1]}")
 
@@ -209,7 +209,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         logger.error(f'ERR:{myself()}: whitelist err, {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
 
-async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db())):
+def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db())):
     whitelistEvent = get_whitelist_event_by_event_id(db, eventId)
     additionalDetails = whitelistEvent.additionalDetails
     constraints = {"min_stake": 0}
@@ -218,7 +218,7 @@ async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_
     address = whitelist.ergoAddress
     if (constraints['min_stake'] > 0):
         try:
-            stakedRes = await staked(AddressList(addresses=[address]))
+            stakedRes = staked(AddressList(addresses=[address]))
             if stakedRes["totalStaked"] >= constraints['min_stake']:
                 return (True, "ok")
             else:
@@ -228,7 +228,7 @@ async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_
     return (True, "ok")
 
 @r.get("/summary/{eventName}", name="whitelist:summary")
-async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
+def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
     try:
         logger.debug(DATABASE)
         con = create_engine(DATABASE)
@@ -268,7 +268,7 @@ async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user
     response_model_exclude_none=True,
     name="whitelist:all-events"
 )
-async def whitelist_event_list(
+def whitelist_event_list(
     db=Depends(get_db),
 ):
     """
@@ -284,7 +284,7 @@ async def whitelist_event_list(
     response_model_exclude_none=True,
     name="whitelist:event"
 )
-async def whitelist_event(
+def whitelist_event(
     projectName: str, 
     roundName: str,
     db=Depends(get_db),
@@ -298,7 +298,7 @@ async def whitelist_event(
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 @r.post("/events", response_model_exclude_none=True, name="whitelist:create-event")
-async def whitelist_event_create(
+def whitelist_event_create(
     whitelist_event: CreateWhitelistEvent,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -316,7 +316,7 @@ async def whitelist_event_create(
     response_model_exclude_none=True, 
     name="whitelist:edit-event"
 )
-async def whitelist_event_edit(
+def whitelist_event_edit(
     id: int,
     whitelist_event: CreateWhitelistEvent,
     db=Depends(get_db),
@@ -335,7 +335,7 @@ async def whitelist_event_edit(
     response_model_exclude_none=True, 
     name="whitelist:delete-event"
 )
-async def whitelist_event_delete(
+def whitelist_event_delete(
     id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
