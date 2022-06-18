@@ -48,7 +48,7 @@ class Email(BaseModel):
 # endregion CLASSES
 
 @r.post("/email")
-async def email(email: Email, request: Request):
+def email(email: Email, request: Request):
     try:
         # validate referer
         logger.debug(request.headers)

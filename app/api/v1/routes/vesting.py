@@ -364,7 +364,7 @@ class RedeemWithNFTRequest(BaseModel):
     addresses: List[str] = []
 
 @r.post("/redeemWithNFT", name="vesting:redeemWithNFT")
-async def redeemWithNFT(req: RedeemWithNFTRequest):
+def redeemWithNFT(req: RedeemWithNFTRequest):
     try:
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
         vestingBox = appKit.getBoxesById([req.boxId])[0]
@@ -472,7 +472,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 
 
 @r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
-async def vested(req: AddressList):
+def vested(req: AddressList):
     CACHE_TTL = 600 # 10 mins
     vestingAddresses = [
         '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU',
@@ -572,7 +572,7 @@ class BootstrapRoundRequest(BaseModel):
     roundEnd_ms: int
 
 @r.post('/bootstrapRound', name="vesting:bootstrapRound")
-async def bootstrapRound(
+def bootstrapRound(
     req: BootstrapRoundRequest, 
     current_user=Depends(get_current_active_superuser)
 ):
@@ -695,7 +695,7 @@ async def bootstrapRound(
 
 
 @r.get('/activeRounds', name='vesting:activeRounds')
-async def activeRounds():
+def activeRounds():
     try:
         proxyAddresses = [
             'Jf7SDZuaVDGiCwCxC7N2y8cuptH3cgNT1nteJK469effW2gNarYn1AxsYjNcP7zYtvzmVjNPMmE3PYJRMC2E7m3yTDBrHvv8voJM35a9ktLb3bNeQ4qEJSyFse3pQeqcTxvPATNAv7RHc3fnAkBf3PsNBGFoRq2nwnciNwUaNcunyfWz2JDbwrBzMT7gMfs8U9YKAKGU1V754PUa1WRccaUfWxDAj5zVVkzkvVNNeQPH2g9GAu539Kc5792XLRwfv5MqaBkQ6KqHw8tgck2e55G4sY6n9ZQ4vboeuVC9JzsuiYraAuc6Lbj1NbPdDRaHXBUAQioDuzRBFxDFwLdmsZXykdvDfJZDytxPoCkzdfMmr8Zchga8vELSydrJ8smXbjWnrySGTZWqcQbJLB1YwPDiGVQvDvvQhRSezJcGMXUXea9zX6cCaeAsrqCULonZKVoeVgCNGte6VFk7PTKJ5W5LrRW1cgkJNRHYrpqPujPN8SoMgLjt1zvCKww5eSuu2RXqyZNVPRxMU3uQd3F2hRjGAmJA6M8Mz5QdZmoXj1LRWnrz1C1E6z6mL1Unry2GYWbxfTsVFRbZVZEv78yn9TUN7cuA163BSoxLVeKwUbGC2uiWeWSm1FzTPNCHHpVtBRfTACKoNbxag9SGgxpsepyxaF7snbXhKtBnqFvyg2ZEiiHXUDjY1Qy8kjf9JrdLmifU6WaZ7VdhNEdHGpf72ivo5sVPNEeUKoKfHAY6WWokivYjeSpKCSLjougKwaNoR79tUWdfN8CEudwUSebWXD92cbnMZxS7QBvGqcUSGRQuuD1uXgeWF8m76xgVH4sQfTuMMvYVWeH8e8bHHqtQMzw2FUajFo2F1mxxwVqvkUQJgmRQXYBndDGiquVCvTqNdZ25eo32gf',
@@ -731,7 +731,7 @@ class RequiredNergTokensRequest(BaseModel):
     sigUSDAmount: Decimal
 
 @r.post('/requiredNergTokens', name="vesting:requiredNergTokens")
-async def requiredNergTokens(req: RequiredNergTokensRequest):
+def requiredNergTokens(req: RequiredNergTokensRequest):
     try:
         proxyBox = getNFTBox(req.proxyNFT)
         whitelistTokenId = proxyBox["additionalRegisters"]["R7"]["renderedValue"]
@@ -740,7 +740,7 @@ async def requiredNergTokens(req: RequiredNergTokensRequest):
         priceNum = roundParameters[3]
         priceDenom = roundParameters[4]
         vestedTokenInfo = getTokenInfo(vestedTokenId)
-        oracleInfo = await ergusdoracle()
+        oracleInfo = ergusdoracle()
         nErgPerUSD = int(oracleInfo["latest_datapoint"]*1.01)
         sigUsdDecimals = int(2)
         sigUsdTokens = int(req.sigUSDAmount*10**sigUsdDecimals)
@@ -774,9 +774,9 @@ class VestFromProxyRequest(RequiredNergTokensRequest):
     txFormat: TXFormat = TXFormat.EIP_12
 
 @r.post('/contribute', name="vesting:contribute")
-async def contribute(req: VestFromProxyRequest):
+def contribute(req: VestFromProxyRequest):
     try:
-        oracleInfo = await ergusdoracle()
+        oracleInfo = ergusdoracle()
         if oracleInfo is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failed to retrieve oracle info')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
@@ -860,7 +860,7 @@ async def contribute(req: VestFromProxyRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 @r.post('/vestFromProxy', name="vesting:vestFromProxy")
-async def vestFromProxy(req: VestFromProxyRequest):
+def vestFromProxy(req: VestFromProxyRequest):
     try:
         oracleInfo = getUnspentBoxesByTokenId(ergUsdOracleNFT)[0]
         #oracleInfo = getNFTBox(ergUsdOracleNFT,includeMempool=False)

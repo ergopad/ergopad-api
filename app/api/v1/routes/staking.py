@@ -103,7 +103,7 @@ class BootstrapRequest(BaseModel):
 #endregion CLASSES
 
 @r.post("/unstake/", name="staking:unstake")
-async def unstake(req: UnstakeRequest, project: str = "ergopad"):
+def unstake(req: UnstakeRequest, project: str = "ergopad"):
     try:
         sc = stakingConfigsV1[project]
         logger.debug('unstake::appKit')
@@ -297,7 +297,7 @@ def validPenalty(startTime: int):
     return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
 @r.post("/staked/", name="staking:staked")
-async def staked(req: AddressList, project: str = "ergopad"):
+def staked(req: AddressList, project: str = "ergopad"):
     CACHE_TTL = 600 # 10 mins
     try:
         sc = stakingConfigsV1[project]
@@ -402,7 +402,7 @@ def stakingStatusV1(project: str = "ergopad"):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 @r.post("/stake/", name="staking:stake")
-async def stake(req: StakeRequest, project: str = "ergopad"):
+def stake(req: StakeRequest, project: str = "ergopad"):
     try:
         sc = stakingConfigsV1[project]
         logger.debug(f'stake::staked token info')
@@ -528,7 +528,7 @@ async def stake(req: StakeRequest, project: str = "ergopad"):
 
 # bootstrap staking setup
 @r.post("/bootstrap/", name="staking:bootstrap")
-async def bootstrapStaking(req: BootstrapRequest):
+def bootstrapStaking(req: BootstrapRequest):
     try:
         stakedToken = getTokenInfo(req.stakedTokenID)
         stakedTokenDecimalMultiplier = 10**stakedToken["decimals"]
@@ -636,10 +636,10 @@ async def bootstrapStaking(req: BootstrapRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
 
 @r.post("/{project}/stake/", name="staking:stake-v2")
-async def stakeV2(project: str, req: StakeRequest):
+def stakeV2(project: str, req: StakeRequest):
     try:
         if project in stakingConfigsV1:
-            return await stake(req,project)
+            return stake(req,project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
@@ -661,10 +661,10 @@ async def stakeV2(project: str, req: StakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.post("/{project}/unstake/", name="staking:unstake-v2")
-async def unstakev2(project: str, req: UnstakeRequest):
+def unstakev2(project: str, req: UnstakeRequest):
     try:
         if project in stakingConfigsV1:
-            return await unstake(req,project)
+            return unstake(req,project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
@@ -690,7 +690,7 @@ async def unstakev2(project: str, req: UnstakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.post("/{project}/addstake/", name="staking:addstake-v2")
-async def addstake(project: str, req: UnstakeRequest):
+def addstake(project: str, req: UnstakeRequest):
     try:
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -764,9 +764,9 @@ def stakingStatus(project: str):
 # can use the POST /api/util/forceInvalidateCache endpoint for this
 #
 @r.post("/{project}/staked/", name="staking:staked-v2")
-async def stakedv2(project: str, req: AddressList):
+def stakedv2(project: str, req: AddressList):
     if project in stakingConfigsV1:
-            return await staked(req, project)
+            return staked(req, project)
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
 
@@ -840,7 +840,7 @@ async def stakedv2(project: str, req: AddressList):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.post("/staked-v2/", name="staking:all-staked-v2")
-async def allstakedv2(req: AddressList):
+def allstakedv2(req: AddressList):
     CACHE_TTL = 300 # 5 mins
     try:
         # creating a hash for the input that is independent of ordering
@@ -852,7 +852,7 @@ async def allstakedv2(req: AddressList):
 
         ret = []
         for project in stakingConfigs:
-            staked = await stakedv2(project, req)
+            staked = stakedv2(project, req)
             if type(staked) == JSONResponse:
                 # error
                 return staked
@@ -873,7 +873,7 @@ async def allstakedv2(req: AddressList):
 ########################################
 
 @r.get("/config", response_model_exclude_none=True, name="staking-cms:all-config")
-async def staking_config_list_cms(
+def staking_config_list_cms(
     db=Depends(get_db),
 ):
     """
@@ -888,7 +888,7 @@ async def staking_config_list_cms(
 
 
 @r.get("/config/{project}", response_model_exclude_none=True, name="staking-cms:config")
-async def staking_config_cms(
+def staking_config_cms(
     project: str,
     db=Depends(get_db),
 ):
@@ -904,7 +904,7 @@ async def staking_config_cms(
 
 
 @r.post("/config", response_model_exclude_none=True, name="staking-cms:create-config")
-async def staking_config_create_cms(
+def staking_config_create_cms(
     staking_config: CreateAndUpdateStakingConfig,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -921,7 +921,7 @@ async def staking_config_create_cms(
 
 
 @r.put("/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config")
-async def staking_config_edit_cms(
+def staking_config_edit_cms(
     id: int,
     staking_config: CreateAndUpdateStakingConfig,
     db=Depends(get_db),
@@ -941,7 +941,7 @@ async def staking_config_edit_cms(
 @r.delete(
     "/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config"
 )
-async def staking_config_delete_cms(
+def staking_config_delete_cms(
     id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
