@@ -75,10 +75,10 @@ app.add_middleware(
 
 # all requests are timed and logged
 @app.middleware("http")
-async def add_logging_and_process_time(req: Request, call_next):
+def add_logging_and_process_time(req: Request, call_next):
     try:
         beg = time.time()
-        resNext = await call_next(req)
+        resNext = call_next(req)
         tot = str(round((time.time() - beg) * 1000))
         resNext.headers["X-Process-Time-MS"] = tot
         # logger.debug(f"""{req.url} | host: {req.client.host}:{req.client.port} | pid {os.getpid()} | {tot}ms""".strip())
@@ -90,7 +90,7 @@ async def add_logging_and_process_time(req: Request, call_next):
                 insert into api_audit (request, host, port, application, response_time__ms)
                 values (:request, :host, :port, 'ergopad', :response_time__ms); 
             '''            
-            resAudit = await dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
+            resAudit = dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
 
         return resNext
 
@@ -99,32 +99,32 @@ async def add_logging_and_process_time(req: Request, call_next):
         return {'status': 'error'}
 
 @app.on_event('startup')
-async def startup():
-    await dbErgopad.connect()
+def startup():
+    dbErgopad.connect()
     sqlCleanup = f'''
         delete from api_audit
         where created_at__datetime < (NOW()::timestamp - interval '{DISCARD_AFTER}' day)
     '''
     # logger.log(LEIF, sqlCleanup)
-    resCleanup = await dbErgopad.execute(sqlCleanup)
+    resCleanup = dbErgopad.execute(sqlCleanup)
     logger.info('='*40)
     logger.info('='*15+' Begin... '+'='*15)
     logger.info('='*40)
 
 @app.on_event('shutdown')
-async def shutdown():
-    await dbErgopad.disconnect()
+def shutdown():
+    dbErgopad.disconnect()
     logger.info('*'*80)
     logger.info('*'*15+'  Fin...  '+'*'*15)
     logger.info('*'*80)
 
 # catch all route (useful?)
 # @app.api_route("/{path_name:path}", methods=["GET"])
-# async def catch_all(request: Request, path_name: str):
+# def catch_all(request: Request, path_name: str):
 #     return {"request_method": request.method, "path_name": path_name}
 
 @app.get("/api/ping")
-async def ping():
+def ping():
     return {"hello": "world"}
 
 # MAIN
