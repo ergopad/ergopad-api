@@ -24,7 +24,7 @@ def getEvent(additionalDetails):
     )
 
 
-@pytest.mark.asyncio
+# @pytest.mark.asyncio
 def test_checkEventConstraints_for_default_events(mocker):
     # setup
     mocker.patch('api.v1.routes.whitelist.staked', return_value={
@@ -52,7 +52,7 @@ def test_checkEventConstraints_for_default_events(mocker):
     assert ret[0] == True and ret[1] == 'ok'
 
 
-@pytest.mark.asyncio
+# @pytest.mark.asyncio
 def test_checkEventConstraints_for_paideia_staker_success(mocker):
     # setup
     mocker.patch('api.v1.routes.whitelist.staked', return_value={
@@ -80,7 +80,7 @@ def test_checkEventConstraints_for_paideia_staker_success(mocker):
     assert ret[0] == True and ret[1] == 'ok'
 
 
-@pytest.mark.asyncio
+# @pytest.mark.asyncio
 def test_checkEventConstraints_for_paideia_staker_not_enough_staked(mocker):
     # setup
     mocker.patch('api.v1.routes.whitelist.staked', return_value={
