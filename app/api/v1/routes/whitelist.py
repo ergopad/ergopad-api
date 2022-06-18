@@ -141,11 +141,11 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         # continue with signup
         sqlFindWallet = text(f"select id from wallets where address = :address")
         resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
-        logging.debug(f'find wallet: {resFindWallet["id"]}')
+        # logging.debug(f'find wallet: {resFindWallet["id"]}')
 
         # does wallet exist, or do we need to create it?
         if resFindWallet is None:
-            text(sql = f'''
+            sql = text(f'''
                 insert into wallets(address, email, "blockChainId", network, "walletPass", mneumonic, "socialHandle", "socialPlatform", "chatHandle", "chatPlatform", created_dtz, "lastSeen_dtz", "twitterHandle", "discordHandle", "telegramHandle")
 	            values (
                     :address -- address
@@ -160,12 +160,13 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , null, null, null -- twitter, discord, telegram
                 );
             ''')
+            logging.debug(sql)
             res = con.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
             resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
 
         # found or created, get wallet address
         walletId = resFindWallet['id']
-        logging.warning(f'wallet id: {walletId}')
+        # logging.warning(f'wallet id: {walletId}')
 
         # already whitelisted
         sqlCheckSignup = text(f'''
@@ -206,7 +207,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 )
             ''')
             # logger.warning(f'ip hash: {sqlIpHash}')
-            resIpHash = con.execute(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash}).fetchone()
+            resIpHash = con.execute(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
             logging.debug(f'ip hash: {resIpHash}')
 
             # whitelist success
