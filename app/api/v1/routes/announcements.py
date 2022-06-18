@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 import typing as t
 from starlette.responses import JSONResponse
-
+from utils.logger import logger, myself
 from core.auth import get_current_active_user
 
 from db.session import get_db
@@ -31,8 +31,10 @@ async def announcements_list(
     """
     try:
         return get_announcements(db)
+        
     except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+        logger.error(f'ERR:{myself()}: {e}')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error returning announcement.')
 
 
 @r.get(
@@ -50,8 +52,10 @@ async def announcement_details(
     """
     try:
         return get_announcement(db, id)
+
     except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+        logger.error(f'ERR:{myself()}: {e}')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error returning announcement details.')
 
 
 @r.post("/", response_model=Announcement, response_model_exclude_none=True, name="announcements:create")
@@ -65,9 +69,10 @@ async def announcement_create(
     """
     try:
         return create_announcement(db, announcement)
+    
     except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
-
+        logger.error(f'ERR:{myself()}: {e}')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error creating announcement.')
 
 @r.put(
     "/{announcement_id}", response_model=Announcement, response_model_exclude_none=True, name="announcements:edit"
@@ -83,8 +88,10 @@ async def announcement_edit(
     """
     try:
         return edit_announcement(db, announcement_id, announcement)
+
     except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+        logger.error(f'ERR:{myself()}: {e}')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error updating announcement.')
 
 
 @r.delete(
@@ -100,5 +107,7 @@ async def announcement_delete(
     """
     try:
         return delete_announcement(db, announcement_id)
+
     except Exception as e:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+        logger.error(f'ERR:{myself()}: {e}')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error deleting announcement.')
