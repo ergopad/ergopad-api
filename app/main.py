@@ -5,7 +5,7 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.auth import get_current_active_user
 from utils.logger import logger, myself, LEIF
-from utils.db import dbErgopad
+# from utils.db import dbErgopad
 
 from api.v1.routes.users import users_router
 from api.v1.routes.auth import auth_router
@@ -90,7 +90,7 @@ def add_logging_and_process_time(req: Request, call_next):
                 insert into api_audit (request, host, port, application, response_time__ms)
                 values (:request, :host, :port, 'ergopad', :response_time__ms); 
             '''            
-            resAudit = dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
+            # resAudit = dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
 
         return resNext
 
@@ -100,20 +100,12 @@ def add_logging_and_process_time(req: Request, call_next):
 
 @app.on_event('startup')
 def startup():
-    dbErgopad.connect()
-    sqlCleanup = f'''
-        delete from api_audit
-        where created_at__datetime < (NOW()::timestamp - interval '{DISCARD_AFTER}' day)
-    '''
-    # logger.log(LEIF, sqlCleanup)
-    resCleanup = dbErgopad.execute(sqlCleanup)
     logger.info('='*40)
     logger.info('='*15+' Begin... '+'='*15)
     logger.info('='*40)
 
 @app.on_event('shutdown')
 def shutdown():
-    dbErgopad.disconnect()
     logger.info('*'*80)
     logger.info('*'*15+'  Fin...  '+'*'*15)
     logger.info('*'*80)
