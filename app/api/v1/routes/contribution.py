@@ -1,5 +1,3 @@
-import inspect
-import logging
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Depends, status
 from db.schemas.contributionEvents import CreateContributionEvent
@@ -7,20 +5,12 @@ from db.crud.contribution_events import create_contribution_event, delete_contri
 from db.session import get_db
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
+from utils.logger import logger, myself
 
 CFG = Config[Network]
 DEBUG = CFG.debug
 
 contribution_router = r = APIRouter()
-
-
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(
-    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-
-def myself(): return inspect.stack()[1][3]
-
 
 @r.get(
     "/events",

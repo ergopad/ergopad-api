@@ -1,5 +1,3 @@
-import inspect
-import logging
 import requests
 import ssl
 import typing as t
@@ -13,6 +11,7 @@ from config import Config, Network  # api specific config
 from core.auth import get_current_active_superuser
 
 from cache.cache import cache
+from utils.logger import logger, myself
 
 CFG = Config[Network]
 
@@ -48,19 +47,11 @@ class Email(BaseModel):
         }
 # endregion CLASSES
 
-# region LOGGING
-levelname = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(
-    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', levelname=levelname)
-
-def myself(): return inspect.stack()[1][3]
-# endregion LOGGING
-
 @r.post("/email")
 async def email(email: Email, request: Request):
     try:
         # validate referer
-        logging.debug(request.headers)
+        logger.debug(request.headers)
         validEmailApply = CFG.validEmailApply
         referer = request.headers.get('referer') or ''
         validateMe = request.headers.get('validate_me') or ''
@@ -78,26 +69,26 @@ async def email(email: Email, request: Request):
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
 
         # create connection
-        logging.info(f'creating connection for: {svr} as {usr}')
+        logger.info(f'creating connection for: {svr} as {usr}')
         con = SMTP(svr, 587)
         res = con.ehlo()
         res = con.starttls(context=ctx)
-        if res[0] == 220: logging.info('starttls success')
-        else: logging.error(res)
+        if res[0] == 220: logger.info('starttls success')
+        else: logger.error(res)
         res = con.ehlo()
         res = con.login(usr, pwd)
-        if res[0] == 235: logging.info('login success')
-        else: logging.error(res)
+        if res[0] == 235: logger.info('login success')
+        else: logger.error(res)
 
         msg = f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}"""
         res = con.sendmail(frm, email.to, msg) # con.sendmail(frm, 'erickson.winter@gmail.com', msg)
-        if res == {}: logging.info('message sent')
-        else: logging.error(res)
+        if res == {}: logger.info('message sent')
+        else: logger.error(res)
 
         return {'status': 'success', 'detail': f'email sent to {email.to}'}
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: ({e})')
+        logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.post("/compileErgoscript", name="blockchain:sendPayment")
@@ -112,7 +103,7 @@ def compileErgoscript(ergoscript: Ergoscript):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'invalid ergoscript:\n{ergoscript.script}')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
+        logger.error(f'ERR:{myself()}: unable to compile ergoscript ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to compile ergoscript ({e})')
 
 

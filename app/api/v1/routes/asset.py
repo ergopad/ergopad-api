@@ -1,5 +1,3 @@
-import inspect
-import logging
 import requests
 import typing as t
 
@@ -15,6 +13,7 @@ from datetime import datetime
 from ergodex.price import getErgodexTokenPrice, getErgodexTokenPriceByTokenId
 from config import Config, Network  # api specific config
 from cache.cache import cache
+from utils.logger import logger, myself
 
 CFG = Config[Network]
 
@@ -37,15 +36,6 @@ symbol = 'ERG/USDT'
 con = create_engine(CFG.connectionString)
 # endregion INIT
 
-# region LOGGING
-level = (logging.WARN, logging.DEBUG)[DEBUG]
-logging.basicConfig(
-    format='{asctime}:{name:>8s}:{levelname:<8s}::{message}', style='{', level=level)
-
-
-def myself(): return inspect.stack()[1][3]
-# endregion LOGGING
-
 # region ROUTES
 
 # Single coin balance and tokens for wallet address
@@ -53,7 +43,7 @@ def myself(): return inspect.stack()[1][3]
 async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
     try:
         # get balance from ergo explorer api
-        logging.debug(f'find balance for [blockchain], address: {address}...')
+        logger.debug(f'find balance for [blockchain], address: {address}...')
         res = requests.get(
             f'{CFG.explorer}/addresses/{address}/balance/total')
 
@@ -63,8 +53,8 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
         if res.status_code == 200:
             balance = res.json()
         # else:
-            # raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Something went wrong.")
-        logging.info(f'Balance for ergo: {balance}')
+            # return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content="Something went wrong.")
+        logger.info(f'Balance for ergo: {balance}')
         ergPrice = (await get_asset_current_price('ERGO'))['price']
 
         # handle SigUSD and SigRSV
@@ -104,8 +94,8 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
         }
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find balance ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find balance ({e})')
+        logger.error(f'ERR:{myself()}: unable to find balance ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to get balance from address.')
 
 
 # Find price by token_id
@@ -119,7 +109,7 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
 
         price = None
 
-        logging.warning('find price from ergodex')
+        logger.warning('find price from ergodex')
         ret = getErgodexTokenPriceByTokenId(tokenId)
         if (ret["status"] == "success"):
             price = ret["price"]
@@ -138,8 +128,8 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
         return ret
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find price ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price ({e})')
+        logger.error(f'ERR:{myself()}: unable to find price ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to get price by token id.')
 
 
 # Find price by coin
@@ -195,16 +185,16 @@ async def get_asset_current_price(coin: str = None):
         # ...all other prices
         else:
             # first check ergodex
-            logging.warning("find price from ergodex")
+            logger.warning("find price from ergodex")
             ret = getErgodexTokenPrice(coin)
             if ret["status"] == "success":
                 price = ret["price"]
             else:
-                logging.warning(f"invalid ergodex price: {ret}")
+                logger.warning(f"invalid ergodex price: {ret}")
 
             # check local database storage for price
             if price == None:
-                logging.warning("find price from aggregator...")
+                logger.warning("find price from aggregator...")
                 sqlFindLatestPrice = ''
                 try:
                     pairMapper = {
@@ -225,20 +215,20 @@ async def get_asset_current_price(coin: str = None):
                     res = con.execute(sqlFindLatestPrice)
                     price = res.fetchone()[0]
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"invalid price scraper price: {str(e)}"
                     )
 
             # if not in local database, ask for online value
             if price == None:
-                logging.warning("fallback to price from exchange")
+                logger.warning("fallback to price from exchange")
                 try:
                     res = requests.get(
                         f"{coingecko_url}/simple/price?vs_currencies={currency}&ids={coin}"
                     )
                     price = res.json()[coin][currency]
                 except Exception as e:
-                    logging.warning(f"invalid coingecko price: {str(e)}")
+                    logger.warning(f"invalid coingecko price: {str(e)}")
 
         # return value
         ret = {"status": "unavailable", "name": coin, "price": price}
@@ -251,10 +241,10 @@ async def get_asset_current_price(coin: str = None):
         return ret
 
     except Exception as e:
-        logging.error(f"ERR:{myself()}: unable to find price ({e})")
+        logger.error(f"ERR:{myself()}: unable to find price ({e})")
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content=f"ERR:{myself()}: unable to find price ({e})",
+            content=f"ERR:{myself()}: Unable to find current price.",
         )
 
 
@@ -270,14 +260,21 @@ class TokenPrice(BaseModel):
 # Find price for a list of tokens/coins
 @r.post("/prices", response_model=t.List[TokenPrice], name="coin:coin-prices")
 async def get_asset_current_prices(tokens: TokenListRequest):
-    prices = []
-    for token in tokens.tokens:
-        prices.append({
-            "name": token,
-            "price": (await get_asset_current_price(token))["price"]
-        })
-    return prices
+    try:
+        prices = []
+        for token in tokens.tokens:
+            prices.append({
+                "name": token,
+                "price": (await get_asset_current_price(token))["price"]
+            })
+        return prices
 
+    except Exception as e:
+        logger.error(f"ERR:{myself()}: unable to find price ({e})")
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=f"ERR:{myself()}: Unable to find current prices.",
+        )
 
 # Coin history response schema
 class CoinHistoryDataPoint(BaseModel):
@@ -310,7 +307,7 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
     try:
         # return every nth row
         resolution = int(stepSize * timeMap[stepUnit])
-        logging.info(f'Fecthing history for resolution: {resolution}')
+        logger.info(f'Fecthing history for resolution: {resolution}')
         table = "ergodex_ERG/ergodexToken_continuous_5m"
         # sql
         sql = f"""
@@ -323,7 +320,7 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
             ORDER BY t.timestamp_utc DESC
             LIMIT {limit}
         """
-        logging.debug(f'exec sql: {sql}')
+        logger.debug(f'exec sql: {sql}')
         res = con.execute(sql).fetchall()
         result = []
         # filter tokens
@@ -366,8 +363,8 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
         return result
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find historical price ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find historical price ({e})')
+        logger.error(f'ERR:{myself()}: unable to find historical price ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find historical price.')
 
 
 # Find price by trading pair (ergodex)
@@ -384,7 +381,7 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
         return cached
 
     if pair not in ("ergopad_erg", "ergopad_sigusd"):
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: trading pair not supported')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Trading pair not supported.')
         
     # aggregator stores at 5 min resolution
     timeMap = {
@@ -396,7 +393,7 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
     try:
         # return every nth row
         resolution = int(stepSize * timeMap[stepUnit])
-        logging.info(f'Fecthing history for resolution: {resolution}')
+        logger.info(f'Fecthing history for resolution: {resolution}')
         table = "ergodex_ERG/ergodexToken_continuous_5m"
         # sql
         sql = f"""
@@ -409,7 +406,7 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
             ORDER BY t.timestamp_utc DESC
             LIMIT {limit}
         """
-        logging.debug(f'exec sql: {sql}')
+        logger.debug(f'exec sql: {sql}')
         res = con.execute(sql).fetchall()
 
         tokenData = {
@@ -435,8 +432,8 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
         return tokenData
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find price chart ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price chart ({e})')
+        logger.error(f'ERR:{myself()}: unable to find price chart ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to get price chart.')
 
 # endregion ROUTES
 
@@ -492,5 +489,5 @@ async def get_all_assets(request: Request) -> None:
         return assets
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find all balances ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find all balances ({e})')
+        logger.error(f'ERR:{myself()}: unable to find all balances ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find all balances.')

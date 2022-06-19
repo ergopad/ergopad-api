@@ -11,9 +11,9 @@ from db.crud.faq import (
 )
 from db.schemas.faq import CreateAndUpdateFaq, Faq
 from core.auth import get_current_active_user
+# from utils.logger import logger, myself
 
 faq_router = r = APIRouter()
-
 
 @r.get(
     "/",

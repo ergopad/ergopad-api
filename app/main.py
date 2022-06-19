@@ -1,8 +1,11 @@
 import uvicorn
+import time, os
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.auth import get_current_active_user
+from utils.logger import logger, myself, LEIF
+from utils.db import dbErgopad
 
 from api.v1.routes.users import users_router
 from api.v1.routes.auth import auth_router
@@ -27,6 +30,9 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api"
 )
+
+AUDIT_REQUESTS = True
+DISCARD_AFTER = 3 # days
 
 #region Routers
 app.include_router(users_router,        prefix="/api/users",         tags=["users"], dependencies=[Depends(get_current_active_user)])
@@ -66,6 +72,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# all requests are timed and logged
+@app.middleware("http")
+async def add_logging_and_process_time(req: Request, call_next):
+    try:
+        beg = time.time()
+        resNext = await call_next(req)
+        tot = str(round((time.time() - beg) * 1000))
+        resNext.headers["X-Process-Time-MS"] = tot
+        # logger.debug(f"""{req.url} | host: {req.client.host}:{req.client.port} | pid {os.getpid()} | {tot}ms""".strip())
+        logger.log(LEIF, f"""{req.url}: {tot}ms""".strip())
+
+        # create table api_audit (id serial primary key, request text, host text, port int, application varchar(20), response_time__ms int);
+        if AUDIT_REQUESTS:
+            sqlAudit = f'''
+                insert into api_audit (request, host, port, application, response_time__ms)
+                values (:request, :host, :port, 'ergopad', :response_time__ms); 
+            '''            
+            resAudit = await dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
+
+        return resNext
+
+    except Exception as e:
+        logger.error(f'ERR:middleware:{myself()}: {e}')
+        return {'status': 'error'}
+
+@app.on_event('startup')
+async def startup():
+    await dbErgopad.connect()
+    sqlCleanup = f'''
+        delete from api_audit
+        where created_at__datetime < (NOW()::timestamp - interval '{DISCARD_AFTER}' day)
+    '''
+    # logger.log(LEIF, sqlCleanup)
+    resCleanup = await dbErgopad.execute(sqlCleanup)
+    logger.info('='*40)
+    logger.info('='*15+' Begin... '+'='*15)
+    logger.info('='*40)
+
+@app.on_event('shutdown')
+async def shutdown():
+    await dbErgopad.disconnect()
+    logger.info('*'*80)
+    logger.info('*'*15+'  Fin...  '+'*'*15)
+    logger.info('*'*80)
 
 # catch all route (useful?)
 # @app.api_route("/{path_name:path}", methods=["GET"])
