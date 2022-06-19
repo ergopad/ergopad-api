@@ -997,7 +997,7 @@ async def stakedv2(project: str, req: AddressList):
             data = None
             cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
             if cached:
-                logging.debug(f'DEBUG:{myself()}: (cache_hit_for_{address})')
+                logger.debug(f'DEBUG:{myself()}: (cache_hit_for_{address})')
                 ok = True
                 data = cached
             else:
@@ -1023,7 +1023,7 @@ async def stakedv2(project: str, req: AddressList):
         checkBoxes = []
         cached = cache.get(f"get_staking_staked_token_boxes_{config.stakeTokenId}")
         if cached:
-            logging.debug(f'DEBUG:{myself()}: (cache_hit_for_{config.stakeTokenId})')
+            logger.debug(f'DEBUG:{myself()}: (cache_hit_for_{config.stakeTokenId})')
             checkBoxes = cached
         else:
             # query explorer api or read from db and cache response

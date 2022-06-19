@@ -116,5 +116,5 @@ def forceInvalidateCache(req: InvalidateCacheRequest, current_user = Depends(get
         invalidation_count = sum(map(lambda key : cache.invalidate(key), req.keys))
         return {'status': 'success', 'invalidation_count': invalidation_count}
     except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to invalidate cache ({e})')
+        logger.error(f'ERR:{myself()}: unable to invalidate cache ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'({str(e)})')

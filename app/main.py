@@ -90,7 +90,7 @@ async def add_logging_and_process_time(req: Request, call_next):
                 insert into api_audit (request, host, port, application, response_time__ms)
                 values (:request, :host, :port, 'ergopad', :response_time__ms); 
             '''            
-            resAudit = await dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
+            # resAudit = await dbErgopad.execute(sqlAudit, {'request': str(req.url), 'host': req.client.host, 'port': int(req.client.port), 'response_time__ms': int(tot)})
 
         return resNext
 
@@ -98,25 +98,13 @@ async def add_logging_and_process_time(req: Request, call_next):
         logger.error(f'ERR:middleware:{myself()}: {e}')
         return {'status': 'error'}
 
-@app.on_event('startup')
-async def startup():
-    await dbErgopad.connect()
-    sqlCleanup = f'''
-        delete from api_audit
-        where created_at__datetime < (NOW()::timestamp - interval '{DISCARD_AFTER}' day)
-    '''
-    # logger.log(LEIF, sqlCleanup)
-    resCleanup = await dbErgopad.execute(sqlCleanup)
-    logger.info('='*40)
-    logger.info('='*15+' Begin... '+'='*15)
-    logger.info('='*40)
+# @app.on_event('startup')
+# async def startup():
+#     logger.info(' Begin... ')
 
-@app.on_event('shutdown')
-async def shutdown():
-    await dbErgopad.disconnect()
-    logger.info('*'*80)
-    logger.info('*'*15+'  Fin...  '+'*'*15)
-    logger.info('*'*80)
+# @app.on_event('shutdown')
+# async def shutdown():
+#     logger.info('  Fin...  ')
 
 # catch all route (useful?)
 # @app.api_route("/{path_name:path}", methods=["GET"])
