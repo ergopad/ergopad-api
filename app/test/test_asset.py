@@ -72,25 +72,25 @@ def init_mocks_failure(mocker):
     )
 
 
-@pytest.mark.asyncio
-async def test_get_asset_current_price_for_ergopad(mocker):
+# @pytest.mark.asyncio
+def test_get_asset_current_price_for_ergopad(mocker):
     # setup
     init_mocks_success(mocker)
 
     # act
-    ret = await get_asset_current_price("ergopad")
+    ret = get_asset_current_price("ergopad")
 
     # assert
     assert ret["status"] == "ok" and ret["price"] == 1
 
 
-@pytest.mark.asyncio
-async def test_get_asset_current_price_for_ergoxyz(mocker):
+# @pytest.mark.asyncio
+def test_get_asset_current_price_for_ergoxyz(mocker):
     # setup
     init_mocks_failure(mocker)
 
     # act
-    ret = await get_asset_current_price("ergoxyz")
+    ret = get_asset_current_price("ergoxyz")
 
     # assert
     assert ret["status"] == "unavailable" and ret["price"] == None

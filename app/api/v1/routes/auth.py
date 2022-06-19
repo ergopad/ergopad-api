@@ -23,7 +23,7 @@ auth_router = r = APIRouter()
 
 
 @r.post("/token")
-async def login(
+def login(
     db=Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
     try:
@@ -60,7 +60,7 @@ async def login(
 
 
 @r.post("/signup")
-async def signup(
+def signup(
     db=Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
     try:

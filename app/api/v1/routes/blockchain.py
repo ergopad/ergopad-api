@@ -45,7 +45,7 @@ class TXFormat(str, Enum):
 #region ROUTES
 # current node info (and more)
 @r.get("/info", name="blockchain:info")
-async def getInfo():
+def getInfo():
     try:
         st = time() # stopwatch
         nodeInfo = {}
@@ -77,7 +77,7 @@ async def getInfo():
         nodeInfo['ergopadTokenId'] = CFG.ergopadTokenId
 
         # nodeInfo['vestingBegin_ms'] = f'{ctime(1643245200)} UTC'
-        nodeInfo['sigUSD'] = await get_asset_current_price('sigusd')
+        nodeInfo['sigUSD'] = get_asset_current_price('sigusd')
         nodeInfo['inDebugMode'] = ('PROD', '!! DEBUG !!')[DEBUG]
 
         logger.debug(f'::TOOK {time()-st:0.4f}s')
@@ -130,7 +130,7 @@ def getEmmissionAmount(tokenId):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
 
 @r.get("/ergusdoracle", name="blockchain:ergusdoracle")
-async def ergusdoracle():
+def ergusdoracle():
     res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
     return json.loads(res.json())
 
@@ -526,12 +526,19 @@ def getUnspentStakeBoxesFromExplorerDB(stakeTokenId: str = STAKE_KEY_ID, stakeAd
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to read data from explorer db ({e})')
 
 # GET token boxes legacy code using explorer API
-def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100):
+def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100, retries: int = 10):
     try:
-        res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}?offset={offset}&limit={limit}')
-        if res.ok:
-            items = res.json()["items"]
-            return items
+        while retries > 0:
+            res = requests.get(f'{CFG.explorer}/boxes/unspent/byTokenId/{tokenId}?offset={offset}&limit={limit}')
+            if res.ok:
+                items = res.json()["items"]
+                return items
+            else:
+                if res.status_code == 503:
+                    retries -= 1
+                else:
+                    retries = 0
+        raise Exception("Explorer not responding correctly")
     except Exception as e:
         logger.error(f'ERR:{myself()}: unable to find token box ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find token box ({e})')
@@ -626,7 +633,7 @@ class AirdropRequest(BaseModel):
     addresses: Dict[str,Decimal]
 
 @r.post("/airdrop", name="blockchain:airdrop")
-async def airdrop( 
+def airdrop( 
     req: AirdropRequest,
     current_user=Depends(get_current_active_superuser)
 ):
@@ -667,7 +674,7 @@ async def airdrop(
     return ErgoAppKit.unsignedTxToJson(unsignedTx)
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
-async def tvl(tokenId: str):
+def tvl(tokenId: str):
     try:
         cached = cache.get(f"get_tvl_{tokenId}")
         if cached:

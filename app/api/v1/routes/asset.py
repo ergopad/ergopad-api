@@ -40,7 +40,7 @@ con = create_engine(CFG.connectionString)
 
 # Single coin balance and tokens for wallet address
 @r.get("/balance/{address}", name="asset:wallet-balance")
-async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
+def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
     try:
         # get balance from ergo explorer api
         logger.debug(f'find balance for [blockchain], address: {address}...')
@@ -63,14 +63,14 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
             token['price'] = 0.0
             # if token['name'] == 'SigUSD': # TokenId: 22c6cc341518f4971e66bd118d601004053443ed3f91f50632d79936b90712e9
             if token['tokenId'] == '03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04':
-                price = (await get_asset_current_price('SigUSD'))['price']
+                price = (get_asset_current_price('SigUSD'))['price']
                 token['price'] = price
             # if token['name'] == 'SigRSV': # TokenId: 003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0
             if token['tokenId'] == '003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0':
-                price = (await get_asset_current_price('SigRSV'))['price']
+                price = (get_asset_current_price('SigRSV'))['price']
                 token['price'] = price
             # Ergodex tokens
-            price = (await get_ergodex_asset_price_by_token_id(token['tokenId']))['price']
+            price = (get_ergodex_asset_price_by_token_id(token['tokenId']))['price']
             if price:
                 token['price'] = price
             
@@ -101,7 +101,7 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
 # Find price by token_id
 # Base currency is USD for all coins and tokens.
 @r.get("/priceByTokenId/{tokenId}", name="coin:coin-price-by-token-id")
-async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
+def get_ergodex_asset_price_by_token_id(tokenId: str = None):
     try:
         cached = cache.get(f"get_api_asset_price_by_token_id_{tokenId}")
         if cached:
@@ -137,7 +137,7 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
 # - Allow SigUSD/RSV ergo tokens to be listed as coins (TODO: change from ergo.watch api)
 # - Allow multiple coins per blockchain (TODO: change from CoinGecko api)
 @r.get("/price/{coin}", name="coin:coin-price")
-async def get_asset_current_price(coin: str = None):
+def get_asset_current_price(coin: str = None):
     try:
         coin = coin.lower()
         # check cache
@@ -156,7 +156,7 @@ async def get_asset_current_price(coin: str = None):
                     try:
                         # peg_rate_nano: current USD/ERG price [nanoERG]
                         # ERG/USD
-                        ergo_price = (await get_asset_current_price("ergo"))["price"]
+                        ergo_price = (get_asset_current_price("ergo"))["price"]
                         price = (res["peg_rate_nano"] / nerg2erg) * ergo_price  # SIGUSD
                     except:
                         # if get_asset_current_price("ergo") fails
@@ -295,7 +295,7 @@ class CoinHistory(BaseModel):
 # - all, Ergo, sigUSD, sigRSV, ergopad, Erdoge, Lunadog
 # - minimum resolution is 5 mins
 @r.get("/price/history/{coin}", response_model=t.List[CoinHistory], name="coin:coin-price-historical")
-async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
+def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     coin = coin.lower()
     # aggregator stores at 5 min resolution
     timeMap = {
@@ -373,7 +373,7 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
 # - 1. ergopad_erg
 # - 2. ergopad_sigusd
 @r.get("/price/chart/{pair}", response_model=CoinHistory, name="coin:trading-pair-historical")
-async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
+def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     pair = pair.lower()
     # check cache
     cached = cache.get(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
@@ -446,9 +446,9 @@ class Wallets(BaseModel):
 
 # balance of all wallets
 @r.post("/balance/all", name="asset:all-wallet-balances")
-async def get_all_assets(request: Request) -> None:
+def get_all_assets(request: Request) -> None:
 
-    wallets = await request.json()
+    wallets = request.json()
 
     try:
         # Final balance man contain multiple wallets
@@ -461,7 +461,7 @@ async def get_all_assets(request: Request) -> None:
             if wallet == 'ergo':
                 for address in wallets[wallet]:
                     try:
-                        assets[wallet].append(await get_asset_balance_from_address(address))
+                        assets[wallet].append(get_asset_balance_from_address(address))
                     except:
                         assets[wallet].append("invalid response")
 
@@ -479,7 +479,7 @@ async def get_all_assets(request: Request) -> None:
                                     'balance': res.json()['ETH']['balance'],
                                     'unconfirmed': 0,
                                     'tokens': None,
-                                    'price': (await get_asset_current_price(wallet))['price']
+                                    'price': (get_asset_current_price(wallet))['price']
                                 }
                             }
                         })
