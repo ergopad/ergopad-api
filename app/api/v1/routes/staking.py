@@ -256,7 +256,7 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
-@r.get("{project}/snapshot/", name="staking:snapshot")
+@r.get("/{project}/snapshot/", name="staking:snapshot")
 def snapshot(
     project: str,
     request: Request,
