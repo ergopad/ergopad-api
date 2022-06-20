@@ -5,7 +5,6 @@ from xmlrpc.client import Boolean
 import requests, json
 from core.auth import get_current_active_superuser
 from ergo_python_appkit.appkit import ErgoAppKit
-from wallet import Wallet
 
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
@@ -45,7 +44,7 @@ class TXFormat(str, Enum):
 #region ROUTES
 # current node info (and more)
 @r.get("/info", name="blockchain:info")
-def getInfo():
+async def getInfo():
     try:
         st = time() # stopwatch
         nodeInfo = {}
@@ -77,7 +76,7 @@ def getInfo():
         nodeInfo['ergopadTokenId'] = CFG.ergopadTokenId
 
         # nodeInfo['vestingBegin_ms'] = f'{ctime(1643245200)} UTC'
-        nodeInfo['sigUSD'] = get_asset_current_price('sigusd')
+        nodeInfo['sigUSD'] = await get_asset_current_price('sigusd')
         nodeInfo['inDebugMode'] = ('PROD', '!! DEBUG !!')[DEBUG]
 
         logger.debug(f'::TOOK {time()-st:0.4f}s')
