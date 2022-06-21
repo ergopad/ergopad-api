@@ -5,9 +5,6 @@ from fastapi import APIRouter, status
 from typing import Optional
 from pydantic import BaseModel
 from time import time
-# from api.v1.routes.asset import get_asset_current_price
-# from base64 import b64encode
-# from ergo.util import encodeLong, encodeString
 from config import Config, Network # api specific config
 from utils.logger import logger, myself
 

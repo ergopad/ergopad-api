@@ -148,12 +148,13 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , null, null, null -- twitter, discord, telegram
                 );
             ''')
+            logger.debug(sql)
             res = con.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
             resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
 
         # found or created, get wallet address
         walletId = resFindWallet['id']
-        logger.warning(f'wallet id: {walletId}')
+        # logger.warning(f'wallet id: {walletId}')
 
         # already whitelisted
         sqlCheckSignup = text(f'''

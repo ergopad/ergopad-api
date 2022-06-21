@@ -40,7 +40,7 @@ con = create_engine(CFG.connectionString)
 
 # Single coin balance and tokens for wallet address
 @r.get("/balance/{address}", name="asset:wallet-balance")
-def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
+async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
     try:
         # get balance from ergo explorer api
         logger.debug(f'find balance for [blockchain], address: {address}...')
@@ -60,7 +60,7 @@ def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex
                 cache.set(f"get_asset_balance_{address}", balance)
 
         logger.info(f'Balance for ergo: {balance}')
-        ergPrice = (get_asset_current_price('ERGO'))['price']
+        ergPrice = (await get_asset_current_price('ERGO'))['price']
 
         # handle SigUSD and SigRSV
         tokens = []
@@ -68,11 +68,11 @@ def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex
             token['price'] = 0.0
             # if token['name'] == 'SigUSD': # TokenId: 22c6cc341518f4971e66bd118d601004053443ed3f91f50632d79936b90712e9
             if token['tokenId'] == '03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04':
-                price = (get_asset_current_price('SigUSD'))['price']
+                price = (await get_asset_current_price('SigUSD'))['price']
                 token['price'] = price
             # if token['name'] == 'SigRSV': # TokenId: 003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0
             if token['tokenId'] == '003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0':
-                price = (get_asset_current_price('SigRSV'))['price']
+                price = (await get_asset_current_price('SigRSV'))['price']
                 token['price'] = price
             # Ergodex tokens
             price = (get_ergodex_asset_price_by_token_id(token['tokenId']))['price']
@@ -142,7 +142,7 @@ def get_ergodex_asset_price_by_token_id(tokenId: str = None):
 # - Allow SigUSD/RSV ergo tokens to be listed as coins (TODO: change from ergo.watch api)
 # - Allow multiple coins per blockchain (TODO: change from CoinGecko api)
 @r.get("/price/{coin}", name="coin:coin-price")
-def get_asset_current_price(coin: str = None):
+async def get_asset_current_price(coin: str = None):
     try:
         coin = coin.lower()
         # check cache
@@ -161,7 +161,7 @@ def get_asset_current_price(coin: str = None):
                     try:
                         # peg_rate_nano: current USD/ERG price [nanoERG]
                         # ERG/USD
-                        ergo_price = (get_asset_current_price("ergo"))["price"]
+                        ergo_price = (await get_asset_current_price("ergo"))["price"]
                         price = (res["peg_rate_nano"] / nerg2erg) * ergo_price  # SIGUSD
                     except:
                         # if get_asset_current_price("ergo") fails
@@ -264,13 +264,13 @@ class TokenPrice(BaseModel):
 
 # Find price for a list of tokens/coins
 @r.post("/prices", response_model=t.List[TokenPrice], name="coin:coin-prices")
-def get_asset_current_prices(tokens: TokenListRequest):
+async def get_asset_current_prices(tokens: TokenListRequest):
     try:
         prices = []
         for token in tokens.tokens:
             prices.append({
                 "name": token,
-                "price": (get_asset_current_price(token))["price"]
+                "price": (await get_asset_current_price(token))["price"]
             })
         return prices
 
@@ -451,7 +451,7 @@ class Wallets(BaseModel):
 
 # balance of all wallets
 @r.post("/balance/all", name="asset:all-wallet-balances")
-def get_all_assets(request: Request) -> None:
+async def get_all_assets(request: Request) -> None:
 
     wallets = request.json()
 
@@ -484,7 +484,7 @@ def get_all_assets(request: Request) -> None:
                                     'balance': res.json()['ETH']['balance'],
                                     'unconfirmed': 0,
                                     'tokens': None,
-                                    'price': (get_asset_current_price(wallet))['price']
+                                    'price': (await get_asset_current_price(wallet))['price']
                                 }
                             }
                         })

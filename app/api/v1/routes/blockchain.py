@@ -5,7 +5,6 @@ from xmlrpc.client import Boolean
 import requests, json
 from core.auth import get_current_active_superuser
 from ergo_python_appkit.appkit import ErgoAppKit
-from wallet import Wallet
 
 from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
@@ -45,7 +44,7 @@ class TXFormat(str, Enum):
 #region ROUTES
 # current node info (and more)
 @r.get("/info", name="blockchain:info")
-def getInfo():
+async def getInfo():
     try:
         st = time() # stopwatch
         nodeInfo = {}
@@ -77,7 +76,7 @@ def getInfo():
         nodeInfo['ergopadTokenId'] = CFG.ergopadTokenId
 
         # nodeInfo['vestingBegin_ms'] = f'{ctime(1643245200)} UTC'
-        nodeInfo['sigUSD'] = get_asset_current_price('sigusd')
+        nodeInfo['sigUSD'] = await get_asset_current_price('sigusd')
         nodeInfo['inDebugMode'] = ('PROD', '!! DEBUG !!')[DEBUG]
 
         logger.debug(f'::TOOK {time()-st:0.4f}s')
@@ -674,7 +673,7 @@ def airdrop(
     return ErgoAppKit.unsignedTxToJson(unsignedTx)
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
-def tvl(tokenId: str):
+async def tvl(tokenId: str):
     try:
         cached = cache.get(f"get_tvl_{tokenId}")
         if cached:
@@ -688,11 +687,11 @@ def tvl(tokenId: str):
             vestingBalanceC = get_asset_balance_from_address(vestingAddress)
             vestingWithNFTBalanceC = get_asset_balance_from_address(vestingWithNFTAddress)
 
-            stakingBalance = stakingBalanceC
+            stakingBalance = await stakingBalanceC
             logger.debug(f'stakingBalance: {stakingBalance}')
-            vestingBalance = vestingBalanceC
+            vestingBalance = await vestingBalanceC
             logger.debug(f'vestingBalance: {vestingBalance}')
-            vestingWithNFTBalance = vestingWithNFTBalanceC
+            vestingWithNFTBalance = await vestingWithNFTBalanceC
             logger.debug(f'vestingWithNFTBalance: {vestingWithNFTBalance}')
 
             stakingTVL = 0
