@@ -97,7 +97,7 @@ def signup(
 
 
 @r.post("/logout")
-def logout(db=Depends(get_db), token: str = Depends(security.oauth2_scheme), current_user=Depends(get_current_active_user)):
+async def logout(db=Depends(get_db), token: str = Depends(security.oauth2_scheme), current_user=Depends(get_current_active_user)):
     try:
         return blacklist_token(db, token)
 

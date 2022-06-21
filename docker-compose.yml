@@ -24,7 +24,8 @@ services:
      - ./app:/app
     networks:
       - ergopad-net
-    command: uvicorn main:app --reload --workers 4 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '52.72.64.235'
+    # t3.xlarge uses 4 vcpu, 2 cores; recommendation to do 2*cores+1??
+    command: uvicorn main:app --reload --workers 17 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '52.72.64.235'
     # command: uvicorn main:app --workers 4 --host 0.0.0.0 --port ${API_PORT}
 
 networks:

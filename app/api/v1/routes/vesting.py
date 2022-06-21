@@ -14,7 +14,6 @@ from typing import List, Optional
 from pydantic import BaseModel
 from time import sleep, time
 from datetime import date, datetime, timezone, timedelta
-from api.v1.routes.asset import get_asset_current_price
 from base64 import b64encode
 from ergo.util import encodeLong, encodeString
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId

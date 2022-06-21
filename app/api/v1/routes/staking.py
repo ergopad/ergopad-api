@@ -19,6 +19,7 @@ from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
 from core.auth import get_current_active_superuser, get_current_active_user
 from core.security import get_md5_hash
 from cache.staking import AsyncSnapshotEngine
+from sqlalchemy import create_engine, text
 from cache.cache import cache
 from utils.logger import logger, myself
 
@@ -105,12 +106,11 @@ class BootstrapRequest(BaseModel):
 @r.post("/unstake/", name="staking:unstake")
 def unstake(req: UnstakeRequest, project: str = "ergopad"):
     try:
-        sc = stakingConfigsV1[project]
         logger.debug('unstake::appKit')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
-        stakedTokenInfo = getTokenInfo(sc["stakedTokenID"])
+
         logger.debug('unstake::get NFT stakeStateBox')
-        stakeStateBox = getNFTBox(sc["stakeStateNFT"])
+        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
         if stakeStateBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to find stake state box')
         res = requests.get(f'{CFG.explorer}/boxes/{req.stakeBox}')
@@ -257,7 +257,7 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
         logger.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
-@r.get("{project}/snapshot/", name="staking:snapshot")
+@r.get("/{project}/snapshot/", name="staking:snapshot")
 def snapshot(
     project: str,
     request: Request,
@@ -298,6 +298,47 @@ def validPenalty(startTime: int):
             
 @r.post("/staked/", name="staking:staked")
 def staked(req: AddressList, project: str = "ergopad"):
+    eng = create_engine(CFG.csDanaides)
+    wallet_addresses = f''' '{"','".join(req.addresses)}' '''
+    sql = text(f'''
+        select a.box_id
+            , k.stakekey_id
+            , k.stake_amount
+        from addresses_staking a
+            join keys_staking k on k.stakekey_id = a.token_id
+        where address in (:wallet_addresses)
+    ''')
+    res = eng.execute(sql, {'wallet_addresses': wallet_addresses}).fetchall()
+    totalStaked = 0
+    stakePerAddress = {}
+    tokenDecimals = 100 # 10**stakedTokenInfo["decimals"]    
+    for r in res:
+        penalty = 0
+        cleanedBox = {
+            'boxId': r['box_id'],
+            'stakeKeyId': r['stakekey_id'],
+            'stakeAmount': r['stake_amount'],
+            'penaltyPct': validPenalty(penalty),
+            'penaltyEndTime': int(penalty+8*week)
+        }
+        totalStaked += r['stake_amount']/tokenDecimals
+        stakePerAddress[r['stakekey_id']]["stakeBoxes"].append(cleanedBox)
+        stakePerAddress[r['stakekey_id']]["totalStaked"] += r['stake_amount']/tokenDecimals
+    # def getR4(self,box):
+    #     hexVal = ""
+    #     if "serializedValue" in box["additionalRegisters"]["R4"]:
+    #         hexVal = box["additionalRegisters"]["R4"]["serializedValue"]
+    #     else:
+    #         hexVal = box["additionalRegisters"]["R4"]
+    #     return ErgoValue.fromHex(hexVal).getValue()
+
+    return {
+        'totalStaked': totalStaked,
+        'addresses': stakePerAddress
+    }
+
+### TODO: DEPRECATED
+def oldstaked(req: AddressList, project: str = "ergopad"):
     CACHE_TTL = 600 # 10 mins
     try:
         sc = stakingConfigsV1[project]
@@ -404,9 +445,8 @@ def stakingStatusV1(project: str = "ergopad"):
 @r.post("/stake/", name="staking:stake")
 def stake(req: StakeRequest, project: str = "ergopad"):
     try:
-        sc = stakingConfigsV1[project]
         logger.debug(f'stake::staked token info')
-        stakedTokenInfo = getTokenInfo(sc["stakedTokenID"])
+        stakedTokenInfo = getTokenInfo(CFG.stakedTokenID)
 
         logger.debug(f'stake::appkit')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
@@ -423,7 +463,7 @@ def stake(req: StakeRequest, project: str = "ergopad"):
         )
 
         logger.debug(f'stake::get NFT box')
-        stakeStateBox = getNFTBox(sc["stakeStateNFT"])
+        stakeStateBox = getNFTBox(CFG.stakeStateNFT)
 
         logger.debug(f'stake::token amount')
         tokenAmount = int(req.amount*10**stakedTokenInfo["decimals"])
@@ -811,7 +851,7 @@ def stakedv2(project: str, req: AddressList):
             checkBoxes = cached
         else:
             # query explorer api or read from db and cache response
-            checkBoxes = getUnspentStakeBoxes(config.stakeTokenId, config.stakeContract.contract.toAddress().toString(), True)
+            checkBoxes = getUnspentStakeBoxes(config.stakeTokenId, config.stakeContract.contract.toAddress().toString(), False)
             cache.set(f"get_staking_staked_token_boxes_{config.stakeTokenId}", checkBoxes, CACHE_TTL)
         for box in checkBoxes:
             if box["assets"][0]["tokenId"]==config.stakeTokenId:
