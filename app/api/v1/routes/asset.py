@@ -44,16 +44,21 @@ def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex
     try:
         # get balance from ergo explorer api
         logger.debug(f'find balance for [blockchain], address: {address}...')
-        res = requests.get(
-            f'{CFG.explorer}/addresses/{address}/balance/total')
-
-        # handle invalid address or other error
-        wallet_assets = {}
         balance = {}
-        if res.status_code == 200:
-            balance = res.json()
-        # else:
-            # return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content="Something went wrong.")
+        wallet_assets = {}
+        
+        # check cache
+        cached = cache.get(f"get_asset_balance_{address}")
+        if cached:
+            balance = cached
+        else:
+            res = requests.get(
+                f'{CFG.explorer}/addresses/{address}/balance/total')
+            # handle invalid address or other error
+            if res.status_code == 200:
+                balance = res.json()
+                cache.set(f"get_asset_balance_{address}", balance)
+
         logger.info(f'Balance for ergo: {balance}')
         ergPrice = (get_asset_current_price('ERGO'))['price']
 
