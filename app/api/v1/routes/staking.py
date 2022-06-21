@@ -19,6 +19,7 @@ from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
 from core.auth import get_current_active_superuser, get_current_active_user
 from core.security import get_md5_hash
 from cache.staking import AsyncSnapshotEngine
+from sqlalchemy import create_engine, text
 from cache.cache import cache
 from utils.logger import logger, myself
 
@@ -297,6 +298,47 @@ def validPenalty(startTime: int):
             
 @r.post("/staked/", name="staking:staked")
 def staked(req: AddressList, project: str = "ergopad"):
+    eng = create_engine(CFG.csDanaides)
+    wallet_addresses = f''' '{"','".join(req.addresses)}' '''
+    sql = text(f'''
+        select a.box_id
+            , k.stakekey_id
+            , k.stake_amount
+        from addresses_staking a
+            join keys_staking k on k.stakekey_id = a.token_id
+        where address in (:wallet_addresses)
+    ''')
+    res = eng.execute(sql, {'wallet_addresses': wallet_addresses}).fetchall()
+    totalStaked = 0
+    stakePerAddress = {}
+    tokenDecimals = 100 # 10**stakedTokenInfo["decimals"]    
+    for r in res:
+        penalty = 0
+        cleanedBox = {
+            'boxId': r['box_id'],
+            'stakeKeyId': r['stakekey_id'],
+            'stakeAmount': r['stake_amount'],
+            'penaltyPct': validPenalty(penalty),
+            'penaltyEndTime': int(penalty+8*week)
+        }
+        totalStaked += r['stake_amount']/tokenDecimals
+        stakePerAddress[r['stakekey_id']]["stakeBoxes"].append(cleanedBox)
+        stakePerAddress[r['stakekey_id']]["totalStaked"] += r['stake_amount']/tokenDecimals
+    # def getR4(self,box):
+    #     hexVal = ""
+    #     if "serializedValue" in box["additionalRegisters"]["R4"]:
+    #         hexVal = box["additionalRegisters"]["R4"]["serializedValue"]
+    #     else:
+    #         hexVal = box["additionalRegisters"]["R4"]
+    #     return ErgoValue.fromHex(hexVal).getValue()
+
+    return {
+        'totalStaked': totalStaked,
+        'addresses': stakePerAddress
+    }
+
+### TODO: DEPRECATED
+def oldstaked(req: AddressList, project: str = "ergopad"):
     CACHE_TTL = 600 # 10 mins
     try:
         sc = stakingConfigsV1[project]

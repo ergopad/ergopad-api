@@ -673,7 +673,7 @@ def airdrop(
     return ErgoAppKit.unsignedTxToJson(unsignedTx)
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
-def tvl(tokenId: str):
+async def tvl(tokenId: str):
     try:
         cached = cache.get(f"get_tvl_{tokenId}")
         if cached:
