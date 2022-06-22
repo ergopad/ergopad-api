@@ -548,7 +548,8 @@ def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100, retries: int 
                     retries -= 1
                 else:
                     retries = 0
-        raise Exception("Explorer not responding correctly")    except Exception as e:
+        raise Exception("Explorer not responding correctly")    
+    except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find token box ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find token box ({e})')
 
