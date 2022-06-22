@@ -276,7 +276,7 @@ async def unstake(req: UnstakeRequest, project: str = "ergopad"):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
-@r.get("{project}/snapshot/", name="staking:snapshot")
+@r.get("/{project}/snapshot/", name="staking:snapshot")
 def snapshot(
     project: str,
     request: Request,
@@ -413,7 +413,7 @@ def stakingStatusV1(project: str = "ergopad"):
         }
 
         # cache and return
-        cache.set(f"get_api_staking_status", ret, timeout=300)
+        cache.set(f"get_api_staking_status_{project}", ret)
         return ret
 
     except Exception as e:
@@ -814,7 +814,7 @@ def stakingStatus(project: str):
         }
 
         # cache and return
-        cache.set(f"get_api_staking_status_{project}", ret, timeout=300)
+        cache.set(f"get_api_staking_status_{project}", ret)
         return ret
 
     except Exception as e:
@@ -934,6 +934,7 @@ async def allstakedv2(req: AddressList):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
+
 
 ########################################
 ########## STAKING CONFIG CMS ##########
