@@ -34,6 +34,7 @@ stakingConfigs = {
 
 stakingConfigsV1 = {
     'ergopad': {
+        'tokenName': "ErgoPad",
         'stakeStateNFT': "05cde13424a7972fbcd0b43fccbb5e501b1f75302175178fc86d8f243f3f3125",
         'stakePoolNFT': "0d01f2f0b3254b4a1731e1b61ad77641fe54de2bd68d1c6fc1ae4e7e9ddfb212",
         'emissionNFT': "0549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab9195eed59",
@@ -42,6 +43,7 @@ stakingConfigsV1 = {
         'stakeAddress': "3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9"
     },
     'egio': {
+        'tokenName': "EGIO",
         'stakeStateNFT': "f419099a27aaa5f6f7d109d8773b1862e8d1857b44aa7d86395940d41eb53806",
         'stakePoolNFT': "07a8648d0de0f7c87aad41a1fbc6d393a6ad95584d38c47c88125bef101c29e9",
         'emissionNFT': "a8d633dee705ff90e3181013381455353dac2d91366952209ac6b3f9cdcc23e9",
@@ -361,7 +363,12 @@ async def staked(req: AddressList, project: str = "ergopad"):
     
     toc = perf_counter()
     print(f"Took {toc - tic:0.4f} seconds")
+    tokenName = None
+    if project in stakingConfigsV1:
+        tokenName = stakingConfigsV1[project]
     return {
+        'project': project,
+        'tokenName': tokenName,
         'totalStaked': totalStaked,
         'addresses': stakePerAddress
     }
@@ -979,14 +986,14 @@ async def allStaked(req: AddressList):
             ret.append(res)
 
         for project in stakingConfigs:
-            staked = await stakedv2(project, req)
-            if type(staked) == JSONResponse:
+            res = await stakedv2(project, req)
+            if type(res) == JSONResponse:
                 # error
-                return staked
-            if staked["totalStaked"] == 0:
+                return res
+            if res["totalStaked"] == 0:
                 # filter 0 values
                 continue
-            ret.append(staked)
+            ret.append(res)
 
         cache.set(f"get_staking_staked_v2_{u_hash}", ret, timeout=CACHE_TTL)
         return ret
