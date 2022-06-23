@@ -40,6 +40,14 @@ stakingConfigsV1 = {
         'stakeTokenID':  "1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee",
         'stakedTokenID': "d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413",
         'stakeAddress': "3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9"
+    },
+    'egio': {
+        'stakeStateNFT': "f419099a27aaa5f6f7d109d8773b1862e8d1857b44aa7d86395940d41eb53806",
+        'stakePoolNFT': "07a8648d0de0f7c87aad41a1fbc6d393a6ad95584d38c47c88125bef101c29e9",
+        'emissionNFT': "a8d633dee705ff90e3181013381455353dac2d91366952209ac6b3f9cdcc23e9",
+        'stakeTokenID':  "1431964fa6559e969a7bf047405d3f63f7592354d432556f79894a12c4286e81",
+        'stakedTokenID': "00b1e236b60b95c2c6f8007a9d89bc460fc9e78f98b09faec9449007b40bccf3",
+        'stakeAddress': "3eiC8caSy3jixP2iRTiYygUaYjRXXa45eva19FqeMD24Tykh17yux6MqT4t7FB2kHtFethYZjKhpBQyqSsUWdRWtwz1a8KMNnmEykv5JmT3sA6V6ZNfAtzdV8acRoBXhteVQ8nDMywZ8FvcBVbw6yBvXpcDjXRHzgbb35YHi51xJ9ZooaAmLHqBCJhXVMM1enpUYRxNPXdVZgeGnygmLq6k9LRS7Sp2MKciicyqbWpW8wVnzewmoEkvteCeAHErHkBagdLsYbs9dgBAktqAgwTvTRhLMkC42eWHnenAaFNih4GpReq9tz9AMhDJYWd2n7WVCDnVkDT6CXe8d83jSFkMaoiFoBLGqy5M68jMjUNS2yHuLo1GnyMjukB3y5N1vbyjUFstVPgHCs99e8LGE2QUE5YbX1LBQz934XvZo1heTXVfevmm9bZWBiruiwH7kCcv81tRE2Y22nk6EDMWdyYUYchjK31KqcMRrF2hdWFtocAL3bz3Pniz4zjnrFQQcWMsVypZRzqdWAdKpVjZswP4k4VyBJAerHniekyBQ5FMhtN3kNWUKHXYkhmqSmaiEx2Uw4JiK9KnXapT"
     }
 }
 
@@ -109,6 +117,7 @@ class BootstrapRequest(BaseModel):
     stakeAmount: int
     emissionAmount: int
     cycleDuration_ms: int
+    emissionStart_ms: int
 #endregion CLASSES
 
 @r.post("/unstake/", name="staking:unstake")
@@ -196,6 +205,8 @@ async def unstake(req: UnstakeRequest, project: str = "ergopad"):
             if penalty > 0:
                 assetsToBurn[sc["stakedTokenID"]] = penalty
 
+            ergsNeeded = (int(1e7) if (partial) else int(9e6)) + int(1e6)
+
             logging.debug('unstake::address')
             if req.address == "":
                 changeAddress = userBox["address"]
@@ -208,13 +219,13 @@ async def unstake(req: UnstakeRequest, project: str = "ergopad"):
             logging.debug('unstake::count utxos')
             if len(req.utxos) == 0:
                 if len(req.addresses) == 0:
-                    userInputs = appKit.boxesToSpend(req.address,int(2e7),tokensToSpend)
+                    userInputs = appKit.boxesToSpend(req.address,ergsNeeded,tokensToSpend)
                 else:
-                    userInputs = appKit.boxesToSpendFromList(req.addresses,int(2e7),tokensToSpend)
+                    userInputs = appKit.boxesToSpendFromList(req.addresses,ergsNeeded,tokensToSpend)
             else:
                 userInputs = appKit.getBoxesById(req.utxos)
-                if not ErgoAppKit.boxesCovered(userInputs,int(2e7),tokensToSpend):
-                    userInputs = appKit.boxesToSpend(req.address,int(2e7),tokensToSpend)
+                if not ErgoAppKit.boxesCovered(userInputs,ergsNeeded,tokensToSpend):
+                    userInputs = appKit.boxesToSpend(req.address,ergsNeeded,tokensToSpend)
             if userInputs is None:
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Could not find enough erg and/or tokens')
 
@@ -234,7 +245,7 @@ async def unstake(req: UnstakeRequest, project: str = "ergopad"):
             logging.debug('unstake::other boxes')
             userInputs = [keyBox] + list(otherBoxes)
 
-            userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,int(2e7),{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
+            userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,ergsNeeded,{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
             
             inputs = appKit.getBoxesById([stakeStateBox["boxId"],req.stakeBox])
 
@@ -461,6 +472,54 @@ def stakingStatusV1(project: str = "ergopad"):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 
+@r.get("/{project}/incentive/", name="staking:incentive")
+def incentive(project: str = "ergopad"):
+
+    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+    sc = stakingConfigsV1[project]
+    params = {}
+    params["stakedTokenID"] = hexstringToB64(sc["stakedTokenID"])
+    params["stakePoolNFT"] = hexstringToB64(sc["stakePoolNFT"])
+    params["emissionNFT"] = hexstringToB64(sc["emissionNFT"])
+    params["stakeStateNFT"] = hexstringToB64(sc["stakeStateNFT"])
+    params["stakeTokenID"] = hexstringToB64(sc["stakeTokenID"])
+
+    emissionAddress = getErgoscript("emission",params=params)
+    stakeAddress = getErgoscript("stake",params=params)
+    stakeWallet = Wallet(stakeAddress)
+    stakeErgoTreeBytes = bytes.fromhex(stakeWallet.ergoTree()[2:])
+    stakeHash = b64encode(blake2b(stakeErgoTreeBytes, digest_size=32).digest()).decode('utf-8')
+
+    params["stakeContractHash"] = stakeHash
+    stakeStateAddress = getErgoscript("stakeState",params=params)
+
+    stakeStateWallet = Wallet(stakeStateAddress)
+    emissionWallet = Wallet(emissionAddress)
+
+    stakeStateErgoTreeBytes = bytes.fromhex(stakeStateWallet.ergoTree()[2:])
+    emissionErgoTreeBytes = bytes.fromhex(emissionWallet.ergoTree()[2:])
+
+    stakeStateHash = blake2b(stakeStateErgoTreeBytes, digest_size=32).digest()
+    logging.debug(stakeStateHash)
+    emissionHash = blake2b(emissionErgoTreeBytes, digest_size=32).digest()
+    logging.debug(emissionHash)
+
+    with open(f'contracts/stakingIncentive.es') as f:
+            script = f.read()
+    incentiveTree = appKit.compileErgoScript(
+        script,
+        {
+            "_emissionContractHash": ErgoAppKit.ergoValue(emissionHash, ErgoValueT.ByteArray).getValue(),
+            "_stakeStateContractHash": ErgoAppKit.ergoValue(stakeStateHash, ErgoValueT.ByteArray).getValue(),
+            "_stakeTokenID": ErgoAppKit.ergoValue(sc["stakeTokenID"], ErgoValueT.ByteArrayFromHex).getValue()
+        }
+    )
+
+    return {
+        'tree': incentiveTree.bytesHex(),
+        'address': appKit.tree2Address(incentiveTree)
+    }
+
 @r.post("/stake/", name="staking:stake")
 async def stake(req: StakeRequest, project: str = "ergopad"):
     try:
@@ -623,7 +682,6 @@ async def bootstrapStaking(req: BootstrapRequest):
         params["emissionNFT"] = hexstringToB64(req.emissionNFT)
         params["stakeStateNFT"] = hexstringToB64(req.stakeStateNFT)
         params["stakeTokenID"] = hexstringToB64(req.stakeTokenID)
-        params["timestamp"] = int(time())
 
         emissionAddress = getErgoscript("emission",params=params)
         stakePoolAddress = getErgoscript("stakePool", params=params)
@@ -657,7 +715,7 @@ async def bootstrapStaking(req: BootstrapRequest):
             'address': stakeStateAddress,
             'value': int(0.001*nergsPerErg),
             'registers': {
-                'R4': encodeLongArray([0,0,0,int(time()*1000),req.cycleDuration_ms])
+                'R4': encodeLongArray([0,0,0,req.emissionStart_ms-req.cycleDuration_ms,req.cycleDuration_ms])
             },
             'assets': [
                 {
