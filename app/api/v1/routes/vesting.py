@@ -156,7 +156,7 @@ def redeemTX(inBoxes, outBoxes, txBoxTotal_nerg, txFee_nerg):
 
 # redeem/disburse tokens after lock
 @r.get("/redeem/{address}", name="vesting:redeem")
-def redeemToken(address:str, numBoxes:Optional[int]=200):
+async def redeemToken(address:str, numBoxes:Optional[int]=200):
     try:
         txFee_nerg = CFG.txFee
         txBoxTotal_nerg = 0
@@ -257,7 +257,7 @@ def redeemToken(address:str, numBoxes:Optional[int]=200):
 
 # find vesting/vested tokens
 @r.get("/vested/{wallet}", name="vesting:findVestedTokens")
-def findVestingTokens(wallet:str):
+async def findVestingTokens(wallet:str):
     CACHE_TTL = 1800 # 30 mins (this is only changed once per month)
     try:
         # check cache first
@@ -333,7 +333,7 @@ def findVestingTokens(wallet:str):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
 @r.get('/unspent', name="vesting:unspent")
-def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
+async def getUnspentExchange(tokenId=CFG.ergopadTokenId, allowMempool=True):
     logging.debug(f'TOKEN::{tokenId}')
     ergopadTokenBoxes = {}
     try:
