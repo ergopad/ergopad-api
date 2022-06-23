@@ -367,7 +367,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
     }
 
 ### TODO: DEPRECATED
-# def oldstaked(req: AddressList, project: str = "ergopad"):
+# async def oldstaked(req: AddressList, project: str = "ergopad"):
 #     CACHE_TTL = 600 # 10 mins
 #     try:
 #         sc = stakingConfigsV1[project]
@@ -437,7 +437,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
 #         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.get("/status/", name="staking:status")
-def stakingStatusV1(project: str = "ergopad"):
+async def stakingStatusV1(project: str = "ergopad"):
     try:
         # check cache
         cached = cache.get(f"get_api_staking_status_{project}")
@@ -473,7 +473,7 @@ def stakingStatusV1(project: str = "ergopad"):
 
 
 @r.get("/{project}/incentive/", name="staking:incentive")
-def incentive(project: str = "ergopad"):
+async def incentive(project: str = "ergopad"):
 
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     sc = stakingConfigsV1[project]
@@ -832,7 +832,7 @@ async def addstake(project: str, req: UnstakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to add stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.get("/{project}/status/", name="staking:status-v2")
-def stakingStatus(project: str):
+async def stakingStatus(project: str):
     try:
         if project in stakingConfigsV1:
             return stakingStatusV1(project)
@@ -957,8 +957,8 @@ async def stakedv2(project: str, req: AddressList):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
-@r.post("/staked-v2/", name="staking:all-staked-v2")
-async def allstakedv2(req: AddressList):
+@r.post("/staked-all/", name="staking:staked-all")
+async def allStaked(req: AddressList):
     CACHE_TTL = 300 # 5 mins
     try:
         # creating a hash for the input that is independent of ordering
@@ -969,6 +969,15 @@ async def allstakedv2(req: AddressList):
             return cached
 
         ret = []
+        for project in stakingConfigsV1:
+            staked = await staked(req, project)
+            if type(staked) == JSONResponse:
+                # error
+                return staked
+            if staked["totalStaked"] == 0:
+                continue
+            ret.append(staked)
+
         for project in stakingConfigs:
             staked = await stakedv2(project, req)
             if type(staked) == JSONResponse:
