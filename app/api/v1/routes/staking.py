@@ -970,13 +970,13 @@ async def allStaked(req: AddressList):
 
         ret = []
         for project in stakingConfigsV1:
-            staked = await staked(req, project)
-            if type(staked) == JSONResponse:
+            res = await staked(req, project)
+            if type(res) == JSONResponse:
                 # error
-                return staked
-            if staked["totalStaked"] == 0:
+                return res
+            if res["totalStaked"] == 0:
                 continue
-            ret.append(staked)
+            ret.append(res)
 
         for project in stakingConfigs:
             staked = await stakedv2(project, req)
