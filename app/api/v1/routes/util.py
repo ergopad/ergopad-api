@@ -101,7 +101,7 @@ async def email(email: Email, request: Request):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.post("/compileErgoscript", name="blockchain:sendPayment")
-def compileErgoscript(ergoscript: Ergoscript):
+async def compileErgoscript(ergoscript: Ergoscript):
     try:
         script = {'source': ergoscript.script}
         p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=dict(
