@@ -979,14 +979,14 @@ async def allStaked(req: AddressList):
             ret.append(res)
 
         for project in stakingConfigs:
-            staked = await stakedv2(project, req)
-            if type(staked) == JSONResponse:
+            res = await stakedv2(project, req)
+            if type(res) == JSONResponse:
                 # error
-                return staked
-            if staked["totalStaked"] == 0:
+                return res
+            if res["totalStaked"] == 0:
                 # filter 0 values
                 continue
-            ret.append(staked)
+            ret.append(res)
 
         cache.set(f"get_staking_staked_v2_{u_hash}", ret, timeout=CACHE_TTL)
         return ret
