@@ -842,7 +842,7 @@ async def addstake(project: str, req: UnstakeRequest):
 async def stakingStatus(project: str):
     try:
         if project in stakingConfigsV1:
-            return stakingStatusV1(project)
+            return await stakingStatusV1(project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
         # check cache
@@ -891,7 +891,9 @@ async def stakingStatus(project: str):
 @r.post("/{project}/staked/", name="staking:staked-v2")
 async def stakedv2(project: str, req: AddressList):
     if project in stakingConfigsV1:
-            return await staked(req, project)
+        return await staked(req, project)
+    if project in ("paideia",): # use optimized endpoint for paideia
+        return await staked(req, project)
     if project not in stakingConfigs:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
 
