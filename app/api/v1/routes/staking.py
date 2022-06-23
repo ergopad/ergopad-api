@@ -306,7 +306,7 @@ def validPenalty(startTime: int):
     return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
 @r.post("/staked/", name="staking:staked")
-def staked(req: AddressList, project: str = "ergopad"):
+async def staked(req: AddressList, project: str = "ergopad"):
     tic = perf_counter()
     engDanaides = create_engine(CFG.csDanaides)
     wallet_addresses = "'"+("','".join(req.addresses))+"'"
