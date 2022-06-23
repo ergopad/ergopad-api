@@ -95,6 +95,7 @@ async def getInfo():
         logging.error(f'ERR:{myself()}: invalid blockchain info ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid blockchain info ({e})')
 
+
 # info about token
 @r.get("/tokenInfo/{tokenId}", name="blockchain:tokenInfo")
 def getTokenInfo(tokenId):
@@ -106,6 +107,7 @@ def getTokenInfo(tokenId):
         logging.error(f'ERR:{myself()}: invalid token request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid token request ({e})')
 
+
 @r.get("/boxInfo/{boxId}", name="blockchain:boxInfo")
 def getBoxInfo(boxId):
     try:
@@ -115,6 +117,7 @@ def getBoxInfo(boxId):
         logging.error(f'ERR:{myself()}: invalid box request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid box request ({e})')
 
+
 @r.get("/transactionInfo/{transactionId}", name="blockchain:transactionInfo")
 def getTransactionInfo(transactionId):
     try:
@@ -123,6 +126,7 @@ def getTransactionInfo(transactionId):
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid tx info ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid tx info ({e})')
+
 
 # request by CMC
 @r.get("/emissionAmount/{tokenId}", name="blockchain:emissionAmount")
@@ -137,10 +141,12 @@ def getEmmissionAmount(tokenId):
         logging.error(f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
 
+
 @r.get("/ergusdoracle", name="blockchain:ergusdoracle")
 async def ergusdoracle():
     res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
     return json.loads(res.json())
+
 
 # find value from token and address
 def sqlTokenValue(address, token_id, con):
@@ -183,9 +189,10 @@ def sqlTokenValue(address, token_id, con):
     except:
         return 0
 
+
 # paideia tokenId: 1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489
 @r.get("/paideiaInCirculation", name="blockchain:paideiaInCirculation")
-def paideiaInCirculation():
+async def paideiaInCirculation():
     # check cache
     cached = cache.get("get_api_blockchain_paideia_in_circulation")
     if cached:
@@ -197,17 +204,13 @@ def paideiaInCirculation():
         logging.debug(f'TOTAL_SUPPLY_PAIDEIA_IN_CIRC: {supply}')
 
         token_id = '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489'
-
         stakePool = 0
-
         address = '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU'
         vested  = sqlTokenValue(address, token_id, con)
         logging.debug(f'paideia vested: {vested}')
 
         reserved = 0
-
         emitted = 0
-
         paideiaInCirculation = supply - stakePool - vested - reserved - emitted
 
         # set cache
@@ -218,9 +221,10 @@ def paideiaInCirculation():
         logging.error(f'ERR:{myself()}: invalid paideiaInCirculation request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid paideiaInCirculation request ({e})')
 
+
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
-def ergopadInCirculation():
+async def ergopadInCirculation():
     try:
         # check cache
         cached = cache.get("get_api_blockchain_ergopad_in_circulation")
@@ -264,9 +268,10 @@ def ergopadInCirculation():
         logging.error(f'ERR:{myself()}: invalid ergopadInCirculation request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid ergopadInCirculation request ({e})')
 
+
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
-def totalSupply(tokenId):
+async def totalSupply(tokenId):
     # check cache
     cached = cache.get(f"get_api_blockchain_total_supply_{tokenId}")
     if cached:
@@ -309,16 +314,6 @@ def totalSupply(tokenId):
         logging.error(f'ERR:{myself()}: invalid totalSupply request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid totalSupply request ({e})')
 
-# assember follow info
-@r.get("/followInfo/{followId}", name="blockchain:followInfo")
-def followInfo(followId):
-    try:
-        res = requests.get(f'{CFG.assembler}/result/{followId}')
-        return res.json()
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: invalid assembly follow ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid assembly follow ({e})')
 
 def getInputBoxes(boxes, txFormat: TXFormat):
     if txFormat==TXFormat.NODE:
@@ -349,6 +344,7 @@ def getInputBoxes(boxes, txFormat: TXFormat):
                 })
         return unsignedInputs
     return None
+
 
 def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
     try:
@@ -410,9 +406,11 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
 
+
 @r.get("/signingRequest/{txId}", name="blockchain:signingRequest")
 def signingRequest(txId):
     return cache.get(f'ergopay_signing_request_{txId}')
+
 
 # @r.get("/getUnspentBoxesByTokenId/{tokenId}", name='blockchain:getUnspentBoxesByTokenId')
 def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
@@ -450,6 +448,7 @@ def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
         logging.error(f'ERR:{myself()}: failed to get boxes by token id ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to get boxes by token id ({e})')
 
+
 # GET unspent stake boxes
 # Note: Run with useExplorerApi = True in case local explorer service failure
 def getUnspentStakeBoxes(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS, useExplorerApi=False):
@@ -469,6 +468,7 @@ def getUnspentStakeBoxes(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = S
     else:
         # fast, average response time around 3 seconds
         return getUnspentStakeBoxesFromExplorerDB(stakeTokenId, stakeAddress)
+
 
 # GET unspent boxes by token id direct from explorer db
 def getUnspentStakeBoxesFromExplorerDB(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS):
@@ -535,6 +535,7 @@ def getUnspentStakeBoxesFromExplorerDB(stakeTokenId: str = STAKE_KEY_ID, stakeAd
         logging.error(f'ERR:{myself()}: failed to read data from explorer db ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to read data from explorer db ({e})')
 
+
 # GET token boxes legacy code using explorer API
 def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100, retries: int = 10):
     try:
@@ -552,6 +553,7 @@ def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100, retries: int 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find token box ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find token box ({e})')
+
 
 # find unspent boxes with tokens
 @r.get("/unspentTokens", name="blockchain:unspentTokens")
@@ -601,6 +603,7 @@ def getBoxesWithUnspentTokens(nErgAmount=-1, tokenId=CFG.ergopadTokenId, tokenAm
         logging.error(f'ERR:{myself()}: unable to find unspent tokens ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find unspent tokens ({e})')
 
+
 # ergoscripts
 @r.get("/script/{name}", name="blockchain:getErgoscript")
 def getErgoscript(name, params={}):
@@ -637,10 +640,12 @@ def getErgoscript(name, params={}):
         logging.error(f'ERR:{myself()}: unable to build script ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to build script ({e})')
 
+
 class AirdropRequest(BaseModel):
     tokenId: str
     submit: bool = False
     addresses: Dict[str,Decimal]
+
 
 @r.post("/airdrop", name="blockchain:airdrop")
 async def airdrop( 
@@ -666,22 +671,20 @@ async def airdrop(
         ))
     
     feeRequired = max(int(1e6),int(len(outputs)*int(1e5)))
-
     inputs = appKit.boxesToSpend(CFG.ergopadWallet,nErgRequired+feeRequired,{req.tokenId: tokensRequired})
-
     unsignedTx = appKit.buildUnsignedTransaction(
         inputs=inputs,
         outputs=outputs,
         fee=feeRequired,
         sendChangeTo=appKit.contractFromAddress(CFG.ergopadWallet).toAddress().getErgoAddress()
     )
-
     signedTx = appKit.signTransactionWithNode(unsignedTx)
 
     if req.submit:
         return appKit.sendTransaction(signedTx)
     
     return ErgoAppKit.unsignedTxToJson(unsignedTx)
+
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
 async def tvl(tokenId: str):
@@ -729,4 +732,5 @@ async def tvl(tokenId: str):
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to determine TVL ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to determine TVL.')
+
 #endregion ROUTES
