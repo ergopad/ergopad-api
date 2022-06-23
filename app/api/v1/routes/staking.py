@@ -311,6 +311,11 @@ def staked(req: AddressList, project: str = "ergopad"):
     engDanaides = create_engine(CFG.csDanaides)
     wallet_addresses = "'"+("','".join(req.addresses))+"'"
     sql = text(f'''
+        with a as (
+            select distinct token_id
+                , address 
+            from addresses_staking
+        )
         select a.address
             , t.token_id
             , k.box_id
@@ -318,7 +323,7 @@ def staked(req: AddressList, project: str = "ergopad"):
             , k.amount/power(10, t.decimals) as amount
             , k.penalty -- unix time
         from keys_staking k
-            join addresses_staking a on a.token_id = k.stakekey_token_id
+            join a on a.token_id = k.stakekey_token_id
             join tokens t on t.stake_token_id = k.token_id
         where a.address in ({wallet_addresses})
             and t.token_name = :project
