@@ -306,7 +306,7 @@ def validPenalty(startTime: int):
     return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
 @r.post("/staked/", name="staking:staked")
-async def staked(req: AddressList, project: str = "ergopad"):
+def staked(req: AddressList, project: str = "ergopad"):
     tic = perf_counter()
     engDanaides = create_engine(CFG.csDanaides)
     wallet_addresses = "'"+("','".join(req.addresses))+"'"
@@ -315,19 +315,23 @@ async def staked(req: AddressList, project: str = "ergopad"):
             , t.token_id
             , k.box_id
             , k.stakekey_token_id -- proxy staking key
-            , k.amount
+            , k.amount/power(10, t.decimals) as amount
             , k.penalty -- unix time
         from keys_staking k
             join addresses_staking a on a.token_id = k.stakekey_token_id
             join tokens t on t.stake_token_id = k.token_id
         where a.address in ({wallet_addresses})
+            and t.token_name = :project
     ''')
-    res = engDanaides.execute(sql, {'wallet_addresses': wallet_addresses}).fetchall()
+    res = engDanaides.execute(sql, {'wallet_addresses': wallet_addresses, 'project': project}).fetchall()
     totalStaked = 0
     stakePerAddress = {}
-    tokenDecimals = 100 # 10**stakedTokenInfo["decimals"]    
     for r in res:
-        stakePerAddress[r['stakekey_token_id']] = {'totalStaked': 0, 'stakeBoxes': []}
+        # init
+        if r['address'] not in stakePerAddress:
+            stakePerAddress[r['address']] = {'totalStaked': 0, 'stakeBoxes': []}
+
+        # boxes by address
         cleanedBox = {
             'boxId': r['box_id'],
             'stakeKeyId': r['stakekey_token_id'],
@@ -335,9 +339,9 @@ async def staked(req: AddressList, project: str = "ergopad"):
             'penaltyPct': validPenalty(r['penalty']),
             'penaltyEndTime': int(r['penalty']+8*week)
         }
-        totalStaked += r['amount']/tokenDecimals
-        stakePerAddress[r['stakekey_token_id']]["stakeBoxes"].append(cleanedBox)
-        stakePerAddress[r['stakekey_token_id']]["totalStaked"] += r['amount']/tokenDecimals
+        totalStaked += r['amount']
+        stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
+        stakePerAddress[r['address']]['totalStaked'] += r['amount']
     
     toc = perf_counter()
     print(f"Took {toc - tic:0.4f} seconds")
@@ -347,7 +351,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
     }
 
 ### TODO: DEPRECATED
-# async def oldStaked(req: AddressList, project: str = "ergopad"):
+# def oldstaked(req: AddressList, project: str = "ergopad"):
 #     CACHE_TTL = 600 # 10 mins
 #     try:
 #         sc = stakingConfigsV1[project]
@@ -417,7 +421,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
 #         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.get("/status/", name="staking:status")
-async def stakingStatusV1(project: str = "ergopad"):
+def stakingStatusV1(project: str = "ergopad"):
     try:
         # check cache
         cached = cache.get(f"get_api_staking_status_{project}")
@@ -765,7 +769,7 @@ async def addstake(project: str, req: UnstakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to add stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.get("/{project}/status/", name="staking:status-v2")
-async def stakingStatus(project: str):
+def stakingStatus(project: str):
     try:
         if project in stakingConfigsV1:
             return stakingStatusV1(project)
