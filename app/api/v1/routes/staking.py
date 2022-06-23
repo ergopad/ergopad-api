@@ -306,7 +306,7 @@ def validPenalty(startTime: int):
     return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
 @r.post("/staked/", name="staking:staked")
-def staked(req: AddressList, project: str = "ergopad"):
+async def staked(req: AddressList, project: str = "ergopad"):
     tic = perf_counter()
     engDanaides = create_engine(CFG.csDanaides)
     wallet_addresses = "'"+("','".join(req.addresses))+"'"
@@ -347,7 +347,7 @@ def staked(req: AddressList, project: str = "ergopad"):
     }
 
 ### TODO: DEPRECATED
-# def oldstaked(req: AddressList, project: str = "ergopad"):
+# async def oldStaked(req: AddressList, project: str = "ergopad"):
 #     CACHE_TTL = 600 # 10 mins
 #     try:
 #         sc = stakingConfigsV1[project]
@@ -417,7 +417,7 @@ def staked(req: AddressList, project: str = "ergopad"):
 #         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.get("/status/", name="staking:status")
-def stakingStatusV1(project: str = "ergopad"):
+async def stakingStatusV1(project: str = "ergopad"):
     try:
         # check cache
         cached = cache.get(f"get_api_staking_status_{project}")
@@ -765,7 +765,7 @@ async def addstake(project: str, req: UnstakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to add stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.get("/{project}/status/", name="staking:status-v2")
-def stakingStatus(project: str):
+async def stakingStatus(project: str):
     try:
         if project in stakingConfigsV1:
             return stakingStatusV1(project)
