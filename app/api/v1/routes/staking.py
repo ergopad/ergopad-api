@@ -255,7 +255,7 @@ async def unstake(req: UnstakeRequest, project: str = "ergopad"):
             if req.txFormat == TXFormat.EIP_12:
                 logging.debug('unstake::EIP_12')
                 result = {
-                    'penalty': (penalty/100),
+                    'penalty': (penalty/10**stakedTokenInfo["decimals"]),
                     'unsignedTX': ErgoAppKit.unsignedTxToJson(unsignedTx)
                 }
 
