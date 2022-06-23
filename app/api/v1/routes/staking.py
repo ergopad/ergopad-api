@@ -266,7 +266,7 @@ async def unstake(req: UnstakeRequest, project: str = "ergopad"):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, try again shortly or contact support if error continues.')
 
-@r.get("{project}/snapshot/", name="staking:snapshot")
+@r.get("/{project}/snapshot/", name="staking:snapshot")
 def snapshot(
     project: str,
     request: Request,
@@ -315,19 +315,23 @@ def staked(req: AddressList, project: str = "ergopad"):
             , t.token_id
             , k.box_id
             , k.stakekey_token_id -- proxy staking key
-            , k.amount
+            , k.amount/power(10, t.decimals) as amount
             , k.penalty -- unix time
         from keys_staking k
             join addresses_staking a on a.token_id = k.stakekey_token_id
             join tokens t on t.stake_token_id = k.token_id
         where a.address in ({wallet_addresses})
+            and t.token_name = :project
     ''')
-    res = engDanaides.execute(sql, {'wallet_addresses': wallet_addresses}).fetchall()
+    res = engDanaides.execute(sql, {'wallet_addresses': wallet_addresses, 'project': project}).fetchall()
     totalStaked = 0
     stakePerAddress = {}
-    tokenDecimals = 100 # 10**stakedTokenInfo["decimals"]    
     for r in res:
-        stakePerAddress[r['stakekey_token_id']] = {'totalStaked': 0, 'stakeBoxes': []}
+        # init
+        if r['address'] not in stakePerAddress:
+            stakePerAddress[r['address']] = {'totalStaked': 0, 'stakeBoxes': []}
+
+        # boxes by address
         cleanedBox = {
             'boxId': r['box_id'],
             'stakeKeyId': r['stakekey_token_id'],
@@ -335,9 +339,9 @@ def staked(req: AddressList, project: str = "ergopad"):
             'penaltyPct': validPenalty(r['penalty']),
             'penaltyEndTime': int(r['penalty']+8*week)
         }
-        totalStaked += r['amount']/tokenDecimals
-        stakePerAddress[r['stakekey_token_id']]["stakeBoxes"].append(cleanedBox)
-        stakePerAddress[r['stakekey_token_id']]["totalStaked"] += r['amount']/tokenDecimals
+        totalStaked += r['amount']
+        stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
+        stakePerAddress[r['address']]['totalStaked'] += r['amount']
     
     toc = perf_counter()
     print(f"Took {toc - tic:0.4f} seconds")
@@ -444,7 +448,7 @@ def stakingStatusV1(project: str = "ergopad"):
         }
 
         # cache and return
-        cache.set(f"get_api_staking_status", ret, timeout=300)
+        cache.set(f"get_api_staking_status_{project}", ret)
         return ret
 
     except Exception as e:
@@ -798,7 +802,7 @@ def stakingStatus(project: str):
         }
 
         # cache and return
-        cache.set(f"get_api_staking_status_{project}", ret, timeout=300)
+        cache.set(f"get_api_staking_status_{project}", ret)
         return ret
 
     except Exception as e:
@@ -918,6 +922,7 @@ async def allstakedv2(req: AddressList):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
+
 
 ########################################
 ########## STAKING CONFIG CMS ##########
