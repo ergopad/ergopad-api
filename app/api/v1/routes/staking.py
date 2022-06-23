@@ -365,7 +365,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
     print(f"Took {toc - tic:0.4f} seconds")
     tokenName = None
     if project in stakingConfigsV1:
-        tokenName = stakingConfigsV1[project]
+        tokenName = stakingConfigsV1[project]["tokenName"]
     return {
         'project': project,
         'tokenName': tokenName,
