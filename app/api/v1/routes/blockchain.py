@@ -200,7 +200,7 @@ async def paideiaInCirculation():
         return cached
     try:
         con = create_engine(EXPLORER)
-        supply = totalSupply('1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489')
+        supply = await totalSupply('1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489')
         logging.debug(f'TOTAL_SUPPLY_PAIDEIA_IN_CIRC: {supply}')
 
         token_id = '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489'
@@ -229,13 +229,12 @@ async def ergopadInCirculation():
         # check cache
         cached = cache.get("get_api_blockchain_ergopad_in_circulation")
         if cached:
+            logging.debug(f'CACHED_ERGOPAD_IN_CIRC: {cached}')
             return cached
 
         ergopad_token_id = 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413'
-        logging.debug(1)
         con = create_engine(EXPLORER)
-        logging.debug(2)
-        supply = totalSupply(ergopad_token_id)
+        supply = await totalSupply(ergopad_token_id)
 
         # don't currently use this, but may be useful to have
         burned = 400*(10**6) - supply
@@ -275,6 +274,7 @@ async def totalSupply(tokenId):
     # check cache
     cached = cache.get(f"get_api_blockchain_total_supply_{tokenId}")
     if cached:
+        logging.debug(f'CACHED_TOTAL_SUPPLY_{tokenId}: {cached}')
         return cached
     try:
         # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)

@@ -349,13 +349,20 @@ async def staked(req: AddressList, project: str = "ergopad"):
         if r['address'] not in stakePerAddress:
             stakePerAddress[r['address']] = {'totalStaked': 0, 'stakeBoxes': []}
 
+        # penalty is only for v1 contract
+        penaltyPct = 0
+        penaltyEndTime = None
+        if project in stakingConfigsV1:
+            penaltyPct = validPenalty(r['penalty'])
+            penaltyEndTime = int(r['penalty'] + 8 * week)
+
         # boxes by address
         cleanedBox = {
             'boxId': r['box_id'],
             'stakeKeyId': r['stakekey_token_id'],
             'stakeAmount': r['amount'],
-            'penaltyPct': validPenalty(r['penalty']),
-            'penaltyEndTime': int(r['penalty']+8*week)
+            'penaltyPct': penaltyPct,
+            'penaltyEndTime': penaltyEndTime
         }
         totalStaked += r['amount']
         stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
@@ -363,7 +370,8 @@ async def staked(req: AddressList, project: str = "ergopad"):
     
     toc = perf_counter()
     print(f"Took {toc - tic:0.4f} seconds")
-    tokenName = None
+    # default token name
+    tokenName = project.capitalize()
     if project in stakingConfigsV1:
         tokenName = stakingConfigsV1[project]["tokenName"]
     return {
