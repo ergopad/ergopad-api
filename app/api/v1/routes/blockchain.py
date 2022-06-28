@@ -7,7 +7,7 @@ from core.auth import get_current_active_superuser
 from ergo_python_appkit.appkit import ErgoAppKit
 from wallet import Wallet
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Depends, status
 from time import time
@@ -95,6 +95,23 @@ async def getInfo():
         logging.error(f'ERR:{myself()}: invalid blockchain info ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid blockchain info ({e})')
 
+
+@r.get("/tokenStats/{tokenId}", name="blockchain:tokenStats")
+def getTokenStats(tokenId):
+    engDanaides = create_engine(CFG.csDanaides)
+    sql = text(f'''
+        select a.notes, amount/power(10, t.decimals) as amount, t.name as token_name
+        from token_agg a
+            join tokens t on t.token_id = a.token_id
+        where a.token_id = :token_id
+    ''')
+    stats = engDanaides.execute(sql, {'token_id': tokenId}).fetchall()
+
+    res = {}
+    for stat in stats:        
+        res[stat['notes']] = stat['amount']
+
+    return res
 
 # info about token
 @r.get("/tokenInfo/{tokenId}", name="blockchain:tokenInfo")
@@ -267,6 +284,33 @@ async def ergopadInCirculation():
         logging.error(f'ERR:{myself()}: invalid ergopadInCirculation request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid ergopadInCirculation request ({e})')
 
+
+@r.get("/tokenStats/{tokenId}", name="blockchain:tokenStats")
+async def tokenStats(tokenId):
+    try:
+        # tokenId = 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413'
+        con = create_engine(EXPLORER)
+        sqlTokenStats = text(f'''
+            select current_total_supply
+                , token_price
+                , in_circulation
+                , emission_amount/power(10, decimals) - current_total_supply as burned
+                , token_price * in_circulation as market_cap
+            from tokens
+            where token_id = :tokenId
+        ''')
+        resTokenStats = con.execute(sqlTokenStats, {'tokenId': tokenId}).fetchone()
+        return {
+            'current_total_supply': resTokenStats['current_total_supply'],
+            'token_price': resTokenStats['token_price'],
+            'in_circulation': resTokenStats['in_circulation'],
+            'burned': resTokenStats['burned'],
+            'market_cap': resTokenStats['market_cap'],
+        }
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid totalSupply request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid totalSupply request ({e})')
 
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
