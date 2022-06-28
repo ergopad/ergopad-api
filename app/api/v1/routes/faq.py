@@ -21,7 +21,7 @@ faq_router = r = APIRouter()
     response_model_exclude_none=True,
     name="faq:all-faqs"
 )
-async def faqs_list(
+def faqs_list(
     tag: str = 'all',
     db=Depends(get_db),
 ):
@@ -35,7 +35,7 @@ async def faqs_list(
 
 
 @r.post("/", response_model=Faq, response_model_exclude_none=True, name="faq:create")
-async def faq_create(
+def faq_create(
     faq: CreateAndUpdateFaq,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -52,7 +52,7 @@ async def faq_create(
 @r.put(
     "/{faq_id}", response_model=Faq, response_model_exclude_none=True, name="faq:edit"
 )
-async def faq_edit(
+def faq_edit(
     faq_id: int,
     faq: CreateAndUpdateFaq,
     db=Depends(get_db),
@@ -70,7 +70,7 @@ async def faq_edit(
 @r.delete(
     "/{faq_id}", response_model=Faq, response_model_exclude_none=True, name="faq:delete"
 )
-async def faq_delete(
+def faq_delete(
     faq_id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),

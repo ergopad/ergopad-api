@@ -23,7 +23,7 @@ announcement_router = r = APIRouter()
     response_model_exclude_none=True,
     name="announcements:all-announcements"
 )
-async def announcements_list(
+def announcements_list(
     db=Depends(get_db),
 ):
     """
@@ -41,7 +41,7 @@ async def announcements_list(
     response_model_exclude_none=True,
     name="announcements:announcement-details"
 )
-async def announcement_details(
+def announcement_details(
     id: str,
     db=Depends(get_db),
 ):
@@ -55,7 +55,7 @@ async def announcement_details(
 
 
 @r.post("/", response_model=Announcement, response_model_exclude_none=True, name="announcements:create")
-async def announcement_create(
+def announcement_create(
     announcement: CreateAndUpdateAnnouncement,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -72,7 +72,7 @@ async def announcement_create(
 @r.put(
     "/{announcement_id}", response_model=Announcement, response_model_exclude_none=True, name="announcements:edit"
 )
-async def announcement_edit(
+def announcement_edit(
     announcement_id: int,
     announcement: CreateAndUpdateAnnouncement,
     db=Depends(get_db),
@@ -90,7 +90,7 @@ async def announcement_edit(
 @r.delete(
     "/{announcement_id}", response_model=Announcement, response_model_exclude_none=True, name="announcements:delete"
 )
-async def announcement_delete(
+def announcement_delete(
     announcement_id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),

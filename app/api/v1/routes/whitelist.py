@@ -281,7 +281,7 @@ async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user
     response_model_exclude_none=True,
     name="whitelist:all-events"
 )
-async def whitelist_event_list(
+def whitelist_event_list(
     db=Depends(get_db),
 ):
     """
@@ -297,7 +297,7 @@ async def whitelist_event_list(
     response_model_exclude_none=True,
     name="whitelist:event"
 )
-async def whitelist_event(
+def whitelist_event(
     projectName: str, 
     roundName: str,
     db=Depends(get_db),
@@ -311,7 +311,7 @@ async def whitelist_event(
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
 @r.post("/events", response_model_exclude_none=True, name="whitelist:create-event")
-async def whitelist_event_create(
+def whitelist_event_create(
     whitelist_event: CreateWhitelistEvent,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -329,7 +329,7 @@ async def whitelist_event_create(
     response_model_exclude_none=True, 
     name="whitelist:edit-event"
 )
-async def whitelist_event_edit(
+def whitelist_event_edit(
     id: int,
     whitelist_event: CreateWhitelistEvent,
     db=Depends(get_db),
@@ -348,7 +348,7 @@ async def whitelist_event_edit(
     response_model_exclude_none=True, 
     name="whitelist:delete-event"
 )
-async def whitelist_event_delete(
+def whitelist_event_delete(
     id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
