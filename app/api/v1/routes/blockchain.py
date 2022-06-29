@@ -96,14 +96,19 @@ async def getInfo():
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid blockchain info ({e})')
 
 
-@r.get("/tokenStats/{tokenId}", name="blockchain:tokenStats")
-def getTokenStats(tokenId):
+@r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
+async def tokenomics(tokenId):
     engDanaides = create_engine(CFG.csDanaides)
     sql = text(f'''
-        select a.notes, amount/power(10, t.decimals) as amount, t.name as token_name
-        from token_agg a
-            join tokens t on t.token_id = a.token_id
-        where a.token_id = :token_id
+        select t.name as token_name
+            , t.token_price * t.in_circulation as market_cap
+            , emission_amount/power(10, decimals) as initial_total_supply
+            , t.current_total_supply
+            , emission_amount/power(10, decimals) - t.current_total_supply as burned
+            , t.in_circulation
+            , t.token_price
+        from tokens t on t.token_id = a.token_id
+        where t.token_id = :token_id
     ''')
     stats = engDanaides.execute(sql, {'token_id': tokenId}).fetchall()
 
