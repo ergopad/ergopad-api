@@ -1018,7 +1018,7 @@ async def allStaked(req: AddressList):
 ########################################
 
 @r.get("/config", response_model_exclude_none=True, name="staking-cms:all-config")
-async def staking_config_list_cms(
+def staking_config_list_cms(
     db=Depends(get_db),
 ):
     """
@@ -1033,7 +1033,7 @@ async def staking_config_list_cms(
 
 
 @r.get("/config/{project}", response_model_exclude_none=True, name="staking-cms:config")
-async def staking_config_cms(
+def staking_config_cms(
     project: str,
     db=Depends(get_db),
 ):
@@ -1049,7 +1049,7 @@ async def staking_config_cms(
 
 
 @r.post("/config", response_model_exclude_none=True, name="staking-cms:create-config")
-async def staking_config_create_cms(
+def staking_config_create_cms(
     staking_config: CreateAndUpdateStakingConfig,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -1066,7 +1066,7 @@ async def staking_config_create_cms(
 
 
 @r.put("/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config")
-async def staking_config_edit_cms(
+def staking_config_edit_cms(
     id: int,
     staking_config: CreateAndUpdateStakingConfig,
     db=Depends(get_db),
@@ -1086,7 +1086,7 @@ async def staking_config_edit_cms(
 @r.delete(
     "/config/{id}", response_model_exclude_none=True, name="staking-cms:edit-config"
 )
-async def staking_config_delete_cms(
+def staking_config_delete_cms(
     id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),

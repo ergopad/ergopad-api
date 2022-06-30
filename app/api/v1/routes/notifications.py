@@ -21,7 +21,7 @@ notification_router = r = APIRouter()
     response_model_exclude_none=True,
     name="notifications:all-notifications"
 )
-async def notifications_list(
+def notifications_list(
     walletAddress: str,
     db=Depends(get_db),
 ):
@@ -40,7 +40,7 @@ async def notifications_list(
     response_model_exclude_none=True,
     name="notifications:all-notifications"
 )
-async def notifications_list(
+def notifications_list(
     walletAddresses: t.List[str],
     db=Depends(get_db),
 ):
@@ -54,7 +54,7 @@ async def notifications_list(
 
 
 @r.post("/{walletAddress}", response_model=Notification, response_model_exclude_none=True, name="notifications:create")
-async def notification_create(
+def notification_create(
     walletAddress: str,
     notification: CreateAndUpdateNotification,
     db=Depends(get_db),
@@ -72,7 +72,7 @@ async def notification_create(
 @r.delete(
     "/cleanup", name="notifications:clean-up"
 )
-async def notification_cleanup(
+def notification_cleanup(
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -88,7 +88,7 @@ async def notification_cleanup(
 @r.delete(
     "/{notification_id}", response_model=Notification, response_model_exclude_none=True, name="notifications:delete"
 )
-async def notification_delete(
+def notification_delete(
     notification_id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),

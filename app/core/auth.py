@@ -10,7 +10,7 @@ from db.crud.users import get_blacklisted_token, get_user_by_email, create_user
 from core import security
 
 
-async def get_current_user(
+def get_current_user(
     db=Depends(get_db), token: str = Depends(security.oauth2_scheme)
 ):
     credentials_exception = HTTPException(
@@ -38,7 +38,7 @@ async def get_current_user(
     return user
 
 
-async def get_current_active_user(
+def get_current_active_user(
     current_user: models.User = Depends(get_current_user),
 ):
     if not current_user.is_active:
@@ -46,7 +46,7 @@ async def get_current_active_user(
     return current_user
 
 
-async def get_current_active_superuser(
+def get_current_active_superuser(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
     if not current_user.is_superuser:

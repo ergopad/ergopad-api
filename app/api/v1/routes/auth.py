@@ -21,7 +21,7 @@ auth_router = r = APIRouter()
 
 
 @r.post("/token")
-async def login(
+def login(
     db=Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -48,7 +48,7 @@ async def login(
 
 
 @r.post("/signup")
-async def signup(
+def signup(
     db=Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
     user = sign_up_new_user(db, form_data.username, form_data.password)
@@ -75,5 +75,5 @@ async def signup(
 
 
 @r.post("/logout")
-async def logout(db=Depends(get_db), token: str = Depends(security.oauth2_scheme), current_user=Depends(get_current_active_user)):
+def logout(db=Depends(get_db), token: str = Depends(security.oauth2_scheme), current_user=Depends(get_current_active_user)):
     return blacklist_token(db, token)

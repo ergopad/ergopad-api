@@ -22,7 +22,7 @@ jobs_router = r = APIRouter()
     response_model_exclude_none=True,
     name="jobs:all-jobs"
 )
-async def jobs_list(
+def jobs_list(
     db=Depends(get_db),
 ):
     """
@@ -40,7 +40,7 @@ async def jobs_list(
     response_model_exclude_none=True,
     name="jobs:job-details"
 )
-async def job_details(
+def job_details(
     job_id: int,
     db=Depends(get_db),
 ):
@@ -54,7 +54,7 @@ async def job_details(
 
 
 @r.post("/", response_model=Job, response_model_exclude_none=True, name="jobs:create")
-async def job_create(
+def job_create(
     job: CreateAndUpdateJob,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -71,7 +71,7 @@ async def job_create(
 @r.put(
     "/{job_id}", response_model=Job, response_model_exclude_none=True, name="jobs:edit"
 )
-async def job_edit(
+def job_edit(
     job_id: int,
     job: CreateAndUpdateJob,
     db=Depends(get_db),
@@ -89,7 +89,7 @@ async def job_edit(
 @r.delete(
     "/{job_id}", response_model=Job, response_model_exclude_none=True, name="jobs:delete"
 )
-async def job_delete(
+def job_delete(
     job_id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),

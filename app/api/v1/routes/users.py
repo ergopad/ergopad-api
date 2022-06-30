@@ -21,7 +21,7 @@ users_router = r = APIRouter()
     response_model_exclude_none=True,
     name="users:all-users"
 )
-async def users_list(
+def users_list(
     response: Response,
     db=Depends(get_db),
     current_user=Depends(get_current_active_superuser),
@@ -39,7 +39,7 @@ async def users_list(
 
 
 @r.get("/me", response_model=User, response_model_exclude_none=True, name="users:me")
-async def user_me(current_user=Depends(get_current_active_user)):
+def user_me(current_user=Depends(get_current_active_user)):
     """
     Get own user
     """
@@ -52,7 +52,7 @@ async def user_me(current_user=Depends(get_current_active_user)):
     response_model_exclude_none=True,
     name="users:user-details"
 )
-async def user_details(
+def user_details(
     request: Request,
     user_id: int,
     db=Depends(get_db),
@@ -68,7 +68,7 @@ async def user_details(
 
 
 @r.post("/", response_model=User, response_model_exclude_none=True, name="users:create")
-async def user_create(
+def user_create(
     request: Request,
     user: UserCreate,
     db=Depends(get_db),
@@ -86,7 +86,7 @@ async def user_create(
 @r.put(
     "/{user_id}", response_model=User, response_model_exclude_none=True, name="users:edit"
 )
-async def user_edit(
+def user_edit(
     request: Request,
     user_id: int,
     user: UserEdit,
@@ -105,7 +105,7 @@ async def user_edit(
 @r.put(
     "/{user_id}/password", response_model=User, response_model_exclude_none=True, name="users:change-password"
 )
-async def user_edit(
+def user_edit_password(
     request: Request,
     user_id: int,
     user: UserEdit,
@@ -127,7 +127,7 @@ async def user_edit(
 @r.delete(
     "/{user_id}", response_model=User, response_model_exclude_none=True, name="users:delete"
 )
-async def user_delete(
+def user_delete(
     request: Request,
     user_id: int,
     db=Depends(get_db),
