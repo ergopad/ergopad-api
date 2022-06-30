@@ -79,7 +79,7 @@ async def add_logging_and_process_time(req: Request, call_next):
         resNext = await call_next(req)
         tot = f'{time()-beg:0.3f}'
         resNext.headers["X-Process-Time-MS"] = tot
-        logging.debug(f"""### %%% TOOK {tot} (req.url) %%% ###""")
+        logging.debug(f"""### %%% TOOK {tot} / ({req.url}) %%% ###""")
         return resNext
 
     except Exception as e:
