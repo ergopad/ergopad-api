@@ -1,6 +1,10 @@
 import uvicorn
+import logging
 
-from fastapi import FastAPI, Depends
+from time import time
+from os import getpid
+
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.auth import get_current_active_user
 
@@ -66,6 +70,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_logging_and_process_time(req: Request, call_next):
+    try:
+        logging.debug(f"""### REQUEST: {req.url} | host: {req.client.host}:{req.client.port} | pid {getpid()} ###""")
+        beg = time()
+        resNext = await call_next(req)
+        tot = f'{time()-beg:0.3f}'
+        resNext.headers["X-Process-Time-MS"] = tot
+        logging.debug(f"""### %%% TOOK {tot} / ({req.url}) %%% ###""")
+        return resNext
+
+    except Exception as e:
+        logging.debug(e)
+        return resNext
+        pass
 
 # catch all route (useful?)
 # @app.api_route("/{path_name:path}", methods=["GET"])
