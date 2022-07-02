@@ -98,6 +98,10 @@ async def getInfo():
 @r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
 async def tokenomics(tokenId):
     try:
+        cached = cache.get(f"get_api_blockchain_tokenomics_{tokenId}")
+        if cached:
+            return cached
+
         engDanaides = create_engine(CFG.csDanaides)
         sqlTokenomics = text(f'''
             select token_name
@@ -123,6 +127,8 @@ async def tokenomics(tokenId):
             'market_cap': res['market_cap'],
             'in_circulation': res['in_circulation'],
         }
+        
+        cache.set(f"get_api_blockchain_tokenomics_{tokenId}", stats)
 
         return stats
 
