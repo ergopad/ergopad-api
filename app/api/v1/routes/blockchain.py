@@ -103,11 +103,11 @@ async def tokenomics(tokenId):
             select token_name
                 , token_id
                 , token_price
-                , current_total_supply
+                , current_total_supply/power(10, decimals) as current_total_supply
                 , emission_amount/power(10, decimals) as initial_total_supply
-                , emission_amount/power(10, decimals) - current_total_supply as burned
-                , token_price * in_circulation as market_cap
-                , in_circulation
+                , (emission_amount - current_total_supply)/power(10, decimals) as burned
+                , token_price * (current_total_supply/power(10, decimals) - vested - emitted - stake_pool) as market_cap
+                , (current_total_supply/power(10, decimals) - vested - emitted - stake_pool) as in_circulation
             from tokens
             where token_id = :token_id
         ''')
