@@ -27,7 +27,7 @@ projects_router = r = APIRouter()
     response_model_exclude_none=True,
     name="projects:all-projects"
 )
-async def projects_list(
+def projects_list(
     db=Depends(get_db),
 ):
     """
@@ -46,7 +46,7 @@ async def projects_list(
     response_model_exclude_none=True,
     name="projects:project-details"
 )
-async def project_details(
+def project_details(
     id: str,
     db=Depends(get_db),
 ):
@@ -60,7 +60,7 @@ async def project_details(
 
 
 @r.post("/", response_model=Project, response_model_exclude_none=True, name="projects:create")
-async def project_create(
+def project_create(
     project: CreateAndUpdateProject,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -77,7 +77,7 @@ async def project_create(
 @r.put(
     "/{project_id}", response_model=Project, response_model_exclude_none=True, name="projects:edit"
 )
-async def project_edit(
+def project_edit(
     project_id: int,
     project: CreateAndUpdateProject,
     db=Depends(get_db),
@@ -95,7 +95,7 @@ async def project_edit(
 @r.delete(
     "/{project_id}", response_model=Project, response_model_exclude_none=True, name="projects:delete"
 )
-async def project_delete(
+def project_delete(
     project_id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -110,7 +110,7 @@ async def project_delete(
 
 
 @r.post("/upload_image", name="projects:upload-image-to-S3")
-async def upload(fileobject: UploadFile = File(...), current_user=Depends(get_current_active_user)):
+def upload(fileobject: UploadFile = File(...), current_user=Depends(get_current_active_user)):
     """
     Upload files to s3 bucket
     """

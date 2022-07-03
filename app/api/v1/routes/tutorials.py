@@ -21,7 +21,7 @@ tutorial_router = r = APIRouter()
     response_model_exclude_none=True,
     name="tutorials:all-tutorials"
 )
-async def tutorials_list(
+def tutorials_list(
     category: str = 'all',
     db=Depends(get_db),
 ):
@@ -40,7 +40,7 @@ async def tutorials_list(
     response_model_exclude_none=True,
     name="tutorials:all-categories"
 )
-async def tutorials_categories_list(
+def tutorials_categories_list(
     db=Depends(get_db),
 ):
     """
@@ -53,7 +53,7 @@ async def tutorials_categories_list(
 
 
 @r.post("/", response_model=Tutorial, response_model_exclude_none=True, name="tutorials:create")
-async def tutorial_create(
+def tutorial_create(
     tutorial: CreateAndUpdateTutorial,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -70,7 +70,7 @@ async def tutorial_create(
 @r.put(
     "/{tutorial_id}", response_model=Tutorial, response_model_exclude_none=True, name="tutorials:edit"
 )
-async def tutorial_edit(
+def tutorial_edit(
     tutorial_id: int,
     tutorial: CreateAndUpdateTutorial,
     db=Depends(get_db),
@@ -88,7 +88,7 @@ async def tutorial_edit(
 @r.delete(
     "/{tutorial_id}", response_model=Tutorial, response_model_exclude_none=True, name="tutorial:delete"
 )
-async def tutorial_delete(
+def tutorial_delete(
     tutorial_id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),

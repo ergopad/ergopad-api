@@ -27,7 +27,7 @@ def myself(): return inspect.stack()[1][3]
     response_model_exclude_none=True,
     name="contribution:all-events"
 )
-async def contribution_event_list(
+def contribution_event_list(
     db=Depends(get_db),
 ):
     """
@@ -44,7 +44,7 @@ async def contribution_event_list(
     response_model_exclude_none=True,
     name="contribution:event"
 )
-async def contribution_event(projectName: str, roundName: str,
+def contribution_event(projectName: str, roundName: str,
                              db=Depends(get_db),
                              ):
     """
@@ -57,7 +57,7 @@ async def contribution_event(projectName: str, roundName: str,
 
 
 @r.post("/events", response_model_exclude_none=True, name="contribution:create-event")
-async def contribution_event_create(
+def contribution_event_create(
     contribution_event: CreateContributionEvent,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -74,7 +74,7 @@ async def contribution_event_create(
 @r.put(
     "/events/{id}", response_model_exclude_none=True, name="contribution:edit-event"
 )
-async def contribution_event_edit(
+def contribution_event_edit(
     id: int,
     contribution_event: CreateContributionEvent,
     db=Depends(get_db),
@@ -92,7 +92,7 @@ async def contribution_event_edit(
 @r.delete(
     "/events/{id}", response_model_exclude_none=True, name="contribution:delete-event"
 )
-async def contribution_event_delete(
+def contribution_event_delete(
     id: int,
     db=Depends(get_db),
     current_user=Depends(get_current_active_user),

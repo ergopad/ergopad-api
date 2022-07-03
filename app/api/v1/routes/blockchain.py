@@ -7,7 +7,7 @@ from core.auth import get_current_active_superuser
 from ergo_python_appkit.appkit import ErgoAppKit
 from wallet import Wallet
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Depends, status
 from time import time
@@ -95,6 +95,40 @@ async def getInfo():
         logging.error(f'ERR:{myself()}: invalid blockchain info ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid blockchain info ({e})')
 
+@r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
+async def tokenomics(tokenId):
+    try:
+        engDanaides = create_engine(CFG.csDanaides)
+        sqlTokenomics = text(f'''
+            select token_name
+                , token_id
+                , token_price
+                , current_total_supply
+                , emission_amount/power(10, decimals) as initial_total_supply
+                , emission_amount/power(10, decimals) - current_total_supply as burned
+                , token_price * in_circulation as market_cap
+                , in_circulation
+            from tokens
+            where token_id = :token_id
+        ''')
+        res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+
+        stats = {
+            'token_id': res['token_id'],
+            'token_name': res['token_name'],
+            'token_price': res['token_price'],
+            'current_total_supply': res['current_total_supply'],
+            'initial_total_supply': res['initial_total_supply'],
+            'burned': res['burned'],
+            'market_cap': res['market_cap'],
+            'in_circulation': res['in_circulation'],
+        }
+
+        return stats
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid tokenomics request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid tokenomics request ({e})')
 
 # info about token
 @r.get("/tokenInfo/{tokenId}", name="blockchain:tokenInfo")
