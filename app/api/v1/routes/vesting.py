@@ -20,7 +20,7 @@ from ergo.util import encodeLong, encodeString
 from api.v1.routes.blockchain import TXFormat, ergusdoracle, getNFTBox, getTokenInfo, getErgoscript, getBoxesWithUnspentTokens, getUnspentBoxesByTokenId
 from hashlib import blake2b
 from cache.cache import cache
-from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
+from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT, ErgoValue
 from org.ergoplatform.appkit import Address, ErgoClientException, InputBox
 from sigmastate.Values import ErgoTree
 
@@ -256,6 +256,83 @@ async def redeemToken(address:str, numBoxes:Optional[int]=200):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem token.')
 
 # find vesting/vested tokens
+@r.get("/v1/{wallet}", name="vesting:v1")
+async def vestingV1(wallet:str):
+    try:
+        userWallet = Wallet(wallet)
+        userErgoTree = userWallet.ergoTree()
+        engDanaides = create_engine(CFG.csDanaides)
+        sql = f'''
+            with v as (
+                    select id 
+                        , ergo_tree
+                        , box_id
+                        , registers->'R4' as r4
+						, registers->'R5' as r5
+						, registers->'R6' as r6
+						, registers->'R7' as r7
+						, registers->'R8' as r8
+                        , (each(assets)).key::varchar(64) as token_id
+                        , (each(assets)).value as amount
+                    from utxos
+                    where ergo_tree = '10070400040204000500040004000400d80bd601e4c6a7040ed602b2db6308a7730000d6038c720201d604e4c6a70805d605e4c6a70705d606e4c6a70505d607e4c6a70605d6089c9d99db6903db6503fe720572067207d6098c720202d60a9972047209d60b958f99720472087207997204720a997208720ad1ed93b0b5a5d9010c63ededed93c2720c720193e4c6720c040ee4c6a7090e93b1db6308720c7301938cb2db6308720c7302000172037303d9010c41639a8c720c018cb2db63088c720c0273040002720bec937209720baea5d9010c63ededededededededed93c1720cc1a793c2720cc2a7938cb2db6308720c730500017203938cb2db6308720c73060002997209720b93e4c6720c040e720193e4c6720c0505720693e4c6720c0605720793e4c6720c0705720593e4c6720c0805720493e4c6720c090ee4c6a7090e'
+                )
+				select v.box_id
+					, v.r4, v.r5, v.r6, v.r7, v.r8
+					, v.token_id::varchar(64)
+					, v.amount::bigint -- need to divide by decimals
+					, v.ergo_tree::text
+                    , t.token_name
+                    , t.decimals
+				from v
+					-- filter to only vesting keys
+					-- join assets a on a.token_id = v.vesting_key_id    
+                    join tokens t on t.token_id = v.token_id 
+                where right(v.r4, length(v.r4)-4) = {userErgoTree!r}
+        '''
+        with engDanaides.begin() as con:
+            boxes = con.execute(sql).fetchall()
+
+        result = {}
+        for box in boxes:
+            logging.debug(f'''token: {box['token_name']}''')
+            r5 = ErgoValue.fromHex(box["r5"]).getValue()
+            r6 = ErgoValue.fromHex(box["r6"]).getValue()
+            r7 = ErgoValue.fromHex(box["r7"]).getValue()
+            r8 = ErgoValue.fromHex(box["r8"]).getValue()
+            tokenId = box["token_id"]
+            if tokenId not in result:
+                result[tokenId] = {
+                    'name': box["token_name"],
+                    'totalVested': 0.0,
+                    'outstanding': {},
+                }
+            tokenDecimals = 10**box["decimals"]
+            initialVestedAmount = int(r8)/tokenDecimals
+            nextRedeemAmount = int(r6)/tokenDecimals
+            remainingVested = int(box["amount"])/tokenDecimals
+            result[tokenId]['totalVested'] += remainingVested
+            nextRedeemTimestamp = (((initialVestedAmount-remainingVested)/nextRedeemAmount+1)*int(r5)+int(r7))/1000.0
+            nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)
+            logging.debug(nextRedeemDate)
+            while remainingVested > 0:
+                if nextRedeemDate not in result[tokenId]['outstanding']:
+                    result[tokenId]['outstanding'][nextRedeemDate] = {}
+                    result[tokenId]['outstanding'][nextRedeemDate]['amount'] = 0.0
+                redeemAmount = nextRedeemAmount if remainingVested >= 2*nextRedeemAmount else remainingVested
+                result[tokenId]['outstanding'][nextRedeemDate]['amount'] += round(redeemAmount, int(box["decimals"]))
+                remainingVested -= redeemAmount
+                nextRedeemTimestamp += int(r5)/1000.0
+                nextRedeemDate = date.fromtimestamp(nextRedeemTimestamp)        
+                logging.debug(nextRedeemDate)
+
+        return result
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: unable to build ergopad vesting request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build ergopad vesting request.')
+
+# find vesting/vested tokens
 @r.get("/vested/{wallet}", name="vesting:findVestedTokens")
 async def findVestingTokens(wallet:str):
     CACHE_TTL = 3600 # 60 mins (this is only changed once per month)
@@ -476,6 +553,65 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
         logging.error(f'ERR:{myself()}: {content} ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
+# replacement for vestedWithNFT
+@r.post("/v2/", name="vesting:v2")
+async def vestingV2(req: AddressList):
+    try:
+        engDanaides = create_engine(CFG.csDanaides)
+        sql = f'''
+            select v.box_id, v.vesting_key_id, v.parameters, v.token_id, v.remaining, v.address, v.ergo_tree
+                , t.token_name, t.decimals
+            from vesting v 
+                join tokens t on t.token_id = v.token_id
+            where address in ('{"','".join(req.addresses)}')
+        '''
+        with engDanaides.begin() as con:
+            boxes = con.execute(sql).fetchall()
+
+        vested = {}
+        for box in boxes:
+            logging.debug(f'''box: {box['box_id']}''')
+            # parse parameters
+            parameters          = ErgoAppKit.deserializeLongArray(box['parameters'])
+            blockTime           = int(time()*1000)
+            redeemPeriod        = parameters[0]
+            numberOfPeriods     = parameters[1]
+            vestingStart        = parameters[2]
+            totalVested         = parameters[3]
+            timeVested          = blockTime - vestingStart
+            periods             = max(0,int(timeVested/redeemPeriod))
+            redeemed            = totalVested - int(box['remaining'])
+            logging.debug(f'''redeemed: {redeemed}''')
+
+            # handle extended parameters
+            if box["ergo_tree"]  == "1012040204000404040004020406040c0408040a050004000402040204000400040404000400d812d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605db6903db6503fed606e4c6a70411d6079d997205b27206730200b27206730300d608b27206730400d609b27206730500d60a9972097204d60b95917205b272067306009d9c7209b27206730700b272067308007309d60c959272077208997209720a999a9d9c7207997209720b7208720b720ad60d937204720cd60e95720db2a5730a00b2a5730b00d60fdb6308720ed610b2720f730c00d6118c720301d612b2a5730d00d1eded96830201aedb63087201d901134d0e938c721301720293c5b2a4730e00c5a79683050193c2720ec2720193b1720f730f938cb2720f731000017202938c7210017211938c721002720cec720dd801d613b2db630872127311009683060193c17212c1a793c27212c2a7938c7213017211938c721302997204720c93e4c67212050e720293e4c6721204117206":
+                tgeNum          = parameters[4]
+                tgeDenom        = parameters[5]
+                tgeTime         = parameters[6]
+                tgeAmount       = int(totalVested * tgeNum / tgeDenom) if (blockTime > tgeTime) else 0
+                totalRedeemable = int(periods * (totalVested-tgeAmount) / numberOfPeriods) + tgeAmount
+            else:     
+                totalRedeemable = int(periods * totalVested / numberOfPeriods)
+            redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
+            logging.debug(f'''redeemableTokens: {redeemableTokens}''')
+
+            # build response
+            logging.debug(f'''token name: {box['token_name']}''')
+            if box['token_name'] not in vested:
+                vested[box['token_name']] = []
+            vested[box['token_name']].append({
+                'boxId': box["box_id"],
+                'Remaining': round(box['remaining']*10**(-1*box['decimals']),box['decimals']),
+                'Redeemable': round(redeemableTokens*10**(-1*box['decimals']),box['decimals']),
+                'Vesting Key Id': box['vesting_key_id'],
+                'Next unlock': datetime.fromtimestamp((vestingStart+((periods+1)*redeemPeriod))/1000)
+            })
+
+        return vested
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: unable to build vesting request ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
 @r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
 async def vested(req: AddressList):
