@@ -4,6 +4,7 @@ import requests
 import typing as t
 
 from sqlalchemy import create_engine
+from wallet import Wallet
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, status
 from fastapi import Path
@@ -46,7 +47,72 @@ logging.basicConfig(
 def myself(): return inspect.stack()[1][3]
 # endregion LOGGING
 
+class AddressList(BaseModel):
+    addresses: t.List[str]
+
 # region ROUTES
+
+# Single coin balance and tokens for wallet address
+@r.post("/balances/", name="asset:balances")
+async def get_assets_for_addresses(req: AddressList):
+    try:
+        total = 0
+        balances = {}
+        engDanaides = create_engine(CFG.csDanaides)
+
+        # avoid sql injection by validating wallets
+        all_addresses = []
+        for address in req.addresses:
+            wallet = Wallet(address)
+            if wallet.isValid():
+                all_addresses.append(address)
+            else:
+                logging.warning(f'''invalid address '{address}'; potential sql injection''')
+
+        addresses = "','".join([a for a in all_addresses])
+        sql = f'''
+            select sum(nergs) as nergs, address
+            from balances
+            where address in ('{addresses}')
+            group by address
+        '''
+        # logging.debug(sql)
+        with engDanaides.begin() as con:
+            res = con.execute(sql).fetchall()
+        for r in res:
+            balances[r['address']] = { 'balance': r['nergs']/(10**9), 'tokens': [] }
+            total += r['nergs']
+
+        sql = f'''
+            select a.token_id, a.amount, a.address
+                , t.name, t.decimals, t.type
+                , coalesce(p.price, 0.0) as price
+            from assets a
+                left join tokens t on t.token_id = a.token_id
+                left join prices p on p.token_id = a.token_id
+            where address in ('{addresses}')
+        '''
+        logging.debug(sql)
+        with engDanaides.begin() as con:
+            res = con.execute(sql).fetchall()
+
+        for r in res:
+            balances[r['address']]['tokens'].append({
+                'tokenId': r['token_id'],
+                'amount': r['amount'],
+                'decimals': None,
+                'name': None,
+                'tokenType': None,
+                'price': 0.0,
+            })
+
+        balances['total'] = total/(10**9)
+
+        return balances
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: unable to find balances ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find balances.')
 
 # Single coin balance and tokens for wallet address
 @r.get("/balance/{address}", name="asset:wallet-balance")
