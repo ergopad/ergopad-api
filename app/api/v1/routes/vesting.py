@@ -256,11 +256,11 @@ async def redeemToken(address:str, numBoxes:Optional[int]=200):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to redeem token.')
 
 # find vesting/vested tokens
-@r.get("/v1/{wallet}", name="vesting:v1")
-async def vestingV1(wallet:str):
+@r.post("/v1/", name="vesting:v1")
+async def vestingV1(req: AddressList):
     try:
-        userWallet = Wallet(wallet)
-        userErgoTree = userWallet.ergoTree()
+        userWallets = [Wallet(address) for address in req.addresses]
+        userErgoTrees = [wallet.ergoTree() for wallet in userWallets]
         engDanaides = create_engine(CFG.csDanaides)
         sql = f'''
             with v as (
@@ -288,7 +288,7 @@ async def vestingV1(wallet:str):
 					-- filter to only vesting keys
 					-- join assets a on a.token_id = v.vesting_key_id    
                     join tokens t on t.token_id = v.token_id 
-                where right(v.r4, length(v.r4)-4) = {userErgoTree!r}
+                where right(v.r4, length(v.r4)-4) in ('{"','".join(userErgoTrees)}')
         '''
         with engDanaides.begin() as con:
             boxes = con.execute(sql).fetchall()
