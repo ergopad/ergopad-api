@@ -3,7 +3,7 @@ import logging
 import requests
 import typing as t
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from wallet import Wallet
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, status
@@ -84,12 +84,17 @@ async def get_assets_for_addresses(req: AddressList):
             total += r['nergs']
 
         sql = f'''
-            select a.token_id, a.amount, a.address
-                , t.name, t.decimals, t.type
-                , coalesce(p.price, 0.0) as price
+            with assets as (
+                select (each(assets)).key::varchar(64) as token_id
+                    , (each(assets)).value::bigint as amount
+                    , address		
+                from utxos
+                where address != ''
+            )
+            select a.*
+                , t.token_name, t.decimals, t.token_type, t.token_price
             from assets a
-                left join tokens t on t.token_id = a.token_id
-                left join prices p on p.token_id = a.token_id
+            left join tokens t on t.token_id = a.token_id
             where address in ('{addresses}')
         '''
         logging.debug(sql)
@@ -101,9 +106,9 @@ async def get_assets_for_addresses(req: AddressList):
                 'tokenId': r['token_id'],
                 'amount': r['amount'],
                 'decimals': None,
-                'name': None,
+                'name': r['token_name'],
                 'tokenType': None,
-                'price': 0.0,
+                'price': r['token_price'],
             })
 
         balances['total'] = total/(10**9)
@@ -177,16 +182,28 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
 @r.get("/priceByTokenId/{tokenId}", name="coin:coin-price-by-token-id")
 async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
     try:
-        cached = cache.get(f"get_api_asset_price_by_token_id_{tokenId}")
-        if cached:
-            return cached
+        # cached = cache.get(f"get_api_asset_price_by_token_id_{tokenId}")
+        # if cached:
+        #     return cached
 
+        engDanaides = create_engine(CFG.csDanaides)
+        sql = text(f'''
+            select token_price 
+            from tokens 
+            where token_id = :tokenId
+        ''')
         price = None
+        with engDanaides.begin() as con:
+            res = con.execute(sql, {'tokenId': tokenId}).fetchone()
+            if res:
+                price = res['token_price']
+            else:
+                price = 0.0
 
-        logging.warning('find price from ergodex')
-        ret = getErgodexTokenPriceByTokenId(tokenId)
-        if (ret["status"] == "success"):
-            price = ret["price"]
+        # logging.warning('find price from ergodex')
+        # ret = getErgodexTokenPriceByTokenId(tokenId)
+        # if (ret["status"] == "success"):
+        #     price = ret["token_price"] or 0.0
 
         ret = {
             "status": "unavailable",
@@ -197,7 +214,7 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
         # set cache only on success
         if price:
             ret["status"] = "ok"
-            cache.set(f"get_api_asset_price_by_token_id_{tokenId}", ret)
+            # cache.set(f"get_api_asset_price_by_token_id_{tokenId}", ret)
         
         return ret
 
