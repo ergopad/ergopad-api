@@ -25,11 +25,12 @@ from cache.cache import cache
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
 
-from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaConfig, PaideiaTestConfig
+from paideia_contracts.contracts.staking import CreateAddStakeProxyTransaction, CreateStakeProxyTransaction, CreateUnstakeProxyTransaction, PaideiaConfig, PaideiaTestConfig, EGIOConfig
 
 stakingConfigs = {
     'paideiatest': PaideiaTestConfig,
-    'paideia': PaideiaConfig
+    'paideia': PaideiaConfig,
+    'egiov2': EGIOConfig
 }
 
 stakingConfigsV1 = {
