@@ -94,7 +94,7 @@ async def get_assets_for_addresses(req: AddressList):
             select a.*
                 , t.token_name, t.decimals, t.token_type, t.token_price
             from assets a
-            left join tokens t on t.token_id = a.token_id
+            left join tokens_alt t on t.token_id = a.token_id
             where address in ('{addresses}')
         '''
         logging.debug(sql)
