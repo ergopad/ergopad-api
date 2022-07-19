@@ -91,10 +91,16 @@ async def get_assets_for_addresses(req: AddressList):
                 from utxos
                 where address != ''
             )
-            select a.*
-                , t.token_name, t.decimals, t.token_type, t.token_price
+            select a.address
+                , a.token_id
+                , a.amount
+                , t.token_name
+                , coalesce(t.decimals, 0) as decimals
+                , coalesce(t.token_type, '') as token_type
+                , coalesce(p.token_price, 0.0) as token_price
             from assets a
-            left join tokens_alt t on t.token_id = a.token_id
+                left join tokens_alt t on t.token_id = a.token_id
+                left join tokens p on p.token_id = a.token_id
             where address in ('{addresses}')
         '''
         logging.debug(sql)
@@ -105,9 +111,9 @@ async def get_assets_for_addresses(req: AddressList):
             balances[r['address']]['tokens'].append({
                 'tokenId': r['token_id'],
                 'amount': r['amount'],
-                'decimals': None,
+                'decimals': r['decimals'],
                 'name': r['token_name'],
-                'tokenType': None,
+                'tokenType': r['token_type'],
                 'price': r['token_price'],
             })
 
