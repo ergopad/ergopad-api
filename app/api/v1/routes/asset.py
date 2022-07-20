@@ -133,59 +133,13 @@ async def get_assets_for_addresses(req: AddressList):
 @r.get("/balance/{address}", name="asset:wallet-balance")
 async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
     try:
-        # get balance from ergo explorer api
-        logging.debug(f'find balance for [blockchain], address: {address}...')
-        wallet_assets = {}
-        balance = {}
-        
-        res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/total')
-        # handle invalid address or other error
-        if res.status_code == 200:
-            balance = res.json()
-
-        logging.info(f'Balance for ergo: {balance}')
-        ergPrice = (await get_asset_current_price('ERGO'))['price']
-
-        # handle SigUSD and SigRSV
-        tokens = []
-        for token in balance['confirmed']['tokens']:
-            token['price'] = 0.0
-            # if token['name'] == 'SigUSD': # TokenId: 22c6cc341518f4971e66bd118d601004053443ed3f91f50632d79936b90712e9
-            if token['tokenId'] == '03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04':
-                price = (await get_asset_current_price('SigUSD'))['price']
-                token['price'] = price
-            # if token['name'] == 'SigRSV': # TokenId: 003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0
-            if token['tokenId'] == '003bd19d0187117f130b62e1bcab0939929ff5c7709f843c5c4dd158949285d0':
-                price = (await get_asset_current_price('SigRSV'))['price']
-                token['price'] = price
-            # Ergodex tokens
-            price = (await get_ergodex_asset_price_by_token_id(token['tokenId']))['price']
-            if price:
-                token['price'] = price
-            
-            tokens.append(token)
-
-        # normalize result
-        wallet_assets["ERG"] = {
-            "blockchain": "ergo",
-            # satoshis/kushtis
-            "balance": balance['confirmed']['nanoErgs']/nerg2erg,
-            # may not be available for all blockchains
-            "unconfirmed": balance['unconfirmed']['nanoErgs']/nerg2erg,
-            "tokens": tokens,  # array
-            "price": ergPrice,
-        }
-        # unconfirmed?
-
-        return {
-            "address": address,
-            "balance": wallet_assets,
-        }
+        addressList = AddressList
+        addressList.addresses = [f'{address}']
+        return await get_assets_for_addresses(addressList)
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find balance ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find balance ({e})')
-
 
 # Find price by token_id
 # Base currency is USD for all coins and tokens.
