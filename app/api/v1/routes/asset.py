@@ -57,7 +57,9 @@ class AddressList(BaseModel):
 async def get_assets_for_addresses(req: AddressList):
     try:
         total = 0
-        balances = {}
+        balances = {
+            'addresses': {}
+        }
         engDanaides = create_engine(CFG.csDanaides)
 
         # avoid sql injection by validating wallets
@@ -72,7 +74,7 @@ async def get_assets_for_addresses(req: AddressList):
         addresses = "','".join([a for a in all_addresses])
         sql = f'''
             select sum(nergs) as nergs, address
-            from balances
+            from utxos
             where address in ('{addresses}')
             group by address
         '''
@@ -80,7 +82,7 @@ async def get_assets_for_addresses(req: AddressList):
         with engDanaides.begin() as con:
             res = con.execute(sql).fetchall()
         for r in res:
-            balances[r['address']] = { 'balance': r['nergs']/(10**9), 'tokens': [] }
+            balances['addresses'][r['address']] = { 'balance': r['nergs']/(10**9), 'tokens': [] }
             total += r['nergs']
 
         sql = f'''
@@ -108,7 +110,7 @@ async def get_assets_for_addresses(req: AddressList):
             res = con.execute(sql).fetchall()
 
         for r in res:
-            balances[r['address']]['tokens'].append({
+            balances['addresses'][r['address']]['tokens'].append({
                 'tokenId': r['token_id'],
                 'amount': r['amount'],
                 'decimals': r['decimals'],
@@ -118,6 +120,8 @@ async def get_assets_for_addresses(req: AddressList):
             })
 
         balances['total'] = total/(10**9)
+        ergo = await get_asset_current_price(coin='ergo')
+        balances['price'] = ergo['price']
 
         return balances
 
