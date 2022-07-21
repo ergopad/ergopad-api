@@ -745,12 +745,12 @@ async def tvl(tokenId: str):
             stakingTVL = 0
             for token in stakingBalance["balance"]["ERG"]["tokens"]:
                 if token["tokenId"] == tokenId:
-                    stakingTVL += round(token["amount"]*10**(-1*token["decimals"])*token["price"],2)
+                    stakingTVL += round(token["amount"]*10**(-1*token["decimals"])*float(token["price"]),2)
 
             vestingTVL = 0
             for token in vestingBalance["balance"]["ERG"]["tokens"] + vestingWithNFTBalance["balance"]["ERG"]["tokens"]:
                 if token["tokenId"] == tokenId:
-                    vestingTVL += round(token["amount"]*10**(-1*token["decimals"])*token["price"],2)
+                    vestingTVL += round(token["amount"]*10**(-1*token["decimals"])*float(token["price"]),2)
 
             result = {
                 'tvl': {
