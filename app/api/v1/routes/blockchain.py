@@ -135,8 +135,29 @@ async def tokenomics(tokenId):
 def getTokenInfo(tokenId):
     # tkn = requests.get(f'{CFG.node}/wallet/balances/withUnconfirmed', headers=dict(headers, **{'api_key': CFG.apiKey})
     try:
-        tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
-        return tkn.json()
+        # tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
+        # return tkn.json()
+        engDanaides = create_engine(CFG.csDanaides)
+        sqlTokenomics = text(f'''
+            select token_name
+                , token_id
+                , token_price
+                , decimals
+                , coalesce(amount, 0.0) as emission_amount
+            from tokens_alt
+            where token_id = :token_id
+        ''')
+        res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+        return {
+            'id': res['token_id'],
+            'boxId': '',
+            'emissionAmount': res['emission_amount'],
+            'name': res['token_name'],
+            'description': '',
+            'type': '',
+            'decimals': res['decimals'],
+            # 'price': res['token_price'],
+        }
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid token request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid token request ({e})')
@@ -745,12 +766,12 @@ async def tvl(tokenId: str):
             stakingTVL = 0
             for token in stakingBalance["balance"]["ERG"]["tokens"]:
                 if token["tokenId"] == tokenId:
-                    stakingTVL += round(token["amount"]*10**(-1*token["decimals"])*token["price"],2)
+                    stakingTVL += round(token["amount"]*10**(-1*token["decimals"])*float(token["price"]),2)
 
             vestingTVL = 0
             for token in vestingBalance["balance"]["ERG"]["tokens"] + vestingWithNFTBalance["balance"]["ERG"]["tokens"]:
                 if token["tokenId"] == tokenId:
-                    vestingTVL += round(token["amount"]*10**(-1*token["decimals"])*token["price"],2)
+                    vestingTVL += round(token["amount"]*10**(-1*token["decimals"])*float(token["price"]),2)
 
             result = {
                 'tvl': {

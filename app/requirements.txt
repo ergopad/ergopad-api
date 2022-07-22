@@ -198,3 +198,4 @@ websockets==8.1
 # setuptools
 ergo-python-appkit==0.2.1
 paideia-contracts==1.0.5
+gunicorn
