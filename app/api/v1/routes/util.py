@@ -65,9 +65,9 @@ async def email(email: Email, request: Request):
         referer = request.headers.get('referer') or ''
         validateMe = request.headers.get('validate_me') or ''
         isValidReferer = False
-        if referer in validEmailApply: isValidReferer = True
-        if '54.214.59.165' in referer: isValidReferer = True
-        if validateMe == CFG.validateMe: isValidReferer = True
+        # if referer in validEmailApply: isValidReferer = True
+        if 'https://www.ergopad.io/' in referer: isValidReferer = True
+        # if validateMe == CFG.validateMe: isValidReferer = True
         if not isValidReferer:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
 
