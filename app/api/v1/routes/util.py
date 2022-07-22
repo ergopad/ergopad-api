@@ -3,6 +3,7 @@ import logging
 import requests
 import ssl
 import typing as t
+from unicodedata import normalize
 
 from starlette.responses import JSONResponse
 from fastapi import APIRouter, Request, Depends, status
@@ -61,15 +62,9 @@ async def email(email: Email, request: Request):
     try:
         # validate referer
         logging.debug(request.headers)
-        validEmailApply = CFG.validEmailApply
         referer = request.headers.get('referer') or ''
-        validateMe = request.headers.get('validate_me') or ''
-        isValidReferer = False
-        # if referer in validEmailApply: isValidReferer = True
-        if 'https://www.ergopad.io/' in referer: isValidReferer = True
-        # if validateMe == CFG.validateMe: isValidReferer = True
-        if not isValidReferer:
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
+        #if 'https://www.ergopad.io/' not in referer:
+        #    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
 
         usr = CFG.emailUsername
         pwd = CFG.emailPassword
@@ -89,8 +84,8 @@ async def email(email: Email, request: Request):
         if res[0] == 235: logging.info('login success')
         else: logging.error(res)
 
-        msg = f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}"""
-        res = con.sendmail(frm, email.to, msg) # con.sendmail(frm, 'erickson.winter@gmail.com', msg)
+        msg = normalize('NFKD', f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}""")
+        res = con.sendmail(frm, email.to, msg)
         if res == {}: logging.info('message sent')
         else: logging.error(res)
 
