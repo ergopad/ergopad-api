@@ -272,7 +272,7 @@ async def unstake(req: UnstakeRequest, project: str = "ergopad"):
                     address=changeAddress
                 )
                 cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
-                return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
+                return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unsignedTx.getId()}'}
         else:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake box')
 
@@ -655,7 +655,7 @@ async def stake(req: StakeRequest, project: str = "ergopad"):
                 address=req.wallet
             )
             cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
-            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
+            return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unsignedTx.getId()}'}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
@@ -788,7 +788,7 @@ async def stakeV2(project: str, req: StakeRequest):
             
         if req.txFormat == TXFormat.ERGO_PAY:
             cache.set(f'ergopay_signing_request_{stakeProxyTx.unsignedTx.getId()}',stakeProxyTx.ergoPaySigningRequest)
-            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
+            return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{stakeProxyTx.unsignedTx.getId()}'}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
@@ -817,7 +817,7 @@ async def unstakev2(project: str, req: UnstakeRequest):
             
         if req.txFormat == TXFormat.ERGO_PAY:
             cache.set(f'ergopay_signing_request_{unstakeProxyTx.unsignedTx.getId()}',unstakeProxyTx.ergoPaySigningRequest)
-            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
+            return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unstakeProxyTx.unsignedTx.getId()}'}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
@@ -841,7 +841,7 @@ async def addstake(project: str, req: UnstakeRequest):
             
         if req.txFormat == TXFormat.ERGO_PAY:
             cache.set(f'ergopay_signing_request_{addStakeProxyTx.unsignedTx.getId()}',addStakeProxyTx.ergoPaySigningRequest)
-            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
+            return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{addStakeProxyTx.unsignedTx.getId()}'}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
