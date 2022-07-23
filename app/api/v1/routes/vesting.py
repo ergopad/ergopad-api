@@ -542,7 +542,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
                 address=req.address
             )
             cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
-            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
+            return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unsignedTx.getId()}'}
 
     except Exception as e:
         content = f'Unable to redeem with NFT.'
@@ -990,7 +990,7 @@ async def contribute(req: VestFromProxyRequest):
                 address=req.address
             )
             cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
-            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
+            return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unsignedTx.getId()}'}
 
     except Exception as e:
         # return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Uncaught error: {e}')
@@ -1112,7 +1112,7 @@ async def vestFromProxy(req: VestFromProxyRequest):
                 address=req.address
             )
             cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
-            return {'url': f'ergopay://ergopad.io/api/blockchain/signingRequest/{unsignedTx.getId()}'}
+            return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unsignedTx.getId()}'}
 
     except Exception as e:
         # return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Uncaught error: {e}')
