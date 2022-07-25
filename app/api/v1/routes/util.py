@@ -85,7 +85,7 @@ async def email(email: Email, request: Request):
         if res[0] == 235: logging.info('login success')
         else: logging.error(res)
 
-        msg = normalize('NFKD', f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}""")
+        msg = normalize('NFC', f"""From: {frm}\nTo: {email.to}\nSubject: {email.subject}\n\n{email.body}""").encode('utf-8')
         res = con.sendmail(frm, email.to, msg)
         if res == {}: logging.info('message sent')
         else: logging.error(res)
