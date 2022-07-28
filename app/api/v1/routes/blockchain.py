@@ -334,32 +334,21 @@ async def totalSupply(tokenId):
     try:
         # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)
         # ergopad: d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413
-        con = create_engine(EXPLORER)
-        sqlTotalSupply = f"""
-            select 
-                -- filter to "unspent", giving "current" view; avoid nulls
-                coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "totalSupply"
-
-            from node_outputs o
-
-                -- "burned" / invalidate any box that doesn't have an input
-                left join node_inputs i on o.box_id = i.box_id
-                	-- and i.main_chain = true -- ?? is this necessary/useful
-
-                -- find the proper asset
-                join node_assets a on a.box_id = o.box_id
-                    and a.header_id = o.header_id
-				
-                -- find decimals for the token
-                join tokens t on t.token_id = a.token_id
-                
-            where o.main_chain = true
-                and i.box_id is null -- output with no input == unspent
-                and a.token_id = {tokenId!r}
-                and coalesce(a.value, 0) > 0 -- ignore nulls
-        """
-        res = con.execute(sqlTotalSupply).fetchone()
-        totalSupply = res['totalSupply']
+        engDanaides = create_engine(CFG.csDanaides)
+        sqlTokenomics = text(f'''
+            select token_name
+                , token_id
+                , token_price
+                , current_total_supply/power(10, decimals) as current_total_supply
+                , emission_amount/power(10, decimals) as initial_total_supply
+                , (emission_amount - current_total_supply)/power(10, decimals) as burned
+                , token_price * (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as market_cap
+                , (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as in_circulation
+            from tokens
+            where token_id = :token_id
+        ''')
+        res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+        totalSupply = res['current_total_supply']
 
         # set cache
         cache.set(f"get_api_blockchain_total_supply_{tokenId}", totalSupply) # default 15 min TTL
