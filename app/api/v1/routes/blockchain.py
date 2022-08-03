@@ -4,6 +4,7 @@ from typing import Dict
 from xmlrpc.client import Boolean
 import requests, json
 from core.auth import get_current_active_superuser
+from core.db import engDanaides
 from ergo_python_appkit.appkit import ErgoAppKit
 from wallet import Wallet
 
@@ -98,7 +99,7 @@ async def getInfo():
 @r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
 async def tokenomics(tokenId):
     try:
-        engDanaides = create_engine(CFG.csDanaides)
+        # engDanaides = create_engine(CFG.csDanaides)
         sqlTokenomics = text(f'''
             select token_name
                 , token_id
@@ -137,17 +138,27 @@ def getTokenInfo(tokenId):
     try:
         # tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
         # return tkn.json()
-        engDanaides = create_engine(CFG.csDanaides)
+        # engDanaides = create_engine(CFG.csDanaides)
+        # sqlTokenomics = text(f'''
+        #     select token_name
+        #         , token_id
+        #         , token_price
+        #         , decimals
+        #         , coalesce(amount, 0.0) as emission_amount
+        #     from tokens_alt
+        #     where token_id = :token_id
+        # ''')
         sqlTokenomics = text(f'''
             select token_name
                 , token_id
                 , token_price
                 , decimals
                 , coalesce(amount, 0.0) as emission_amount
-            from tokens_alt
+            from tokens
             where token_id = :token_id
         ''')
         res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+
         return {
             'id': res['token_id'],
             'boxId': '',
@@ -207,39 +218,48 @@ async def ergusdoracle():
 def sqlTokenValue(address, token_id, con):
     try:
         # con = create_engine(EXPLORER)
-        sql = f"""
-            with 
-            -- ignore duplicate unspent box_ids
-            unspent as (
-                select o.box_id
-                from node_outputs o 
-                    left join node_inputs i on o.box_id = i.box_id
-                        and i.main_chain = true
-                where i.box_id is null
-                    and o.address = {address!r}
-                    and o.main_chain = true
-                    and coalesce(o.value, 0) > 0
-                group by o.box_id
-            )
-            -- ignore null and duplicate values
-            , assets as (
-                select max(a.value) as value, max(a.token_id) as token_id, a.box_id
-                from node_assets a
-                    join unspent u on u.box_id = a.box_id
-                group by a.box_id
-            )
-            -- find decimals
-            , tokens as (
-                select token_id, decimals
-                from tokens
-                where token_id = {token_id!r}
-            )
-            select sum(a.value)/max(power(10, t.decimals)) as "res"
-            from unspent u
-                join assets a on a.box_id = u.box_id
-                join tokens t on t.token_id = a.token_id
-        """
+        # sql = f"""
+        #     with 
+        #     -- ignore duplicate unspent box_ids
+        #     unspent as (
+        #         select o.box_id
+        #         from node_outputs o 
+        #             left join node_inputs i on o.box_id = i.box_id
+        #                 and i.main_chain = true
+        #         where i.box_id is null
+        #             and o.address = {address!r}
+        #             and o.main_chain = true
+        #             and coalesce(o.value, 0) > 0
+        #         group by o.box_id
+        #     )
+        #     -- ignore null and duplicate values
+        #     , assets as (
+        #         select max(a.value) as value, max(a.token_id) as token_id, a.box_id
+        #         from node_assets a
+        #             join unspent u on u.box_id = a.box_id
+        #         group by a.box_id
+        #     )
+        #     -- find decimals
+        #     , tokens as (
+        #         select token_id, decimals
+        #         from tokens
+        #         where token_id = {token_id!r}
+        #     )
+        #     select sum(a.value)/max(power(10, t.decimals)) as "res"
+        #     from unspent u
+        #         join assets a on a.box_id = u.box_id
+        #         join tokens t on t.token_id = a.token_id
+        # """
+        sql = text(f'''
+            select a.amount/power(10, t.decimals) as res 
+				--, a.token_id, t.token_name
+			from assets a
+				left join tokens t on t.token_id = a.token_id
+			where address = :address
+				and a.token_id = :token_id
+        ''')
         res = con.execute(sql).fetchone()
+
         return res['res']
     except:
         return 0
@@ -332,34 +352,19 @@ async def totalSupply(tokenId):
         logging.debug(f'CACHED_TOTAL_SUPPLY_{tokenId}: {cached}')
         return cached
     try:
-        # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)
-        # ergopad: d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413
-        con = create_engine(EXPLORER)
-        sqlTotalSupply = f"""
-            select 
-                -- filter to "unspent", giving "current" view; avoid nulls
-                coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "totalSupply"
-
-            from node_outputs o
-
-                -- "burned" / invalidate any box that doesn't have an input
-                left join node_inputs i on o.box_id = i.box_id
-                	-- and i.main_chain = true -- ?? is this necessary/useful
-
-                -- find the proper asset
-                join node_assets a on a.box_id = o.box_id
-                    and a.header_id = o.header_id
-				
-                -- find decimals for the token
-                join tokens t on t.token_id = a.token_id
-                
-            where o.main_chain = true
-                and i.box_id is null -- output with no input == unspent
-                and a.token_id = {tokenId!r}
-                and coalesce(a.value, 0) > 0 -- ignore nulls
-        """
-        res = con.execute(sqlTotalSupply).fetchone()
-        totalSupply = res['totalSupply']
+        sqlTokenomics = text(f'''
+			select token_name
+                , token_id
+                , token_price
+                , supply_actual
+                , emission_amount_actual
+                , emission_amount_actual - supply_actual as burned
+                , token_price * in_circulation_actual as market_cap
+                , in_circulation_actual
+            from tokenomics_ergopad
+        ''')
+        res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+        totalSupply = res['supply_actual']
 
         # set cache
         cache.set(f"get_api_blockchain_total_supply_{tokenId}", totalSupply) # default 15 min TTL
@@ -460,7 +465,7 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
-
+ 
 
 @r.get("/signingRequest/{txId}", name="blockchain:signingRequest")
 def signingRequest(txId):
@@ -749,19 +754,11 @@ async def tvl(tokenId: str):
             return cached
         else:
             sqlStaking = text(f'''
-                with assets as (
-                    select (each(assets)).key::varchar(64) as token_id
-                        , (each(assets)).value::bigint as amount
-                    from utxos
-                    -- stakingAddress = "3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9"
-                    where ergo_tree = '1017040004000e200549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab9195eed59040204000400040204020400040005020402040204060400040204040e2005cde13424a7972fbcd0b43fccbb5e501b1f75302175178fc86d8f243f3f312504020402010001010100d802d601b2a4730000d6028cb2db6308720173010001959372027302d80bd603b2a5dc0c1aa402a7730300d604e4c672030411d605e4c6a70411d606db63087203d607b27206730400d608db6308a7d609b27208730500d60ab27206730600d60bb27208730700d60c8c720b02d60de4c672010411d19683090193c17203c1a793c27203c2a793b272047308009ab27205730900730a93e4c67203050ee4c6a7050e93b27204730b00b27205730c00938c7207018c720901938c7207028c720902938c720a018c720b01938c720a029a720c9d9cb2720d730d00720cb2720d730e00d801d603b2a4730f009593c57203c5a7d801d604b2a5731000d1ed93720273119593c27204c2a7d801d605c67204050e95e67205ed93e47205e4c6a7050e938cb2db6308b2a573120073130001e4c67203050e73147315d17316'
-                )
-                select a.token_id, sum((a.amount/power(10, coalesce(t.decimals, 0))) * coalesce(p.token_price, 0.0)) as tvl
-                from assets a
-                    left join tokens_alt t on t.token_id = a.token_id
-                    left join tokens p on p.token_id = a.token_id
-                where a.token_id = :token_id
-                group by a.token_id            
+                select s.token_id, sum(s.amount * t.token_price) as tvl
+                from staking s
+                    join tokens t on t.token_id = s.token_id
+                where s.token_id = :token_id
+                group by s.token_id
             ''')
 
             sqlVesting = text(f'''
@@ -776,15 +773,14 @@ async def tvl(tokenId: str):
                         , '100e04020400040404000402040604000402040204000400040404000400d810d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605e4c6a70411d6069d99db6903db6503feb27205730200b27205730300d607b27205730400d608b27205730500d6099972087204d60a9592720672079972087209999d9c7206720872077209d60b937204720ad60c95720bb2a5730600b2a5730700d60ddb6308720cd60eb2720d730800d60f8c720301d610b2a5730900d1eded96830201aedb63087201d901114d0e938c721101720293c5b2a4730a00c5a79683050193c2720cc2720193b1720d730b938cb2720d730c00017202938c720e01720f938c720e02720aec720bd801d611b2db63087210730d009683060193c17210c1a793c27210c2a7938c721101720f938c721102997204720a93e4c67210050e720293e4c6721004117205'
                     )
                 )
-                select a.token_id, sum((a.amount/power(10, coalesce(t.decimals, 0))) * coalesce(p.token_price, 0.0)) as tvl
+                select a.token_id, sum((a.amount/power(10, coalesce(t.decimals, 0))) * coalesce(t.token_price, 0.0)) as tvl
                 from assets a
-                    left join tokens_alt t on t.token_id = a.token_id
-                    left join tokens p on p.token_id = a.token_id
+                    left join tokens t on t.token_id = a.token_id
                 where a.token_id = :token_id
-                group by a.token_id            
+                group by a.token_id
             ''')
 
-            engDanaides = create_engine(CFG.csDanaides)
+            # engDanaides = create_engine(CFG.csDanaides)
             with engDanaides.begin() as con:
                 resStaking = con.execute(sqlStaking, {'token_id': tokenId}).fetchone()
                 resVesting = con.execute(sqlVesting, {'token_id': tokenId}).fetchone()
