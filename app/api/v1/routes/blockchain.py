@@ -88,20 +88,27 @@ async def getInfo():
 @r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
 async def tokenomics(tokenId):
     try:
-        sqlTokenomics = text(f'''
+        if tokenId == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413': 
+            token = 'ergopad'
+        elif tokenId == '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489':
+            token = 'paideia'
+        else:
+            return {}
+
+        sql = text(f'''
             select token_name
-                , token_id
-                , token_price
-                , current_total_supply/power(10, decimals) as current_total_supply
-                , emission_amount/power(10, decimals) as initial_total_supply
-                , (emission_amount - current_total_supply)/power(10, decimals) as burned
-                , token_price * (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as market_cap
-                , (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as in_circulation
-            from tokens
-            where token_id = :token_id
+                , k.token_id
+                , k.token_price
+                , k.supply_actual as current_total_supply
+                , t.amount/power(10, t.decimals) as initial_total_supply
+                , (t.amount - k.supply)/power(10, t.decimals) as burned
+                , k.token_price * (supply - vested - emitted - stake_pool)/power(10, t.decimals) as market_cap
+                , (supply - vested - emitted - stake_pool)/power(10, t.decimals) as in_circulation
+            from tokenomics_{token} k
+                join tokens t on t.token_id = k.token_id
         ''')
         with engDanaides.begin() as con:
-            res = con.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+            res = con.execute(sql).fetchone()
 
         stats = {
             'token_id': res['token_id'],
@@ -177,7 +184,7 @@ def getTransactionInfo(transactionId):
 def getEmmissionAmount(token_id):
     try:
         sql = text(f'''
-            select emission_amount/power(10, decimals)
+            select amount/power(10, decimals) as emission_amount
             from tokens
             where token_id = :token_id
         ''')
@@ -219,21 +226,20 @@ def sqlTokenValue(address, token_id, con):
 @r.get("/paideiaInCirculation", name="blockchain:paideiaInCirculation")
 async def paideiaInCirculation():
     try:
-        token_id = '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489'
         sql = text(f'''
             select token_name
-                , token_id
-                , token_price
-                , current_total_supply/power(10, decimals) as current_total_supply
-                , emission_amount/power(10, decimals) as initial_total_supply
-                , (emission_amount - current_total_supply)/power(10, decimals) as burned
-                , token_price * (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as market_cap
-                , (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as in_circulation
-            from tokens
-            where token_id = :token_id
+                , k.token_id
+                , k.token_price
+                , k.supply_actual as current_total_supply
+                , t.amount/power(10, t.decimals) as initial_total_supply
+                , (t.amount - k.supply)/power(10, t.decimals) as burned
+                , k.token_price * (supply - vested - emitted - stake_pool)/power(10, t.decimals) as market_cap
+                , (supply - vested)/power(10, t.decimals) as in_circulation
+            from tokenomics_paideia k
+                join tokens t on t.token_id = k.token_id
         ''')
         with engDanaides.begin() as con:
-            res = con.execute(sql, {'token_id': token_id}).fetchone()
+            res = con.execute(sql).fetchone()
 
         return res['in_circulation']
         
@@ -245,22 +251,24 @@ async def paideiaInCirculation():
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
 async def ergopadInCirculation():
+    #
+    # in circulation = total supply - vested - emitted - stake pool
+    # 
     try:
-        token_id = 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413'
         sql = text(f'''
             select token_name
-                , token_id
-                , token_price
-                , current_total_supply/power(10, decimals) as current_total_supply
-                , emission_amount/power(10, decimals) as initial_total_supply
-                , (emission_amount - current_total_supply)/power(10, decimals) as burned
-                , token_price * (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as market_cap
-                , (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as in_circulation
-            from tokens
-            where token_id = :token_id
+                , k.token_id
+                , k.token_price
+                , k.supply_actual as current_total_supply
+                , t.amount/power(10, t.decimals) as initial_total_supply
+                , (t.amount - k.supply)/power(10, t.decimals) as burned
+                , k.token_price * (supply - vested - emitted - stake_pool)/power(10, t.decimals) as market_cap
+                , (supply - vested - emitted - stake_pool)/power(10, t.decimals) as in_circulation
+            from tokenomics_ergopad k
+                join tokens t on t.token_id = k.token_id
         ''')
         with engDanaides.begin() as con:
-            res = con.execute(sql, {'token_id': token_id}).fetchone()
+            res = con.execute(sql).fetchone()
 
         return res['in_circulation']
         
@@ -272,29 +280,27 @@ async def ergopadInCirculation():
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
 async def totalSupply(tokenId):
-    # check cache
-    cached = cache.get(f"get_api_blockchain_total_supply_{tokenId}")
-    if cached:
-        logging.debug(f'CACHED_TOTAL_SUPPLY_{tokenId}: {cached}')
-        return cached
+    #
+    # total supply = emission amount - burned
+    #
     try:
-        sqlTokenomics = text(f'''
-			select token_name
-                , token_id
-                , token_price
-                , supply_actual
-                , emission_amount_actual
-                , emission_amount_actual - supply_actual as burned
-                , token_price * in_circulation_actual as market_cap
-                , in_circulation_actual
-            from tokenomics_ergopad
-        ''')
-        res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
-        totalSupply = res['supply_actual']
+        tokenomics = None
+        if tokenId == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413':
+            tokenomics = 'ergopad'
+        elif tokenId == '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489':
+            tokenomics = 'paideia'
+        else:
+            return -1
 
-        # set cache
-        cache.set(f"get_api_blockchain_total_supply_{tokenId}", totalSupply) # default 15 min TTL
-        return totalSupply
+        sqlTokenomics = text(f'''
+			select supply/power(10, t.decimals) as supply
+            from tokenomics_{tokenomics}
+                join tokens t on t.token_id = :token_id
+        ''')
+        with engDanaides.begin() as con:
+            res = con.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+
+        return res['supply']
         
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid totalSupply request ({e})')
@@ -741,8 +747,10 @@ async def tvl(tokenId: str):
                 resStaking = con.execute(sqlStaking, {'token_id': tokenId}).fetchone()
                 resVesting = con.execute(sqlVesting, {'token_id': tokenId}).fetchone()
 
-            stakingTVL = resStaking['tvl'] or 0
-            vestingTVL = resVesting['tvl'] or 0
+            logging.debug(f'''staking: {resStaking['tvl']}; vesting: {resVesting['tvl']}''')
+
+            stakingTVL = float(resStaking['tvl']) or 0.0
+            vestingTVL = float(resVesting['tvl']) or 0.0
 
             result = {
                 'tvl': {
