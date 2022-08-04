@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
 from api.v1.routes.staking import AddressList
 from core.auth import get_current_active_superuser 
-from core.db import engDanaides 
+from db.session import engDanaides 
 from wallet import Wallet, NetworkEnvironment # ergopad.io library
 from config import Config, Network # api specific config
 from fastapi import APIRouter, Depends, status

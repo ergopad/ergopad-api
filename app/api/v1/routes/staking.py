@@ -19,7 +19,7 @@ from db.crud.staking_config import get_all_staking_config, get_staking_config_by
 from db.schemas.stakingConfig import StakingConfig, CreateAndUpdateStakingConfig
 from core.auth import get_current_active_superuser, get_current_active_user
 from core.security import get_md5_hash
-from core.db import engDanaides
+from db.session import engDanaides
 from cache.staking import AsyncSnapshotEngine
 from cache.cache import cache
 

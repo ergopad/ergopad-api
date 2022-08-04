@@ -16,7 +16,7 @@ from datetime import datetime
 from ergodex.price import getErgodexTokenPrice, getErgodexTokenPriceByTokenId
 from config import Config, Network  # api specific config
 from cache.cache import cache
-from core.db import engDanaides
+from db.session import engDanaides
 
 CFG = Config[Network]
 
@@ -250,6 +250,7 @@ async def get_asset_current_price(coin: str = None):
                     """
                     res = con.execute(sqlFindLatestPrice)
                     price = res.fetchone()[0]
+                
                 except Exception as e:
                     logging.warning(
                         f"invalid price scraper price: {str(e)}"
@@ -472,51 +473,3 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
 #
 class Wallets(BaseModel):
     type: str
-
-# balance of all wallets
-@r.post("/balance/all", name="asset:all-wallet-balances")
-async def get_all_assets(request: Request) -> None:
-
-    wallets = await request.json()
-
-    try:
-        # Final balance man contain multiple wallets
-        assets = {}
-
-        for wallet in wallets:
-            assets[wallet] = []
-
-            # ergo
-            if wallet == 'ergo':
-                for address in wallets[wallet]:
-                    try:
-                        assets[wallet].append(await get_asset_balance_from_address(address))
-                    except:
-                        assets[wallet].append("invalid response")
-
-            # ethereum
-            if wallet == 'ethereum':
-                for address in wallets[wallet]:
-                    try:
-                        res = requests.get(
-                            f'https://api.ethplorer.io/getAddressInfo/{address}?apiKey=freekey')
-                        assets[wallet].append({
-                            "address": address,
-                            "balance": {
-                                'ETH': {
-                                    'blockchain': 'ethereum',
-                                    'balance': res.json()['ETH']['balance'],
-                                    'unconfirmed': 0,
-                                    'tokens': None,
-                                    'price': (await get_asset_current_price(wallet))['price']
-                                }
-                            }
-                        })
-                    except:
-                        assets[wallet].append("invalid response")
-
-        return assets
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find all balances ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find all balances ({e})')

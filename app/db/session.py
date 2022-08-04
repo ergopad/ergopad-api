@@ -8,6 +8,8 @@ CFG = Config[Network]
 engine = create_engine(CFG.connectionString)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+engDanaides = create_engine(CFG.csDanaides)
+
 Base = declarative_base()
 
 
