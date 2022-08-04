@@ -16,6 +16,7 @@ from datetime import datetime
 from ergodex.price import getErgodexTokenPrice, getErgodexTokenPriceByTokenId
 from config import Config, Network  # api specific config
 from cache.cache import cache
+from db.session import engDanaides
 
 CFG = Config[Network]
 
@@ -60,8 +61,6 @@ async def get_assets_for_addresses(req: AddressList):
         balances = {
             'addresses': {}
         }
-        engDanaides = create_engine(CFG.csDanaides)
-
         # avoid sql injection by validating wallets
         all_addresses = []
         for address in req.addresses:
@@ -86,25 +85,18 @@ async def get_assets_for_addresses(req: AddressList):
             total += r['nergs']
 
         sql = f'''
-            with assets as (
-                select (each(assets)).key::varchar(64) as token_id
-                    , (each(assets)).value::bigint as amount
-                    , address		
-                from utxos
-                where address != ''
-            )
             select a.address
                 , a.token_id
                 , a.amount
                 , t.token_name
                 , coalesce(t.decimals, 0) as decimals
                 , coalesce(t.token_type, '') as token_type
-                , coalesce(p.token_price, 0.0) as token_price
+                , coalesce(t.token_price, 0.0) as token_price
             from assets a
-                left join tokens_alt t on t.token_id = a.token_id
-                left join tokens p on p.token_id = a.token_id
-            where address in ('{addresses}')
+                left join tokens t on t.token_id = a.token_id
+            where a.address in ('{addresses}')
         '''
+
         logging.debug(sql)
         with engDanaides.begin() as con:
             res = con.execute(sql).fetchall()
@@ -146,11 +138,6 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
 @r.get("/priceByTokenId/{tokenId}", name="coin:coin-price-by-token-id")
 async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
     try:
-        # cached = cache.get(f"get_api_asset_price_by_token_id_{tokenId}")
-        # if cached:
-        #     return cached
-
-        engDanaides = create_engine(CFG.csDanaides)
         sql = text(f'''
             select token_price 
             from tokens 
@@ -164,11 +151,6 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
             else:
                 price = 0.0
 
-        # logging.warning('find price from ergodex')
-        # ret = getErgodexTokenPriceByTokenId(tokenId)
-        # if (ret["status"] == "success"):
-        #     price = ret["token_price"] or 0.0
-
         ret = {
             "status": "unavailable",
             "tokenId": tokenId,
@@ -178,7 +160,6 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
         # set cache only on success
         if price:
             ret["status"] = "ok"
-            # cache.set(f"get_api_asset_price_by_token_id_{tokenId}", ret)
         
         return ret
 
@@ -269,6 +250,7 @@ async def get_asset_current_price(coin: str = None):
                     """
                     res = con.execute(sqlFindLatestPrice)
                     price = res.fetchone()[0]
+                
                 except Exception as e:
                     logging.warning(
                         f"invalid price scraper price: {str(e)}"
@@ -491,51 +473,3 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
 #
 class Wallets(BaseModel):
     type: str
-
-# balance of all wallets
-@r.post("/balance/all", name="asset:all-wallet-balances")
-async def get_all_assets(request: Request) -> None:
-
-    wallets = await request.json()
-
-    try:
-        # Final balance man contain multiple wallets
-        assets = {}
-
-        for wallet in wallets:
-            assets[wallet] = []
-
-            # ergo
-            if wallet == 'ergo':
-                for address in wallets[wallet]:
-                    try:
-                        assets[wallet].append(await get_asset_balance_from_address(address))
-                    except:
-                        assets[wallet].append("invalid response")
-
-            # ethereum
-            if wallet == 'ethereum':
-                for address in wallets[wallet]:
-                    try:
-                        res = requests.get(
-                            f'https://api.ethplorer.io/getAddressInfo/{address}?apiKey=freekey')
-                        assets[wallet].append({
-                            "address": address,
-                            "balance": {
-                                'ETH': {
-                                    'blockchain': 'ethereum',
-                                    'balance': res.json()['ETH']['balance'],
-                                    'unconfirmed': 0,
-                                    'tokens': None,
-                                    'price': (await get_asset_current_price(wallet))['price']
-                                }
-                            }
-                        })
-                    except:
-                        assets[wallet].append("invalid response")
-
-        return assets
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find all balances ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find all balances ({e})')

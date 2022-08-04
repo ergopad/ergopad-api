@@ -1,9 +1,11 @@
+from configparser import SafeConfigParser
 from decimal import Decimal
 from enum import Enum
 from typing import Dict
 from xmlrpc.client import Boolean
 import requests, json
 from core.auth import get_current_active_superuser
+from db.session import engDanaides
 from ergo_python_appkit.appkit import ErgoAppKit
 from wallet import Wallet
 
@@ -70,22 +72,10 @@ async def getInfo():
         else:
             nodeInfo['ergonode'] = 'error'
 
-        # assembler
-        res = requests.get(f'{CFG.assembler}/state', headers=headers, timeout=2)
-        if res.ok:
-            nodeInfo['assemblerIsFunctioning'] = res.json()['functioning']
-            nodeInfo['assemblerStatus'] = 'ok'
-        else:
-            nodeInfo['assemblerIsFunctioning'] = 'invalid'
-            nodeInfo['assemblerStatus'] = 'error'
-
         # wallet and token
         # CAREFULL!!! XXX nodeInfo['apikey'] = CFG.ergopadApiKey XXX
         nodeInfo['network'] = Network
         nodeInfo['ergopadTokenId'] = CFG.ergopadTokenId
-
-        # nodeInfo['vestingBegin_ms'] = f'{ctime(1643245200)} UTC'
-        nodeInfo['sigUSD'] = await get_asset_current_price('sigusd')
         nodeInfo['inDebugMode'] = ('PROD', '!! DEBUG !!')[DEBUG]
 
         logging.debug(f'::TOOK {time()-st:0.4f}s')
@@ -98,20 +88,27 @@ async def getInfo():
 @r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
 async def tokenomics(tokenId):
     try:
-        engDanaides = create_engine(CFG.csDanaides)
-        sqlTokenomics = text(f'''
+        if tokenId == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413': 
+            token = 'ergopad'
+        elif tokenId == '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489':
+            token = 'paideia'
+        else:
+            return {}
+
+        sql = text(f'''
             select token_name
-                , token_id
-                , token_price
-                , current_total_supply/power(10, decimals) as current_total_supply
-                , emission_amount/power(10, decimals) as initial_total_supply
-                , (emission_amount - current_total_supply)/power(10, decimals) as burned
-                , token_price * (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as market_cap
-                , (current_total_supply - vested - emitted - coalesce(tokens.stake_pool, 0))/power(10, decimals) as in_circulation
-            from tokens
-            where token_id = :token_id
+                , k.token_id
+                , k.token_price
+                , k.supply_actual as current_total_supply
+                , t.amount/power(10, t.decimals) as initial_total_supply
+                , (t.amount - k.supply)/power(10, t.decimals) as burned
+                , k.token_price * (supply - vested - emitted - stake_pool)/power(10, t.decimals) as market_cap
+                , (supply - vested - emitted - stake_pool)/power(10, t.decimals) as in_circulation
+            from tokenomics_{token} k
+                join tokens t on t.token_id = k.token_id
         ''')
-        res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+        with engDanaides.begin() as con:
+            res = con.execute(sql).fetchone()
 
         stats = {
             'token_id': res['token_id'],
@@ -135,19 +132,18 @@ async def tokenomics(tokenId):
 def getTokenInfo(tokenId):
     # tkn = requests.get(f'{CFG.node}/wallet/balances/withUnconfirmed', headers=dict(headers, **{'api_key': CFG.apiKey})
     try:
-        # tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
-        # return tkn.json()
-        engDanaides = create_engine(CFG.csDanaides)
         sqlTokenomics = text(f'''
             select token_name
                 , token_id
                 , token_price
                 , decimals
                 , coalesce(amount, 0.0) as emission_amount
-            from tokens_alt
+            from tokens
             where token_id = :token_id
         ''')
-        res = engDanaides.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+        with engDanaides.begin() as con:
+            res = con.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
+
         return {
             'id': res['token_id'],
             'boxId': '',
@@ -184,13 +180,18 @@ def getTransactionInfo(transactionId):
 
 
 # request by CMC
-@r.get("/emissionAmount/{tokenId}", name="blockchain:emissionAmount")
-def getEmmissionAmount(tokenId):
+@r.get("/emissionAmount/{token_id}", name="blockchain:emissionAmount")
+def getEmmissionAmount(token_id):
     try:
-        tkn = requests.get(f'{CFG.explorer}/tokens/{tokenId}')
-        decimals = tkn.json()['decimals']
-        emissionAmount = tkn.json()['emissionAmount'] / 10**decimals
-        return emissionAmount
+        sql = text(f'''
+            select amount/power(10, decimals) as emission_amount
+            from tokens
+            where token_id = :token_id
+        ''')
+        with engDanaides.begin() as con:
+            res = con.execute(sql, {'token_id': token_id}).fetchone()
+
+        return res['emission_amount']
         
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid getEmmissionAmount request ({e})')
@@ -206,40 +207,16 @@ async def ergusdoracle():
 # find value from token and address
 def sqlTokenValue(address, token_id, con):
     try:
-        # con = create_engine(EXPLORER)
-        sql = f"""
-            with 
-            -- ignore duplicate unspent box_ids
-            unspent as (
-                select o.box_id
-                from node_outputs o 
-                    left join node_inputs i on o.box_id = i.box_id
-                        and i.main_chain = true
-                where i.box_id is null
-                    and o.address = {address!r}
-                    and o.main_chain = true
-                    and coalesce(o.value, 0) > 0
-                group by o.box_id
-            )
-            -- ignore null and duplicate values
-            , assets as (
-                select max(a.value) as value, max(a.token_id) as token_id, a.box_id
-                from node_assets a
-                    join unspent u on u.box_id = a.box_id
-                group by a.box_id
-            )
-            -- find decimals
-            , tokens as (
-                select token_id, decimals
-                from tokens
-                where token_id = {token_id!r}
-            )
-            select sum(a.value)/max(power(10, t.decimals)) as "res"
-            from unspent u
-                join assets a on a.box_id = u.box_id
-                join tokens t on t.token_id = a.token_id
-        """
+        sql = text(f'''
+            select a.amount/power(10, t.decimals) as res 
+				--, a.token_id, t.token_name
+			from assets a
+				left join tokens t on t.token_id = a.token_id
+			where address = :address
+				and a.token_id = :token_id
+        ''')
         res = con.execute(sql).fetchone()
+
         return res['res']
     except:
         return 0
@@ -248,29 +225,23 @@ def sqlTokenValue(address, token_id, con):
 # paideia tokenId: 1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489
 @r.get("/paideiaInCirculation", name="blockchain:paideiaInCirculation")
 async def paideiaInCirculation():
-    # check cache
-    cached = cache.get("get_api_blockchain_paideia_in_circulation")
-    if cached:
-        logging.debug(f'CACHED_PAIDEIA_IN_CIRC: {cached}')
-        return cached
     try:
-        con = create_engine(EXPLORER)
-        supply = await totalSupply('1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489')
-        logging.debug(f'TOTAL_SUPPLY_PAIDEIA_IN_CIRC: {supply}')
+        sql = text(f'''
+            select token_name
+                , k.token_id
+                , k.token_price
+                , k.supply_actual as current_total_supply
+                , t.amount/power(10, t.decimals) as initial_total_supply
+                , (t.amount - k.supply)/power(10, t.decimals) as burned
+                , k.token_price * (supply - vested - emitted - stake_pool)/power(10, t.decimals) as market_cap
+                , (supply - vested)/power(10, t.decimals) as in_circulation
+            from tokenomics_paideia k
+                join tokens t on t.token_id = k.token_id
+        ''')
+        with engDanaides.begin() as con:
+            res = con.execute(sql).fetchone()
 
-        token_id = '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489'
-        stakePool = 0
-        address = '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU'
-        vested  = sqlTokenValue(address, token_id, con)
-        logging.debug(f'paideia vested: {vested}')
-
-        reserved = 0
-        emitted = 0
-        paideiaInCirculation = supply - stakePool - vested - reserved - emitted
-
-        # set cache
-        cache.set("get_api_blockchain_paideia_in_circulation", paideiaInCirculation) # default 15 min TTL
-        return paideiaInCirculation
+        return res['in_circulation']
         
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid paideiaInCirculation request ({e})')
@@ -280,43 +251,26 @@ async def paideiaInCirculation():
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
 async def ergopadInCirculation():
+    #
+    # in circulation = total supply - vested - emitted - stake pool
+    # 
     try:
-        # check cache
-        cached = cache.get("get_api_blockchain_ergopad_in_circulation")
-        if cached:
-            logging.debug(f'CACHED_ERGOPAD_IN_CIRC: {cached}')
-            return cached
+        sql = text(f'''
+            select token_name
+                , k.token_id
+                , k.token_price
+                , k.supply_actual as current_total_supply
+                , t.amount/power(10, t.decimals) as initial_total_supply
+                , (t.amount - k.supply)/power(10, t.decimals) as burned
+                , k.token_price * (supply - vested - emitted - stake_pool)/power(10, t.decimals) as market_cap
+                , (supply - vested - emitted - stake_pool)/power(10, t.decimals) as in_circulation
+            from tokenomics_ergopad k
+                join tokens t on t.token_id = k.token_id
+        ''')
+        with engDanaides.begin() as con:
+            res = con.execute(sql).fetchone()
 
-        ergopad_token_id = 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413'
-        con = create_engine(EXPLORER)
-        supply = await totalSupply(ergopad_token_id)
-
-        # don't currently use this, but may be useful to have
-        burned = 400*(10**6) - supply
-
-        address = '9hXmgvzndtakdSAgJ92fQ8ZjuKirWAw8tyDuyJrXP6sKHVpCz8XbMANK3BVJ1k3WD6ovQKTCasjKL5WMncRB6V9HvmMnJ2WbxYYjtLFS9sifDNXJWugrNEgoVK887bR5oaLZA95yGkMeXVfanxpNDZYaXH9KpHCpC5ohDtaW1PF17b27559toGVCeCUNti7LXyXV8fWS1mVRuz2PhLq5mB7hg2bqn7CZtVM8ntbUJpjkHUc9cP1R8Gvbo1GqcNWgM7gZkr2Dp514BrFz1cXMkv7TYEqH3cdxX9c82hH6fdaf3n6avdtZ5bgqerUZVDDW6ZsqxrqTyTMQUUirRAi3odmMGmuMqDJbU3Z1VnCF9NBow7jrKUDSgckDZakFZNChsr5Kq1kQyNitYJUh9fra1jLHCQ9yekz3te9E'
-        stakePool = sqlTokenValue(address, ergopad_token_id, con)
-        logging.debug(f'ergopad stakePool: {stakePool}')
-
-        address = 'xhRNa2Wo7xXeoEKbLcsW4gV1ggBwrCeXVkkjwMwYk4CVjHo95CLDHmomXirb8SVVtovXNPuqcs6hNMXdPPtT6nigbAqei9djAnpDKsAvhk5M4wwiKPf8d5sZFCMMGtthBzUruKumUW8WTLXtPupD5jBPELekR6yY4zHV4y21xtn7jjeqcb9M39RLRuFWFq2fGWbu5PQhFhUPCB5cbxBKWWxtNv8BQTeYj8bLw5vAH1WmRJ7Ln7SfD9RVePyvKdWGSkTFfVtg8dWuVzEjiXhUHVoeDcdPhGftMxWVPRZKRuMEmYbeaxLyccujuSZPPWSbnA2Uz6EketQgHxfnYhcLNnwNPaMETLKtvwZygfk1PuU9LZPbxNXNFgHuujfXGfQbgNwgd1hcC8utB6uZZRbxXAHmgMaWuoeSsni99idRHQFHTkmTKXx4TAx1kGKft1BjV6vcz1jGBJQyFBbQCTYBNcm9Yq2NbXmk5Vr7gHYbKbig7eMRT4oYxZdb9rwupphRGK4b2tYis9dXMT8m5EfFzxvAY9Thjbg8tZtWX7F5eaNzMKmZACZZqW3U7qS6aF8Jgiu2gdK12QKKBTdBfxaC6hBVtsxtQXYYjKzCmq1JuGP1brycwCfUmTUFkrfNDWBnrrmF2vrzZqL6WtUaSHzXzC4P4h346xnSvrtTTx7JGbrRCxhsaqTgxeCBMXgKgPGud2kNvgyKbjKnPvfhSCYnwhSdZYj8R1rr4TH5XjB3Wv8Z4jQjCkhAFGWJqVASZ3QXrFGFJzQrGLL1XX6cZsAP8cRHxqa7tJfKJzwcub7RjELPa2nnhhz5zj5F9MU1stJY4SBiX3oZJ6HdP9kNFGMR86Q6Z5qyfSRjwDNjVyvkKNoJ6Yk9nm367gznSVWkS9SG3kCUonbLgRt1Moq7o9CN5KrnyRgLrEAQU83SGY7Bc6FcLCZqQn8VqxP4e8R3vhf24nrzXVopydiYai'
-        emitted = sqlTokenValue(address, ergopad_token_id, con)
-        logging.debug(f'ergopad emitted: {emitted}')
-
-        address = 'Y2JDKcXN5zrz3NxpJqhGcJzgPRqQcmMhLqsX3TkkqMxQKK86Sh3hAZUuUweRZ97SLuCYLiB2duoEpYY2Zim3j5aJrDQcsvwyLG2ixLLzgMaWfBhTqxSbv1VgQQkVMKrA4Cx6AiyWJdeXSJA6UMmkGcxNCANbCw7dmrDS6KbnraTAJh6Qj6s9r56pWMeTXKWFxDQSnmB4oZ1o1y6eqyPgamRsoNuEjFBJtkTWKqYoF8FsvquvbzssZMpF6FhA1fkiH3n8oKpxARWRLjx2QwsL6W5hyydZ8VFK3SqYswFvRnCme5Ywi4GvhHeeukW4w1mhVx6sbAaJihWLHvsybRXLWToUXcqXfqYAGyVRJzD1rCeNa8kUb7KHRbzgynHCZR68Khi3G7urSunB9RPTp1EduL264YV5pmRLtoNnH9mf2hAkkmqwydi9LoULxrwsRvp'
-        vested  = sqlTokenValue(address, ergopad_token_id, con)
-        logging.debug(f'ergopad vested: {vested}')
-
-        address = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
-        staked  = sqlTokenValue(address, ergopad_token_id, con)
-        logging.debug(f'ergopad staked: {staked}')
-
-        # reserved amount moved to staking on 5/17/2022
-        reserved = 0 # 20*(10**6) # 20M in reserve wallet, 9ehADYzAkYzUzQHqwM5KqxXwKAnVvkL5geSkmUzK51ofj2dq7K8
-        ergopadInCirculation = supply - stakePool - vested - reserved - emitted
-
-        # set cache
-        cache.set("get_api_blockchain_ergopad_in_circulation", ergopadInCirculation) # default 15 min TTL
-        return ergopadInCirculation
+        return res['in_circulation']
         
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid ergopadInCirculation request ({e})')
@@ -326,44 +280,27 @@ async def ergopadInCirculation():
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
 async def totalSupply(tokenId):
-    # check cache
-    cached = cache.get(f"get_api_blockchain_total_supply_{tokenId}")
-    if cached:
-        logging.debug(f'CACHED_TOTAL_SUPPLY_{tokenId}: {cached}')
-        return cached
+    #
+    # total supply = emission amount - burned
+    #
     try:
-        # NOTE: total emmission doesn't account for burned tokens, which recently began to happen (accidentally so far)
-        # ergopad: d71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413
-        con = create_engine(EXPLORER)
-        sqlTotalSupply = f"""
-            select 
-                -- filter to "unspent", giving "current" view; avoid nulls
-                coalesce(sum(a.value)/max(power(10, t.decimals)), 0) as "totalSupply"
+        tokenomics = None
+        if tokenId == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413':
+            tokenomics = 'ergopad'
+        elif tokenId == '1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489':
+            tokenomics = 'paideia'
+        else:
+            return -1
 
-            from node_outputs o
+        sqlTokenomics = text(f'''
+			select supply/power(10, t.decimals) as supply
+            from tokenomics_{tokenomics}
+                join tokens t on t.token_id = :token_id
+        ''')
+        with engDanaides.begin() as con:
+            res = con.execute(sqlTokenomics, {'token_id': tokenId}).fetchone()
 
-                -- "burned" / invalidate any box that doesn't have an input
-                left join node_inputs i on o.box_id = i.box_id
-                	-- and i.main_chain = true -- ?? is this necessary/useful
-
-                -- find the proper asset
-                join node_assets a on a.box_id = o.box_id
-                    and a.header_id = o.header_id
-				
-                -- find decimals for the token
-                join tokens t on t.token_id = a.token_id
-                
-            where o.main_chain = true
-                and i.box_id is null -- output with no input == unspent
-                and a.token_id = {tokenId!r}
-                and coalesce(a.value, 0) > 0 -- ignore nulls
-        """
-        res = con.execute(sqlTotalSupply).fetchone()
-        totalSupply = res['totalSupply']
-
-        # set cache
-        cache.set(f"get_api_blockchain_total_supply_{tokenId}", totalSupply) # default 15 min TTL
-        return totalSupply
+        return res['supply']
         
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid totalSupply request ({e})')
@@ -460,7 +397,7 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
-
+ 
 
 @r.get("/signingRequest/{txId}", name="blockchain:signingRequest")
 def signingRequest(txId):
@@ -470,6 +407,36 @@ def signingRequest(txId):
 # @r.get("/getUnspentBoxesByTokenId/{tokenId}", name='blockchain:getUnspentBoxesByTokenId')
 def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
     try:
+        # # is this a valid token/avoid sql injection attack
+        # try: 
+        #     if int(tokenId, 16) && (len(tokenId) == 64):
+        #         sql = f'''
+        #             select box_id, registers::json
+        #             from utxos
+        #             where assets->{tokenId!r} is not null
+        #         '''
+        #         with engDanaides.begin() as con:
+        #             res = con.execute(sql, {}).fetchall()
+        #         boxes = []
+        #         for data in res:
+        #             boxes.append({ 
+        #                 'boxId': data["box_id"],
+        #                 'additionalRegisters': data["additional_registers"],
+        #             })
+        #    
+        #         return boxes
+        #
+        #     else:
+        #         return {}
+        # 
+        # except ValueError as e: 
+        #     logging.error(f'ERR:{myself()}: invalid token id ({e})')
+        #     return {}
+        #
+        # except Exception as e:
+        #     logging.error(f'ERR:{myself()}: failed to get boxes by token id ({e})')
+        #     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to get boxes by token id ({e})')
+
         if not useExplorerApi:
             con = create_engine(EXPLORER)
             sql = f"""    
@@ -749,19 +716,11 @@ async def tvl(tokenId: str):
             return cached
         else:
             sqlStaking = text(f'''
-                with assets as (
-                    select (each(assets)).key::varchar(64) as token_id
-                        , (each(assets)).value::bigint as amount
-                    from utxos
-                    -- stakingAddress = "3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9"
-                    where ergo_tree = '1017040004000e200549ea3374a36b7a22a803766af732e61798463c3332c5f6d86c8ab9195eed59040204000400040204020400040005020402040204060400040204040e2005cde13424a7972fbcd0b43fccbb5e501b1f75302175178fc86d8f243f3f312504020402010001010100d802d601b2a4730000d6028cb2db6308720173010001959372027302d80bd603b2a5dc0c1aa402a7730300d604e4c672030411d605e4c6a70411d606db63087203d607b27206730400d608db6308a7d609b27208730500d60ab27206730600d60bb27208730700d60c8c720b02d60de4c672010411d19683090193c17203c1a793c27203c2a793b272047308009ab27205730900730a93e4c67203050ee4c6a7050e93b27204730b00b27205730c00938c7207018c720901938c7207028c720902938c720a018c720b01938c720a029a720c9d9cb2720d730d00720cb2720d730e00d801d603b2a4730f009593c57203c5a7d801d604b2a5731000d1ed93720273119593c27204c2a7d801d605c67204050e95e67205ed93e47205e4c6a7050e938cb2db6308b2a573120073130001e4c67203050e73147315d17316'
-                )
-                select a.token_id, sum((a.amount/power(10, coalesce(t.decimals, 0))) * coalesce(p.token_price, 0.0)) as tvl
-                from assets a
-                    left join tokens_alt t on t.token_id = a.token_id
-                    left join tokens p on p.token_id = a.token_id
-                where a.token_id = :token_id
-                group by a.token_id            
+                select s.token_id, sum(s.amount * t.token_price) as tvl
+                from staking s
+                    join tokens t on t.token_id = s.token_id
+                where s.token_id = :token_id
+                group by s.token_id
             ''')
 
             sqlVesting = text(f'''
@@ -776,21 +735,22 @@ async def tvl(tokenId: str):
                         , '100e04020400040404000402040604000402040204000400040404000400d810d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605e4c6a70411d6069d99db6903db6503feb27205730200b27205730300d607b27205730400d608b27205730500d6099972087204d60a9592720672079972087209999d9c7206720872077209d60b937204720ad60c95720bb2a5730600b2a5730700d60ddb6308720cd60eb2720d730800d60f8c720301d610b2a5730900d1eded96830201aedb63087201d901114d0e938c721101720293c5b2a4730a00c5a79683050193c2720cc2720193b1720d730b938cb2720d730c00017202938c720e01720f938c720e02720aec720bd801d611b2db63087210730d009683060193c17210c1a793c27210c2a7938c721101720f938c721102997204720a93e4c67210050e720293e4c6721004117205'
                     )
                 )
-                select a.token_id, sum((a.amount/power(10, coalesce(t.decimals, 0))) * coalesce(p.token_price, 0.0)) as tvl
+                select a.token_id, sum((a.amount/power(10, coalesce(t.decimals, 0))) * coalesce(t.token_price, 0.0)) as tvl
                 from assets a
-                    left join tokens_alt t on t.token_id = a.token_id
-                    left join tokens p on p.token_id = a.token_id
+                    left join tokens t on t.token_id = a.token_id
                 where a.token_id = :token_id
-                group by a.token_id            
+                group by a.token_id
             ''')
 
-            engDanaides = create_engine(CFG.csDanaides)
+            # engDanaides = create_engine(CFG.csDanaides)
             with engDanaides.begin() as con:
                 resStaking = con.execute(sqlStaking, {'token_id': tokenId}).fetchone()
                 resVesting = con.execute(sqlVesting, {'token_id': tokenId}).fetchone()
 
-            stakingTVL = resStaking['tvl'] or 0
-            vestingTVL = resVesting['tvl'] or 0
+            logging.debug(f'''staking: {resStaking['tvl']}; vesting: {resVesting['tvl']}''')
+
+            stakingTVL = float(resStaking['tvl']) or 0.0
+            vestingTVL = float(resVesting['tvl']) or 0.0
 
             result = {
                 'tvl': {

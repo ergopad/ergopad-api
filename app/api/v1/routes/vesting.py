@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 from starlette.responses import JSONResponse
 from api.v1.routes.staking import AddressList
 from core.auth import get_current_active_superuser 
+from db.session import engDanaides 
 from wallet import Wallet, NetworkEnvironment # ergopad.io library
 from config import Config, Network # api specific config
 from fastapi import APIRouter, Depends, status
@@ -261,7 +262,6 @@ async def vestingV1(req: AddressList):
     try:
         userWallets = [Wallet(address) for address in req.addresses]
         userErgoTrees = [wallet.ergoTree() for wallet in userWallets]
-        engDanaides = create_engine(CFG.csDanaides)
         sql = f'''
             with v as (
                     select id 
@@ -557,7 +557,6 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 @r.post("/v2/", name="vesting:v2")
 async def vestingV2(req: AddressList):
     try:
-        engDanaides = create_engine(CFG.csDanaides)
         sql = f'''
             select v.box_id, v.vesting_key_id, v.parameters, v.token_id, v.remaining, v.address, v.ergo_tree
                 , t.token_name, t.decimals
