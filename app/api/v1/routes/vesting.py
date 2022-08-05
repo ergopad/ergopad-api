@@ -600,7 +600,7 @@ async def vestingV2(req: AddressList):
                 vested[box['token_name']] = []
             vested[box['token_name']].append({
                 'boxId': box["box_id"],
-                'Remaining': round(box['remaining']*10**(-1*box['decimals']),box['decimals']),
+                'Remaining': round(float(box['remaining'])*10**(-1*box['decimals']),box['decimals']),
                 'Redeemable': round(redeemableTokens*10**(-1*box['decimals']),box['decimals']),
                 'Vesting Key Id': box['vesting_key_id'],
                 'Next unlock': datetime.fromtimestamp((vestingStart+((periods+1)*redeemPeriod))/1000)
