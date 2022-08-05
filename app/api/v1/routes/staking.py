@@ -1,4 +1,3 @@
-from turtle import pen
 import requests
 import asyncio
 
