@@ -818,7 +818,7 @@ async def stakingStatus(project: str):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
-#
+# 
 # Need to invalidate cache intelligently here to reduce wait times
 # Response is cached twice, once at address level
 # and the second at stake token id level
