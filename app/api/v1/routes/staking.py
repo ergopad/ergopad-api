@@ -1,5 +1,4 @@
 import requests
-import asyncio
 
 from starlette.responses import JSONResponse
 from wallet import Wallet
@@ -322,36 +321,42 @@ def validPenalty(startTime: int):
             
 @r.post("/staked/", name="staking:staked")
 async def staked(req: AddressList, project: str = "ergopad"):
-    tic = perf_counter()
-    wallet_addresses = "'"+("','".join(req.addresses))+"'"
-    with engDanaides.begin() as con:
-        sql = text(f'''
-            select k.address
-                , t.token_name
-                , k.token_id
-                , k.box_id
-                , k.stakekey_token_id
-                , k.amount/power(10, t.decimals) as amount
-                , k.penalty
-            from staking k
-                join tokens t on t.token_id = k.token_id
-            where k.address in ({wallet_addresses})
-                and t.token_name = :project
-        ''')
-        res = con.execute(sql, {'wallet_addresses': wallet_addresses, 'project': project}).fetchall()
     totalStaked = 0
     stakePerAddress = {}
+    wallet_addresses = "'"+("','".join(req.addresses))+"'"
+
+    sql = text(f'''
+        select k.address
+            , t.token_name
+            , k.token_id
+            , k.box_id
+            , k.stakekey_token_id
+            , k.amount/power(10, t.decimals) as amount
+            , k.penalty
+        from staking k
+            join tokens t on t.token_id = k.token_id
+        where k.address in ({wallet_addresses})
+            and t.token_name = :project
+    ''')
+    logging.debug(sql)
+    with engDanaides.begin() as con:
+        res = con.execute(sql, {'wallet_addresses': wallet_addresses, 'project': project}).fetchall()
     for r in res:
+        logging.debug(f'''result: {r}''')
         # init
         if r['address'] not in stakePerAddress:
             stakePerAddress[r['address']] = {'totalStaked': 0, 'stakeBoxes': []}
+        logging.debug(f'''stk/addr: {stakePerAddress}''')
 
         # penalty is only for v1 contract
         penaltyPct = 0
         penaltyEndTime = None
+        logging.debug(f'''penalty: {r['penalty']}''')
         if project in stakingConfigsV1:
-            penaltyPct = validPenalty(r['penalty'])
-            penaltyEndTime = int(r['penalty'] + 8 * week)
+            penalty = ErgoValue.fromHex(r['penalty']).getValue().apply(1)
+            penaltyPct = validPenalty(penalty)
+            penaltyEndTime = int(penalty + 8 * week)
+        logging.debug(f'''penalties: {penaltyPct}/{penaltyEndTime}''')
 
         # boxes by address
         cleanedBox = {
@@ -364,89 +369,19 @@ async def staked(req: AddressList, project: str = "ergopad"):
         totalStaked += r['amount']
         stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
         stakePerAddress[r['address']]['totalStaked'] += r['amount']
+        logging.debug(f'''totalStaked: {totalStaked}''')
     
-    toc = perf_counter()
-    print(f"Took {toc - tic:0.4f} seconds")
-    # default token name
     tokenName = project.capitalize()
     if project in stakingConfigsV1:
         tokenName = stakingConfigsV1[project]["tokenName"]
+    logging.debug(f'''tokenName: {tokenName}''')
+
     return {
         'project': project,
         'tokenName': tokenName,
         'totalStaked': totalStaked,
         'addresses': stakePerAddress
     }
-
-### TODO: DEPRECATED
-# async def oldstaked(req: AddressList, project: str = "ergopad"):
-#     CACHE_TTL = 600 # 10 mins
-#     try:
-#         sc = stakingConfigsV1[project]
-#         stakedTokenInfo = getTokenInfo(sc["stakedTokenID"])
-#         stakeKeys = {}
-#         for address in req.addresses:
-#             # cache balance confirmed
-#             ok = False
-#             data = None
-#             cached = cache.get(f"get_staking_staked_addresses_{address}_balance_confirmed")
-#             if cached:
-#                 ok = True
-#                 data = cached
-#             else:
-#                 res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
-#                 ok = res.ok
-#                 if ok:
-#                     data = res.json()
-#                     cache.set(f"get_staking_staked_addresses_{address}_balance_confirmed", data, CACHE_TTL)
-#             if ok:
-#                 if 'tokens' in data:
-#                     for token in data["tokens"]:
-#                         if 'name' in token and 'tokenId' in token:
-#                             if token["name"] is not None:
-#                                 if "Stake Key" in token["name"]:
-#                                     stakeKeys[token["tokenId"]] = address
-#             else:
-#                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failure to fetch balance for {address}')
-        
-#         totalStaked = 0
-#         stakePerAddress = {}
-        
-#         # getTokenBoxes from cache
-#         checkBoxes = []
-#         cached = cache.get(f'get_staking_staked_token_boxes_{sc["stakeTokenID"]}')
-#         if cached:
-#             checkBoxes = cached
-#         else:
-#             checkBoxes = getUnspentStakeBoxes(stakeTokenId=sc["stakeTokenID"],stakeAddress=sc["stakeAddress"],useExplorerApi=True)
-#             cache.set(f'get_staking_staked_token_boxes_{sc["stakeTokenID"]}', checkBoxes, CACHE_TTL)
-
-#         for box in checkBoxes:
-#             if box["assets"][0]["tokenId"]==sc["stakeTokenID"]:
-#                 if box["additionalRegisters"]["R5"]["renderedValue"] in stakeKeys.keys():
-#                     if stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]] not in stakePerAddress:
-#                         stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]] = {'totalStaked': 0, 'stakeBoxes': []}
-#                     stakeBoxR4 = eval(box["additionalRegisters"]["R4"]["renderedValue"])
-#                     cleanedBox = {
-#                         'boxId': box["boxId"],
-#                         'stakeKeyId': box["additionalRegisters"]["R5"]["renderedValue"],
-#                         'stakeAmount': box["assets"][1]["amount"]/10**stakedTokenInfo["decimals"],
-#                         'penaltyPct': validPenalty(stakeBoxR4[1]),
-#                         'penaltyEndTime': int(stakeBoxR4[1]+8*week)
-#                     }
-#                     stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["stakeBoxes"].append(cleanedBox)
-#                     totalStaked += box["assets"][1]["amount"]/10**stakedTokenInfo["decimals"]
-#                     stakePerAddress[stakeKeys[box["additionalRegisters"]["R5"]["renderedValue"]]]["totalStaked"] += box["assets"][1]["amount"]/10**stakedTokenInfo["decimals"]
-
-#         logging.debug({'totalStaked': totalStaked, 'addresses': stakePerAddress})
-#         return {
-#             'totalStaked': totalStaked,
-#             'addresses': stakePerAddress
-#         }
-
-#     except Exception as e:
-#         logging.error(f'ERR:{myself()}: ({e})')
-#         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.get("/status/", name="staking:status")
 async def stakingStatusV1(project: str = "ergopad"):
@@ -482,7 +417,6 @@ async def stakingStatusV1(project: str = "ergopad"):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
-
 
 @r.get("/{project}/incentive/", name="staking:incentive")
 async def incentive(project: str = "ergopad"):
@@ -769,7 +703,7 @@ async def bootstrapStaking(req: BootstrapRequest):
 async def stakeV2(project: str, req: StakeRequest):
     try:
         if project in stakingConfigsV1:
-            return await stake(req,project)
+            return await stake(req, project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
@@ -895,17 +829,18 @@ async def stakingStatus(project: str):
 #
 @r.post("/{project}/staked/", name="staking:staked-v2")
 async def stakedv2(project: str, req: AddressList):
-    if project in stakingConfigsV1:
-        return await staked(req, project)
-    if project in ("paideia",): # use optimized endpoint for paideia
-        return await staked(req, project)
-    if project not in stakingConfigs:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
-
-    CACHE_TTL = 600 # 10 mins probably can increase this if cache invalidation is working
-    appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
-    config = stakingConfigs[project](appKit)
     try:
+        if project in stakingConfigsV1:
+            return await staked(req, project)
+        if project in ("paideia",): # use optimized endpoint for paideia
+            return await staked(req, project)
+        if project not in stakingConfigs:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+
+        CACHE_TTL = 600 # 10 mins probably can increase this if cache invalidation is working
+        appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
+        config = stakingConfigs[project](appKit)
+
         stakeKeys = {}
         for address in req.addresses:
             # cache balance confirmed
@@ -973,8 +908,8 @@ async def stakedv2(project: str, req: AddressList):
 
 @r.post("/staked-all/", name="staking:staked-all")
 async def allStaked(req: AddressList):
-    CACHE_TTL = 300 # 5 mins
     try:
+        CACHE_TTL = 300 # 5 mins
         # creating a hash for the input that is independent of ordering
         u_hash = "hash_" + str(sum(list(map(lambda address: int(get_md5_hash(address), 16), set(req.addresses)))))
         cached = cache.get(f"get_staking_staked_v2_{u_hash}")

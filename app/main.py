@@ -74,6 +74,7 @@ app.add_middleware(
 @app.middleware("http")
 async def add_logging_and_process_time(req: Request, call_next):
     try:
+        resNext = None
         logging.debug(f"""### REQUEST: {req.url} | host: {req.client.host}:{req.client.port} | pid {getpid()} ###""")
         beg = time()
         resNext = await call_next(req)
