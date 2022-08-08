@@ -909,7 +909,7 @@ async def allStaked(req: AddressList):
         # creating a hash for the input that is independent of ordering
         u_hash = "hash_" + str(sum(list(map(lambda address: int(get_md5_hash(address), 16), set(req.addresses)))))
         cached = cache.get(f"get_staking_staked_v2_{u_hash}")
-        if cached == False:
+        if cached:
             logging.info(f"INFO:{myself()}: cache hit")
             return cached
 
