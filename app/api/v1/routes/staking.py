@@ -326,17 +326,17 @@ async def staked(req: AddressList, project: str = "ergopad"):
     wallet_addresses = "'"+("','".join(req.addresses))+"'"
 
     sql = text(f'''
-        select k.address
-            , t.token_name
-            , k.token_id
-            , k.box_id
-            , k.stakekey_token_id
-            , k.amount/power(10, t.decimals) as amount
-            , k.penalty
-        from staking k
-            join tokens t on t.token_id = k.token_id
-        where k.address in ({wallet_addresses})
-            and t.token_name = :project
+            select k.address
+                , lower(t.token_name) as token_name
+                , k.token_id
+                , k.box_id
+                , k.stakekey_token_id
+                , k.amount as amount
+                , k.penalty
+            from staking k
+                join tokens t on t.token_id = k.token_id
+            where k.address in ({wallet_addresses})
+                and lower(t.token_name) = :project
     ''')
     logging.debug(sql)
     with engDanaides.begin() as con:
@@ -348,24 +348,20 @@ async def staked(req: AddressList, project: str = "ergopad"):
             stakePerAddress[r['address']] = {'totalStaked': 0, 'stakeBoxes': []}
         logging.debug(f'''stk/addr: {stakePerAddress}''')
 
-        # penalty is only for v1 contract
-        penaltyPct = 0
-        penaltyEndTime = None
-        logging.debug(f'''penalty: {r['penalty']}''')
-        if project in stakingConfigsV1:
-            penalty = ErgoValue.fromHex(r['penalty']).getValue().apply(1)
-            penaltyPct = validPenalty(penalty)
-            penaltyEndTime = int(penalty + 8 * week)
-        logging.debug(f'''penalties: {penaltyPct}/{penaltyEndTime}''')
-
         # boxes by address
         cleanedBox = {
             'boxId': r['box_id'],
             'stakeKeyId': r['stakekey_token_id'],
             'stakeAmount': r['amount'],
-            'penaltyPct': penaltyPct,
-            'penaltyEndTime': penaltyEndTime
         }
+        # penalty is only for v1 contract
+        if project in stakingConfigsV1:
+            penalty = ErgoValue.fromHex(r['penalty']).getValue().apply(1)
+            penaltyPct = validPenalty(penalty)
+            penaltyEndTime = int(penalty + 8 * week)
+            cleanedBox['penaltyPct'] = penaltyPct
+            cleanedBox['penaltyEndTime'] = penaltyEndTime
+
         totalStaked += r['amount']
         stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
         stakePerAddress[r['address']]['totalStaked'] += r['amount']
@@ -832,7 +828,7 @@ async def stakedv2(project: str, req: AddressList):
     try:
         if project in stakingConfigsV1:
             return await staked(req, project)
-        if project in ("paideia",): # use optimized endpoint for paideia
+        if project in ('paideia'): # use optimized endpoint for paideia
             return await staked(req, project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -938,6 +934,7 @@ async def allStaked(req: AddressList):
             ret.append(res)
 
         cache.set(f"get_staking_staked_v2_{u_hash}", ret, timeout=CACHE_TTL)
+        logging.debug('return')
         return ret
 
     except Exception as e:
