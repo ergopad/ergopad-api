@@ -1,7 +1,13 @@
-from cache.redis_client import redisClient
-
 import json
 
+from cache.redis_client import redisClient
+from decimal import *
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return str(obj)
+        return json.JSONEncoder.default(self, obj)
 
 class RedisCache:
     def __init__(self, timeout: int = 900):
@@ -17,7 +23,7 @@ class RedisCache:
     def set(self, key: str, value, timeout: int = -1):
         if timeout == -1:
             timeout = self.timeout
-        value = json.dumps(value)
+        value = json.dumps(value, cls=DecimalEncoder)
         self.client.setex(key, timeout, value)
 
     def invalidate(self, key):
