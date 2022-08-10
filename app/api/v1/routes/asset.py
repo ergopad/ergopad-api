@@ -415,7 +415,7 @@ async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1,
         
     # aggregator stores at 5 min resolution
     timeMap = {
-        "h": 10,
+        "h": 12,
         "d": 288,
         "w": 2016,
         "m": 8064,
