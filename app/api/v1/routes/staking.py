@@ -321,13 +321,14 @@ def validPenalty(startTime: int):
             
 @r.post("/staked/", name="staking:staked")
 async def staked(req: AddressList, project: str = "ergopad"):
-    totalStaked = 0
+    totalStaked = 0.0
     stakePerAddress = {}
     wallet_addresses = "'"+("','".join(req.addresses))+"'"
 
     sql = text(f'''
             select k.address
                 , lower(t.token_name) as token_name
+                , t.decimals
                 , k.token_id
                 , k.box_id
                 , k.stakekey_token_id
@@ -345,7 +346,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
         logging.debug(f'''result: {r}''')
         # init
         if r['address'] not in stakePerAddress:
-            stakePerAddress[r['address']] = {'totalStaked': 0, 'stakeBoxes': []}
+            stakePerAddress[r['address']] = {'totalStaked': 0.0, 'stakeBoxes': []}
         logging.debug(f'''stk/addr: {stakePerAddress}''')
 
         # boxes by address
@@ -362,7 +363,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
             cleanedBox['penaltyPct'] = penaltyPct
             cleanedBox['penaltyEndTime'] = penaltyEndTime
 
-        totalStaked += r['amount']
+        totalStaked += round(r['amount'], r['decimals'])
         stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
         stakePerAddress[r['address']]['totalStaked'] += r['amount']
         logging.debug(f'''totalStaked: {totalStaked}''')
