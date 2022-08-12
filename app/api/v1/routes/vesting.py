@@ -545,7 +545,7 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
             return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unsignedTx.getId()}'}
 
     except Exception as e:
-        content = f'Unable to redeem with NFT.'
+        content = f'Unable to redeem currently. Please try again shortly or contact us in TG/Discord.'
         # found match with "reason"
         m = re.search('reason: NotEnoughErgsError\(not enough boxes to meet ERG needs (\d+) \(found only (\d+)\),\d+\)\)', str(e))
         if m is not None:
