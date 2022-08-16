@@ -21,7 +21,7 @@ from core.security import get_md5_hash
 from db.session import engDanaides
 from cache.staking import AsyncSnapshotEngine
 from cache.cache import cache
-
+from decimal import Decimal
 from ergo_python_appkit.appkit import ErgoAppKit, ErgoValueT
 from org.ergoplatform.appkit import Address, ErgoValue, OutBox, InputBox
 
@@ -321,7 +321,7 @@ def validPenalty(startTime: int):
             
 @r.post("/staked/", name="staking:staked")
 async def staked(req: AddressList, project: str = "ergopad"):
-    totalStaked = 0.0
+    totalStaked = Decimal(0)
     stakePerAddress = {}
     wallet_addresses = "'"+("','".join(req.addresses))+"'"
 
@@ -346,7 +346,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
         logging.debug(f'''result: {r}''')
         # init
         if r['address'] not in stakePerAddress:
-            stakePerAddress[r['address']] = {'totalStaked': 0.0, 'stakeBoxes': []}
+            stakePerAddress[r['address']] = {'totalStaked': Decimal(0), 'stakeBoxes': []}
         logging.debug(f'''stk/addr: {stakePerAddress}''')
 
         # boxes by address
@@ -363,9 +363,9 @@ async def staked(req: AddressList, project: str = "ergopad"):
             cleanedBox['penaltyPct'] = penaltyPct
             cleanedBox['penaltyEndTime'] = penaltyEndTime
 
-        totalStaked += round(r['amount'], r['decimals'])
+        totalStaked += Decimal(r['amount'])
         stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
-        stakePerAddress[r['address']]['totalStaked'] += r['amount']
+        stakePerAddress[r['address']]['totalStaked'] += Decimal(r['amount'])
         logging.debug(f'''totalStaked: {totalStaked}''')
     
     tokenName = project.capitalize()
@@ -373,10 +373,13 @@ async def staked(req: AddressList, project: str = "ergopad"):
         tokenName = stakingConfigsV1[project]["tokenName"]
     logging.debug(f'''tokenName: {tokenName}''')
 
+    try: type(float(totalStaked)) == float
+    except: totalStaked = 0.0
+
     return {
         'project': project,
         'tokenName': tokenName,
-        'totalStaked': totalStaked,
+        'totalStaked': float(totalStaked),
         'addresses': stakePerAddress
     }
 

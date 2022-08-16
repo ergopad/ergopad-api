@@ -32,7 +32,7 @@ services:
     # command: unitd-debug --no-daemon --control unix:/var/run/control.unit.sock
     # command: unitd --no-daemon --control unix:/var/run/control.unit.sock
     ### TESTED
-    command: gunicorn main:app --workers 9 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${API_PORT} --timeout 60
+    command: gunicorn main:app --workers 5 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${API_PORT} --timeout 180
     # NOTE: 5/2022 Leif, using gunicorn seems to lock up on certain calls; could not find a configuration that worked; uvicorn does not have same issue
     # uvicorn.workers.UvicornH11Worker # use for pure python implementation
     # command: python -m gunicorn --bind :8000 --workers 4 main:app --worker-class uvicorn.workers.UvicornWorker --preload --timeout 0 --graceful-timeout 0 --worker-tmp-dir /dev/shm --keep-alive 2 
