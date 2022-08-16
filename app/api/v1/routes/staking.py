@@ -353,7 +353,7 @@ async def staked(req: AddressList, project: str = "ergopad"):
         cleanedBox = {
             'boxId': r['box_id'],
             'stakeKeyId': r['stakekey_token_id'],
-            'stakeAmount': r['amount'],
+            'stakeAmount': float(r['amount']),
         }
         # penalty is only for v1 contract
         if project in stakingConfigsV1:
@@ -363,9 +363,9 @@ async def staked(req: AddressList, project: str = "ergopad"):
             cleanedBox['penaltyPct'] = penaltyPct
             cleanedBox['penaltyEndTime'] = penaltyEndTime
 
-        totalStaked += round(r['amount'], r['decimals'])
+        totalStaked += float(r['amount'])
         stakePerAddress[r['address']]['stakeBoxes'].append(cleanedBox)
-        stakePerAddress[r['address']]['totalStaked'] += r['amount']
+        stakePerAddress[r['address']]['totalStaked'] += float(r['amount'])
         logging.debug(f'''totalStaked: {totalStaked}''')
     
     tokenName = project.capitalize()
@@ -829,7 +829,7 @@ async def stakedv2(project: str, req: AddressList):
     try:
         if project in stakingConfigsV1:
             return await staked(req, project)
-        if project in ('paideia'): # use optimized endpoint for paideia
+        if project in ("paideia",): # use optimized endpoint for paideia
             return await staked(req, project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -935,7 +935,6 @@ async def allStaked(req: AddressList):
             ret.append(res)
 
         cache.set(f"get_staking_staked_v2_{u_hash}", ret, timeout=CACHE_TTL)
-        logging.debug('return')
         return ret
 
     except Exception as e:
