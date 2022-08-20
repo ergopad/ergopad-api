@@ -125,6 +125,7 @@ class BootstrapRequest(BaseModel):
     emissionStart_ms: int
 #endregion CLASSES
 
+# TODO: since index is not saved currently with assets in danaides, keep using public explorer for now
 @r.post("/unstake/", name="staking:unstake")
 async def unstake(req: UnstakeRequest, project: str = "ergopad"):
     try:

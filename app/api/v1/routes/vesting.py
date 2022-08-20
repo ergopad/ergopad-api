@@ -3,7 +3,7 @@ import fractions
 import re
 
 from decimal import Decimal
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from starlette.responses import JSONResponse
 from api.v1.routes.staking import AddressList
 from core.auth import get_current_active_superuser 
@@ -558,8 +558,15 @@ async def redeemWithNFT(req: RedeemWithNFTRequest):
 async def vestingV2(req: AddressList):
     try:
         sql = f'''
-            select v.box_id, v.vesting_key_id, v.parameters, v.token_id, v.remaining, v.address, v.ergo_tree
-                , t.token_name, t.decimals
+            select v.box_id
+                , v.vesting_key_id
+                , v.parameters
+                , v.token_id
+                , v.remaining
+                , v.address
+                , v.ergo_tree
+                , t.token_name
+                , t.decimals
             from vesting v 
                 join tokens t on t.token_id = v.token_id
             where address in ('{"','".join(req.addresses)}')
@@ -614,86 +621,68 @@ async def vestingV2(req: AddressList):
 
 @r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
 async def vested(req: AddressList):
-    CACHE_TTL = 1800 # 30 mins (invalidated by invalidation service on change)
-    vestingAddresses = [
-        '2k6J5ocjeESe4cuXP6rwwq55t6cUwiyqDzNdEFgnKhwnWhttnSShZb4LaMmqTndrog6MbdT8iJbnnwWEcNoeRfEqXBQW4ohBTgm8rDnu9WBBZSixjJoKPT4DStGSobBkoxS4HZMe4brCgujdnmnMBNf8s4cfGtJsxRqGwtLMvmP6Z6FAXw5pYveHRFDBZkhh6qbqoetEKX7ER2kJormhK266bPDQPmFCcsoYRdRiUJBtLoQ3fq4C6N2Mtb3Jab4yqjvjLB7JRTP82wzsXNNbjUsvgCc4wibpMc8MqJutkh7t6trkLmcaH12mAZBWiVhwHkCYCjPFcZZDbr7xeh29UDcwPQdApxHyrWTWHtNRvm9dpwMRjnG2niddbZU82Rpy33cMcN3cEYZajWgDnDKtrtpExC2MWSMCx5ky3t8C1CRtjQYX2yp3x6ZCRxG7vyV7UmfDHWgh9bvU',
-        'HNLdwoHRsUSevguzRajzvy1DLAvUJ9YgQezQq6GGZiY4TmU9VDs2ae8mRpQkfEnLmuUKyJibZD2bXR2yoo1p8T5WCRKPn4rJVJ2VR2LvRBk8ViCmhcume5ubWaySXTUqpftEaaURTM6KSFxe4QbRFbToyPzZ3JJmjoDn4WzHh5ioXZMj7AX6xTwJvFmzPuko9BqDk5z1RJtD1wP4kd8sSsLN9P2YNQxmUGDEBYHaDCoAhY7Pg5oKit6ZyqMynoiycWqctfg1EHhMUKCTJsZNnidU961ri98RaYP4CfEwYQ3d9dRVuC6S1n7J1wPPHYqmUBgJCGWbTULayXUowSSmRuZUkQYGo9vvNaEpB7ManiLsX1n8cBYwN4XoVsY24mCfptBP86P4rZ5fgcr9mYtQ9nG934DMDZBbjs81VzCupB6KVrGCe1WtYSr6c1DwkNAinBMwqcqxTznXZUvfBsjDSCtJzCut44xcc7Zsy9mWz2B2pqhdKsX83BVzMDDM5hnjXTShYfauJGs81']
     try:
-        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
-        vestingKeys = {}
-        for address in req.addresses:
-            # cache balance confirmed
-            ok = False
-            data = None
-            cached = cache.get(f"get_vesting_vested_addresses_{address}_balance_confirmed")
-            if cached:
-                ok = True
-                data = cached
-            else:
-                res = requests.get(f'{CFG.explorer}/addresses/{address}/balance/confirmed')
-                ok = res.ok
-                if ok:
-                    data = res.json()
-                    cache.set(f"get_vesting_vested_addresses_{address}_balance_confirmed", data, CACHE_TTL)
-            if ok:
-                if 'tokens' in data:
-                    for token in data["tokens"]:
-                        if 'name' in token and 'tokenId' in token:
-                            if token["name"] is not None:
-                                if "Vesting Key" in token["name"]:
-                                    vestingKeys[token["tokenId"]] = address
-            else:
-                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Failure to fetch balance for {address}')
-        
+        # find vesting tokens
         vested = {}
-        
-        # getTokenBoxes from cache
-        checkBoxes = []
-        cached = cache.get(f"get_vesting_vested_token_boxes")
-        if cached:
-            checkBoxes = cached
-        else:
-            for vestingAddress in vestingAddresses:
-                appKitBoxes = appKit.getUnspentBoxes(vestingAddress)
-                for appKitBox in appKitBoxes:
-                    checkBoxes.append(json.loads(appKitBox.toJson(False)))
-            cache.set(f"get_vesting_vested_token_boxes", checkBoxes, CACHE_TTL)
-        for box in checkBoxes:
-            if box["additionalRegisters"]["R5"][4:] in vestingKeys.keys():
-                parameters = ErgoAppKit.deserializeLongArray(box["additionalRegisters"]["R4"])
-                blockTime           = int(time()*1000)
+        wallet_addresses = "'"+("','".join(req.addresses))+"'"
+        sql = f'''
+            select 
+                  v.box_id
+                , v.ergo_tree
+                , v.remaining
+                , v.vesting_key_id
+                , v.parameters
+                , t.token_name
+                , t.decimals
+                , u.assets[v.token_id] as redeemed
+            from vesting v
+                join tokens t on t.token_id = v.token_id
+                join utxos u on u.box_id = v.box_id
+            where v.address in ({wallet_addresses})
+        '''
+        with engDanaides.begin() as con:
+            res = con.execute(sql).fetchall()
 
-                redeemPeriod        = parameters[0]
-                numberOfPeriods     = parameters[1]
-                vestingStart        = parameters[2]
-                totalVested         = parameters[3]
+        # no vesting for address(es)
+        if res is None:
+            return vested
 
-                timeVested          = blockTime - vestingStart
-                periods             = max(0,int(timeVested/redeemPeriod))
-                redeemed            = totalVested - int(box["assets"][0]["amount"])
-                if box["ergoTree"] == "1012040204000404040004020406040c0408040a050004000402040204000400040404000400d812d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605db6903db6503fed606e4c6a70411d6079d997205b27206730200b27206730300d608b27206730400d609b27206730500d60a9972097204d60b95917205b272067306009d9c7209b27206730700b272067308007309d60c959272077208997209720a999a9d9c7207997209720b7208720b720ad60d937204720cd60e95720db2a5730a00b2a5730b00d60fdb6308720ed610b2720f730c00d6118c720301d612b2a5730d00d1eded96830201aedb63087201d901134d0e938c721301720293c5b2a4730e00c5a79683050193c2720ec2720193b1720f730f938cb2720f731000017202938c7210017211938c721002720cec720dd801d613b2db630872127311009683060193c17212c1a793c27212c2a7938c7213017211938c721302997204720c93e4c67212050e720293e4c6721204117206":
-                    tgeNum              = parameters[4]
-                    tgeDenom            = parameters[5]
-                    tgeTime             = parameters[6]
-                    tgeAmount           = int(totalVested * tgeNum / tgeDenom) if (blockTime > tgeTime) else 0
-                    totalRedeemable     = int(periods * (totalVested-tgeAmount) / numberOfPeriods) + tgeAmount
-                else:
-                    totalRedeemable     = int(periods * totalVested / numberOfPeriods)
+        # parse vesting row
+        for row in res:
+            if row['token_name'] not in vested:
+                vested[row['token_name']] = []
 
-                redeemableTokens    = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
-                vestedTokenInfo = getTokenInfo(box["assets"][0]["tokenId"])
-                if vestedTokenInfo["name"] not in vested:
-                    vested[vestedTokenInfo["name"]] = []
-                vested[vestedTokenInfo["name"]].append({
-                    'boxId': box["boxId"],
-                    'Remaining': round(box["assets"][0]["amount"]*10**(-1*vestedTokenInfo["decimals"]),vestedTokenInfo["decimals"]),
-                    'Redeemable': round(redeemableTokens*10**(-1*vestedTokenInfo["decimals"]),vestedTokenInfo["decimals"]),
-                    'Vesting Key Id': box["additionalRegisters"]["R5"][4:],
-                    'Next unlock': datetime.fromtimestamp((vestingStart+((periods+1)*redeemPeriod))/1000)
-                })
+            # parse params
+            parameters = ErgoAppKit.deserializeLongArray(row['parameters'])            
+            blockTime           = int(time()*1000)
+            redeemPeriod        = parameters[0]
+            numberOfPeriods     = parameters[1]
+            vestingStart        = parameters[2]
+            totalVested         = parameters[3]
+            timeVested          = blockTime - vestingStart
+            periods             = max(0, int(timeVested/redeemPeriod))
+            redeemed            = totalVested - int(row['redeemed'])
+            if row['ergo_tree'] == '1012040204000404040004020406040c0408040a050004000402040204000400040404000400d812d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605db6903db6503fed606e4c6a70411d6079d997205b27206730200b27206730300d608b27206730400d609b27206730500d60a9972097204d60b95917205b272067306009d9c7209b27206730700b272067308007309d60c959272077208997209720a999a9d9c7207997209720b7208720b720ad60d937204720cd60e95720db2a5730a00b2a5730b00d60fdb6308720ed610b2720f730c00d6118c720301d612b2a5730d00d1eded96830201aedb63087201d901134d0e938c721301720293c5b2a4730e00c5a79683050193c2720ec2720193b1720f730f938cb2720f731000017202938c7210017211938c721002720cec720dd801d613b2db630872127311009683060193c17212c1a793c27212c2a7938c7213017211938c721302997204720c93e4c67212050e720293e4c6721204117206':
+                tgeNum              = parameters[4]
+                tgeDenom            = parameters[5]
+                tgeTime             = parameters[6]
+                tgeAmount           = int(totalVested * tgeNum / tgeDenom) if (blockTime > tgeTime) else 0
+                totalRedeemable     = int(periods * (totalVested-tgeAmount) / numberOfPeriods) + tgeAmount
+            else:
+                totalRedeemable     = int(periods * totalVested / numberOfPeriods)
+
+            redeemableTokens = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
+            decimals = row['decimals']
+            vested[row['token_name']].append({
+                'boxId': row['box_id'],
+                'Remaining': round(row['remaining']/(10**decimals), decimals),
+                'Redeemable': round(redeemableTokens/(10**decimals), decimals),
+                'Vesting Key Id': row['vesting_key_id'],
+                'Next unlock': datetime.fromtimestamp((vestingStart+((periods+1)*redeemPeriod))/1000)
+            })
 
         return vested
-        
+
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to vest with NFT.')
