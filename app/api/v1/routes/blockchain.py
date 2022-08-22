@@ -39,12 +39,7 @@ EXPLORER = CFG.csExplorer
 STAKE_ADDRESS = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
 STAKE_KEY_ID = '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee'
 
-try:
-    headers            = {'Content-Type': 'application/json'}
-    tokenInfo          = requests.get(f'{CFG.explorer}/tokens/{CFG.ergopadTokenId}')
-
-except Exception as e:
-    logging.error(f'Init {e}')
+headers            = {'Content-Type': 'application/json'}
 #endregion INIT
 
 class TXFormat(str, Enum):
@@ -157,26 +152,6 @@ def getTokenInfo(tokenId):
     except Exception as e:
         logging.error(f'ERR:{myself()}: invalid token request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid token request ({e})')
-
-
-@r.get("/boxInfo/{boxId}", name="blockchain:boxInfo")
-def getBoxInfo(boxId):
-    try:
-        box = requests.get(f'{CFG.explorer}/boxes/{boxId}')
-        return box.json()
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: invalid box request ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid box request ({e})')
-
-
-@r.get("/transactionInfo/{transactionId}", name="blockchain:transactionInfo")
-def getTransactionInfo(transactionId):
-    try:
-        tx = requests.get(f'{CFG.explorer}/transactions/{transactionId}')
-        return tx.json()
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: invalid tx info ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid tx info ({e})')
 
 
 # request by CMC

@@ -237,7 +237,7 @@ async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_
             else:
                 return (False, f"Not enough ergopad staked for this address. Min stake required is {constraints['min_stake']}.")
         except:
-            return (False, "Explorer API failed. Could not validate if enough ergopad is staked.")
+            return (False, "API failed. Could not validate if enough ergopad is staked.")
     return (True, "ok")
 
 @r.get("/summary/{eventName}", name="whitelist:summary")
