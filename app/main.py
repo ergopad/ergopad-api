@@ -7,6 +7,8 @@ from os import getpid
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.auth import get_current_active_user
+from db.session import engine
+from schema import init_db
 
 from api.v1.routes.users import users_router
 from api.v1.routes.auth import auth_router
@@ -52,9 +54,10 @@ app.include_router(faq_router,          prefix="/api/faq",           tags=["faq"
 app.include_router(notification_router, prefix="/api/notifications", tags=["notifications"])
 #endregion Routers
 
-# init database?
-# app.add_event_handler("startup", tasks.create_start_app_handler(app))
-# app.add_event_handler("shutdown", tasks.create_stop_app_handler(app))
+# init database
+@app.on_event("startup")
+async def on_startup():
+    await init_db(engine)
 
 # origins = ["*"]
 origins = [
