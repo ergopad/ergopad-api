@@ -1,16 +1,18 @@
 import inspect
 import logging
+import time
+
+from datetime import datetime as dt
 
 from starlette.responses import JSONResponse
 from sqlalchemy import create_engine, text
 from fastapi import APIRouter, Depends, status, Request
 from pydantic import BaseModel
-from time import time
-from datetime import datetime as dt
+
 from api.v1.routes.staking import staked, AddressList
 from db.crud.whitelist_events import create_whitelist_event, delete_whitelist_event, edit_whitelist_event, get_whitelist_event_by_event_id, get_whitelist_event_by_name, get_whitelist_events
 from db.session import get_db
-from db.schemas.whitelistEvents import CreateWhitelistEvent
+from db.schemas.whitelistEvents import CreateWhitelistEvent, WhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
@@ -24,7 +26,7 @@ DEBUG = CFG.debug
 DATABASE = CFG.connectionString
 DATEFORMAT = '%m/%d/%Y %H:%M:%S.%f'
 headers = {'Content-Type': 'application/json'}
-# NOW = int(time()) # !! NOTE: can't use here; will only update once if being imported
+# NOW = int(time.time()) # !! NOTE: can't use here; will only update once if being imported
 # endregion INIT
 
 # region LOGGING
@@ -73,7 +75,7 @@ async def go(request: Request):
 # 2. rewrite logic for max sigusd allowance
 @r.post("/signup", name="whitelist:signup")
 async def whitelistSignUp(whitelist: Whitelist, request: Request):
-    NOW = time()
+    NOW = time.time()
     try:
         eventName = whitelist.event
         # logging.debug(DATABASE)
@@ -222,14 +224,17 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         logging.error(f'ERR:{myself()}: whitelist err, {e}')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
 
+
 async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db())):
-    whitelistEvent = get_whitelist_event_by_event_id(db, eventId)
+    whitelistEvent = adjustWhitelistEarlyBird(
+        get_whitelist_event_by_event_id(db, eventId)
+    )
     additionalDetails = whitelistEvent.additionalDetails
     constraints = {"min_stake": 0}
-    if 'min_stake' in additionalDetails:
-        constraints['min_stake'] = int(additionalDetails["min_stake"])
+    if "min_stake" in additionalDetails:
+        constraints["min_stake"] = int(additionalDetails["min_stake"])
     address = whitelist.ergoAddress
-    if (constraints['min_stake'] > 0):
+    if (constraints["min_stake"] > 0):
         try:
             stakedRes = await staked(AddressList(addresses=[address]))
             if stakedRes["totalStaked"] >= constraints['min_stake']:
@@ -239,6 +244,28 @@ async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_
         except:
             return (False, "API failed. Could not validate if enough ergopad is staked.")
     return (True, "ok")
+
+
+def adjustWhitelistEarlyBird(event: WhitelistEvent):
+    # check if early bird config is present
+    if not event:
+        return None
+    if "early_bird" not in event.additionalDetails:
+        return event
+
+    # check if early bird period
+    start_time = event.start_dtz.timestamp()
+    current_time = time.time()
+    early_bird__s = event.additionalDetails["early_bird"]["round_length__s"]
+    if start_time + early_bird__s <= current_time:
+        return event
+
+    # make edits to config
+    event.additionalDetails["min_stake"] = event.additionalDetails["early_bird"]["min_stake"]
+    event.title = event.title + " (Early Bird)"
+
+    return event
+
 
 @r.get("/summary/{eventName}", name="whitelist:summary")
 async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
@@ -276,6 +303,12 @@ async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
 
+
+##########################
+## WHITELIST CMS CONFIG ##
+##########################
+
+
 @r.get(
     "/events",
     response_model_exclude_none=True,
@@ -292,6 +325,7 @@ def whitelist_event_list(
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
+
 @r.get(
     "/events/{projectName}/{roundName}",
     response_model_exclude_none=True,
@@ -306,9 +340,13 @@ def whitelist_event(
     Get event
     """
     try:
-        return get_whitelist_event_by_name(db, projectName, roundName)
+        event = get_whitelist_event_by_name(db, projectName, roundName)
+        if type(event) == JSONResponse:
+            return event
+        return adjustWhitelistEarlyBird(event)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
 
 @r.post("/events", response_model_exclude_none=True, name="whitelist:create-event")
 def whitelist_event_create(
@@ -323,6 +361,7 @@ def whitelist_event_create(
         return create_whitelist_event(db, whitelist_event)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
 
 @r.put(
     "/events/{id}", 
@@ -343,6 +382,7 @@ def whitelist_event_edit(
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
 
+
 @r.delete(
     "/events/{id}", 
     response_model_exclude_none=True, 
@@ -360,4 +400,5 @@ def whitelist_event_delete(
         return delete_whitelist_event(db, id)
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')
+
 # endregion ROUTES
