@@ -257,7 +257,7 @@ def adjustWhitelistEarlyBird(event: WhitelistEvent):
     start_time = event.start_dtz.timestamp()
     current_time = time.time()
     early_bird__s = event.additionalDetails["early_bird"]["round_length__s"]
-    if start_time + early_bird__s <= current_time:
+    if current_time <= start_time or start_time + early_bird__s <= current_time:
         return event
 
     # make edits to config
@@ -334,6 +334,7 @@ def whitelist_event_list(
 def whitelist_event(
     projectName: str, 
     roundName: str,
+    format: str = 'default',
     db=Depends(get_db),
 ):
     """
@@ -341,6 +342,8 @@ def whitelist_event(
     """
     try:
         event = get_whitelist_event_by_name(db, projectName, roundName)
+        if format != 'adjust_early_bird':
+            return event
         if type(event) == JSONResponse:
             return event
         return adjustWhitelistEarlyBird(event)
