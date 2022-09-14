@@ -900,13 +900,19 @@ async def allStaked(req: AddressList):
                 tokenName[project] = row['token_name']
             
             # summarize
+            summary = {}
             if VERBOSE: logging.debug('allStaked.summary')
             stakePerAddress[project][row['address']]['totalStaked'] += amt
-            stakePerAddress[project][row['address']]['stakeBoxes'].append({
-                'boxId': row['box_id'],
-                'stakeKeyId': row['stakekey_token_id'],
-                'stakeAmount': amt,
-            })
+            summary['boxId'] = row['box_id']
+            summary['stakeKeyId'] = row['stakekey_token_id']
+            summary['stakeAmount'] = amt
+            if project in ['ergopad', 'egio']:
+                penalty = ErgoValue.fromHex(row['penalty']).getValue().apply(1)
+                penaltyPct = validPenalty(penalty)
+                penaltyEndTime = int(penalty + 8 * week)
+                summary['penaltyPct'] = penaltyPct
+                summary['penaltyEndTime'] = penaltyEndTime
+            stakePerAddress[project][row['address']]['stakeBoxes'].append(summary)
 
         for project in projects:
             projects[project].append({
@@ -917,7 +923,9 @@ async def allStaked(req: AddressList):
             })
 
         if VERBOSE: logging.debug('allStaked.return')
-        return projects
+        # return projects
+        return [projects[p][0] for p in projects]
+
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
