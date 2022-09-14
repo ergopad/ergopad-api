@@ -11,7 +11,7 @@ services:
       - ${API_PORT}:${API_PORT}
     deploy:
       restart_policy:
-        condition: on-failure
+        condition: unless-stopped
         delay: 10s
         max_attempts: 5
         window: 90s
@@ -40,5 +40,3 @@ services:
 networks:
   ergopad-net:
     external: true
-  net:
-    driver: bridge
