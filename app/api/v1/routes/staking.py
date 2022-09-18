@@ -721,36 +721,27 @@ async def addstake(project: str, req: UnstakeRequest):
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to add stake, please make sure you have at least 0.5 erg in wallet.')
 
-@r.get("/{project}/status/", name="staking:status-v2")
-async def stakingStatus(project: str):
+@r.get("/{project}/status/", name="staking:xstatus-v2")
+async def xstakingStatus(project: str):
     try:
-        if project in stakingConfigsV1:
-            return await stakingStatusV1(project)
-        if project not in stakingConfigs:
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
-        # check cache
-        cached = cache.get(f"get_api_staking_status_{project}")
-        if cached:
-            return cached
+        sql = text(f'''           
+            select str4, plr4, dcml
+            from token_status
+            where token_name = :project
+        ''')
+        with engDanaides.begin() as con:
+            res = con.execute(sql, {'project': project}).fetchone()
 
-        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
-        config = stakingConfigs[project](appKit)
-
-        stakeStateBox = getNFTBox(config.stakeStateNFT)
-        stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
-        stakePoolBox = getNFTBox(config.stakePoolNFT)
-        stakePoolR4 = eval(stakePoolBox["additionalRegisters"]["R4"]["renderedValue"])
-
-        totalStaked = stakeStateR4[0]
-        cycleEmission = stakePoolR4[0]
-        dailyEmission = cycleEmission*86400000/stakeStateR4[4]
+        totalStaked =  ErgoValue.fromHex(res['str4']).getValue().apply(0)
+        cycleEmission =  ErgoValue.fromHex(res['plr4']).getValue().apply(0)
+        dailyEmission = cycleEmission*86400000/ErgoValue.fromHex(res['str4']).getValue().apply(4)
 
         apy = round(dailyEmission*36500/totalStaked,2)
 
         ret = {
-            'Total amount staked': totalStaked/10**config.stakedTokenDecimals,
-            'Staking boxes': stakeStateR4[2],
-            'Cycle start': stakeStateR4[3],
+            'Total amount staked': totalStaked/10**res['dcml'],
+            'Staking boxes':  ErgoValue.fromHex(res['str4']).getValue().apply(2),
+            'Cycle start':  ErgoValue.fromHex(res['str4']).getValue().apply(3),
             'APY': apy
         }
 
@@ -761,6 +752,47 @@ async def stakingStatus(project: str):
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
+
+## @r.get("/{project}/status/", name="staking:status-v2")
+## async def stakingStatus(project: str):
+##     try:
+##         if project in stakingConfigsV1:
+##             return await stakingStatusV1(project)
+##         if project not in stakingConfigs:
+##             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
+##         # check cache
+##         cached = cache.get(f"get_api_staking_status_{project}")
+##         if cached:
+##             return cached
+## 
+##         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
+##         config = stakingConfigs[project](appKit)
+## 
+##         stakeStateBox = getNFTBox(config.stakeStateNFT)
+##         stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
+##         stakePoolBox = getNFTBox(config.stakePoolNFT)
+##         stakePoolR4 = eval(stakePoolBox["additionalRegisters"]["R4"]["renderedValue"])
+## 
+##         totalStaked = stakeStateR4[0]
+##         cycleEmission = stakePoolR4[0]
+##         dailyEmission = cycleEmission*86400000/stakeStateR4[4]
+## 
+##         apy = round(dailyEmission*36500/totalStaked,2)
+## 
+##         ret = {
+##             'Total amount staked': totalStaked/10**config.stakedTokenDecimals,
+##             'Staking boxes': stakeStateR4[2],
+##             'Cycle start': stakeStateR4[3],
+##             'APY': apy
+##         }
+## 
+##         # cache and return
+##         cache.set(f"get_api_staking_status_{project}", ret)
+##         return ret
+## 
+##     except Exception as e:
+##         logging.error(f'ERR:{myself()}: ({e})')
+##         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 @r.post("/{project}/staked/", name="staking:staked-v2")
 async def stakedv2(project: str, req: AddressList):
