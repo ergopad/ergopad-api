@@ -50,7 +50,7 @@ class TXFormat(str, Enum):
 #region ROUTES
 # current node info (and more)
 @r.get("/info", name="blockchain:info")
-async def getInfo():
+def getInfo():
     try:
         st = time() # stopwatch
         nodeInfo = {}
@@ -81,7 +81,7 @@ async def getInfo():
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid blockchain info ({e})')
 
 @r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
-async def tokenomics(tokenId):
+def tokenomics(tokenId):
     try:
         if tokenId == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413': 
             token = 'ergopad'
@@ -174,7 +174,7 @@ def getEmmissionAmount(token_id):
 
 
 @r.get("/ergusdoracle", name="blockchain:ergusdoracle")
-async def ergusdoracle():
+def ergusdoracle():
     res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
     return json.loads(res.json())
 
@@ -199,7 +199,7 @@ def sqlTokenValue(address, token_id, con):
 
 # paideia tokenId: 1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489
 @r.get("/paideiaInCirculation", name="blockchain:paideiaInCirculation")
-async def paideiaInCirculation():
+def paideiaInCirculation():
     try:
         sql = text(f'''
             select token_name
@@ -225,7 +225,7 @@ async def paideiaInCirculation():
 
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
-async def ergopadInCirculation():
+def ergopadInCirculation():
     #
     # in circulation = total supply - vested - emitted - stake pool
     # 
@@ -254,7 +254,7 @@ async def ergopadInCirculation():
 
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
-async def totalSupply(tokenId):
+def totalSupply(tokenId):
     #
     # total supply = emission amount - burned
     #
@@ -645,7 +645,7 @@ class AirdropRequest(BaseModel):
 
 
 @r.post("/airdrop", name="blockchain:airdrop")
-async def airdrop( 
+def airdrop( 
     req: AirdropRequest,
     current_user=Depends(get_current_active_superuser)
 ):
@@ -684,7 +684,7 @@ async def airdrop(
 
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
-async def tvl(tokenId: str):
+def tvl(tokenId: str):
     try:
         cached = cache.get(f"get_tvl_{tokenId}")
         if cached:

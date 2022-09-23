@@ -128,7 +128,7 @@ class BootstrapRequest(BaseModel):
 
 # TODO: since index is not saved currently with assets in danaides, keep using public explorer for now
 @r.post("/unstake/", name="staking:unstake")
-async def unstake(req: UnstakeRequest, project: str = "ergopad"):
+def unstake(req: UnstakeRequest, project: str = "ergopad"):
     try:
         sc = stakingConfigsV1[project]
         logging.debug('unstake::appKit')
@@ -324,11 +324,11 @@ def validPenalty(startTime: int):
     return 0 if (weeksStaked >= 8) else 5  if (weeksStaked >= 6) else 12.5 if (weeksStaked >= 4) else 20 if (weeksStaked >= 2) else 25
             
 @r.post("/staked/", name="staking:staked")
-async def staked(req: AddressList, project: str = "ergopad"):
-    return await stakedv2(project=project, req=req)
+def staked(req: AddressList, project: str = "ergopad"):
+    return stakedv2(project=project, req=req)
 
 @r.get("/status/", name="staking:status")
-async def stakingStatusV1(project: str = "ergopad"):
+def stakingStatusV1(project: str = "ergopad"):
     try:
         # check cache
         cached = cache.get(f"get_api_staking_status_{project}")
@@ -363,7 +363,7 @@ async def stakingStatusV1(project: str = "ergopad"):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 @r.get("/{project}/incentive/", name="staking:incentive")
-async def incentive(project: str = "ergopad"):
+def incentive(project: str = "ergopad"):
 
     appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
     sc = stakingConfigsV1[project]
@@ -411,7 +411,7 @@ async def incentive(project: str = "ergopad"):
     }
 
 @r.post("/stake/", name="staking:stake")
-async def stake(req: StakeRequest, project: str = "ergopad"):
+def stake(req: StakeRequest, project: str = "ergopad"):
     try:
         sc = stakingConfigsV1[project]
         logging.debug(f'stake::staked token info')
@@ -537,7 +537,7 @@ async def stake(req: StakeRequest, project: str = "ergopad"):
 
 # bootstrap staking setup
 @r.post("/bootstrap/", name="staking:bootstrap")
-async def bootstrapStaking(req: BootstrapRequest):
+def bootstrapStaking(req: BootstrapRequest):
     try:
         stakedToken = getTokenInfo(req.stakedTokenID)
         stakedTokenDecimalMultiplier = 10**stakedToken["decimals"]
@@ -644,10 +644,10 @@ async def bootstrapStaking(req: BootstrapRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to bootstrap, try again shortly or contact support if error continues.')
 
 @r.post("/{project}/stake/", name="staking:stake-v2")
-async def stakeV2(project: str, req: StakeRequest):
+def stakeV2(project: str, req: StakeRequest):
     try:
         if project in stakingConfigsV1:
-            return await stake(req, project)
+            return stake(req, project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
@@ -669,10 +669,10 @@ async def stakeV2(project: str, req: StakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.post("/{project}/unstake/", name="staking:unstake-v2")
-async def unstakev2(project: str, req: UnstakeRequest):
+def unstakev2(project: str, req: UnstakeRequest):
     try:
         if project in stakingConfigsV1:
-            return await unstake(req,project)
+            return unstake(req,project)
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer)
@@ -698,7 +698,7 @@ async def unstakev2(project: str, req: UnstakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to unstake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.post("/{project}/addstake/", name="staking:addstake-v2")
-async def addstake(project: str, req: UnstakeRequest):
+def addstake(project: str, req: UnstakeRequest):
     try:
         if project not in stakingConfigs:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{project} does not have a staking config')
@@ -722,7 +722,7 @@ async def addstake(project: str, req: UnstakeRequest):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to add stake, please make sure you have at least 0.5 erg in wallet.')
 
 @r.get("/{project}/status/", name="staking:xstatus-v2")
-async def xstakingStatus(project: str):
+def stakingStatus(project: str):
     try:
         sql = text(f'''           
             select str4, plr4, dcml
@@ -754,7 +754,7 @@ async def xstakingStatus(project: str):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to find status, try again shortly or contact support if error continues.')
 
 @r.post("/{project}/staked/", name="staking:staked-v2")
-async def stakedv2(project: str, req: AddressList):
+def stakedv2(project: str, req: AddressList):
     try:
         logging.debug('stakedv2.init')
         stakePerAddress = {}
@@ -838,7 +838,7 @@ async def stakedv2(project: str, req: AddressList):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to determine staked value.')
 
 @r.post("/staked-all/", name="staking:staked-all")
-async def allStaked(req: AddressList):
+def allStaked(req: AddressList):
     try:
         logging.debug('allStaked.init')
         stakePerAddress = {}

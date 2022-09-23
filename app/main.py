@@ -89,11 +89,11 @@ async def add_logging_and_process_time(req: Request, call_next):
 
 # catch all route (useful?)
 # @app.api_route("/{path_name:path}", methods=["GET"])
-# async def catch_all(request: Request, path_name: str):
+# def catch_all(request: Request, path_name: str):
 #     return {"request_method": request.method, "path_name": path_name}
 
 @app.get("/api/ping")
-async def ping():
+def ping():
     return {"hello": "world"}
 
 # MAIN
