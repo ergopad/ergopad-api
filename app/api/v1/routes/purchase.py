@@ -39,7 +39,7 @@ myself = lambda: inspect.stack()[1][3]
 #endregion LOGGING
 
 @r.get("/allowance/{wallet}", name="blockchain:whitelist")
-async def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201wl'):
+def allowance(wallet:str, eventName:Optional[str]='presale-ergopad-202201wl'):
     NOW = int(time())
 
     try:

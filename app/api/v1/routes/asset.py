@@ -55,7 +55,7 @@ class AddressList(BaseModel):
 
 # Single coin balance and tokens for wallet address
 @r.post("/balances/", name="asset:balances")
-async def get_assets_for_addresses(req: AddressList):
+def get_assets_for_addresses(req: AddressList):
     try:
         total = 0
         balances = {
@@ -112,7 +112,7 @@ async def get_assets_for_addresses(req: AddressList):
             })
 
         balances['total'] = total/(10**9)
-        ergo = await get_asset_current_price(coin='ergo')
+        ergo = get_asset_current_price(coin='ergo')
         balances['price'] = ergo['price']
 
         return balances
@@ -123,11 +123,11 @@ async def get_assets_for_addresses(req: AddressList):
 
 # Single coin balance and tokens for wallet address
 @r.get("/balance/{address}", name="asset:wallet-balance")
-async def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
+def get_asset_balance_from_address(address: str = Path(..., min_length=40, regex="^[a-zA-Z0-9_-]+$")) -> None:
     try:
         addressList = AddressList
         addressList.addresses = [f'{address}']
-        return await get_assets_for_addresses(addressList)
+        return get_assets_for_addresses(addressList)
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find balance ({e})')
@@ -136,7 +136,7 @@ async def get_asset_balance_from_address(address: str = Path(..., min_length=40,
 # Find price by token_id
 # Base currency is USD for all coins and tokens.
 @r.get("/priceByTokenId/{tokenId}", name="coin:coin-price-by-token-id")
-async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
+def get_ergodex_asset_price_by_token_id(tokenId: str = None):
     try:
         sql = text(f'''
             select token_price 
@@ -173,7 +173,7 @@ async def get_ergodex_asset_price_by_token_id(tokenId: str = None):
 # - Allow SigUSD/RSV ergo tokens to be listed as coins (TODO: change from ergo.watch api)
 # - Allow multiple coins per blockchain (TODO: change from CoinGecko api)
 @r.get("/price/{coin}", name="coin:coin-price")
-async def get_asset_current_price(coin: str = None):
+def get_asset_current_price(coin: str = None):
     try:
         coin = coin.lower()
         # check cache
@@ -192,7 +192,7 @@ async def get_asset_current_price(coin: str = None):
                     try:
                         # peg_rate_nano: current USD/ERG price [nanoERG]
                         # ERG/USD
-                        ergo_price = (await get_asset_current_price("ergo"))["price"]
+                        ergo_price = (get_asset_current_price("ergo"))["price"]
                         price = (res["peg_rate_nano"] / nerg2erg) * ergo_price  # SIGUSD
                     except:
                         # if get_asset_current_price("ergo") fails
@@ -296,12 +296,12 @@ class TokenPrice(BaseModel):
 
 # Find price for a list of tokens/coins
 @r.post("/prices", response_model=t.List[TokenPrice], name="coin:coin-prices")
-async def get_asset_current_prices(tokens: TokenListRequest):
+def get_asset_current_prices(tokens: TokenListRequest):
     prices = []
     for token in tokens.tokens:
         prices.append({
             "name": token,
-            "price": (await get_asset_current_price(token))["price"]
+            "price": (get_asset_current_price(token))["price"]
         })
     return prices
 
@@ -325,7 +325,7 @@ class CoinHistory(BaseModel):
 # - all, Ergo, sigUSD, sigRSV, ergopad, Erdoge, Lunadog
 # - minimum resolution is 5 mins
 @r.get("/price/history/{coin}", response_model=t.List[CoinHistory], name="coin:coin-price-historical")
-async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
+def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     coin = coin.lower()
     # aggregator stores at 5 min resolution
     timeMap = {
@@ -403,7 +403,7 @@ async def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepU
 # - 1. ergopad_erg
 # - 2. ergopad_sigusd
 @r.get("/price/chart/{pair}", response_model=CoinHistory, name="coin:trading-pair-historical")
-async def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
+def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     pair = pair.lower()
     # check cache
     cached = cache.get(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")

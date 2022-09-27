@@ -58,7 +58,7 @@ def myself(): return inspect.stack()[1][3]
 # endregion LOGGING
 
 @r.post("/email")
-async def email(email: Email, request: Request):
+def email(email: Email, request: Request):
     try:
         # validate referer
         logging.debug(request.headers)
@@ -97,7 +97,7 @@ async def email(email: Email, request: Request):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: ({e})')
 
 @r.post("/compileErgoscript", name="blockchain:sendPayment")
-async def compileErgoscript(ergoscript: Ergoscript):
+def compileErgoscript(ergoscript: Ergoscript):
     try:
         script = {'source': ergoscript.script}
         p2s = requests.post(f'{CFG.node}/script/p2sAddress', headers=dict(
