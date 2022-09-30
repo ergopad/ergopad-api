@@ -329,7 +329,7 @@ def getBoxById(box_id, isStateBox=False):
             i += 1
 
         # format registers
-        reg = []
+        reg = {}
         for k, v in box['registers'].items():
             r = None
             if isStateBox:
@@ -337,13 +337,11 @@ def getBoxById(box_id, isStateBox=False):
                 if k == 'R4': r = str([ErgoValue.fromHex(v).getValue().apply(0), ErgoValue.fromHex(v).getValue().apply(1)])
             else:
                 r = ErgoValue.fromHex(v).getValue()                
-            reg.append({
-                k: {
-                    'serializedValue': v,
-                    'sigmaType': None, # dont need
-                    'renderedValue': r,
-                }
-            })
+            reg[k] = {
+                'serializedValue': v,
+                'sigmaType': None, # dont need
+                'renderedValue': r,
+            }
 
         # contents of the stake box
         res = {
@@ -400,7 +398,7 @@ def getInputBoxes(boxes, txFormat: TXFormat):
     return None
 
 
-def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
+def getNFTBox(tokenId: str, allowCached=False, includeMempool=False):
     try:
         if includeMempool:
             ok = False
@@ -455,6 +453,7 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
                 return items[0]
             else:
                 logging.error(f'ERR:{myself()}: multiple nft box or tokenId doesn\'t exist')
+                return {}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')

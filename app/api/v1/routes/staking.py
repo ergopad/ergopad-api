@@ -1,3 +1,4 @@
+import requests
 from decimal import Decimal
 
 from starlette.responses import JSONResponse
@@ -129,6 +130,7 @@ class BootstrapRequest(BaseModel):
 @r.post("/unstake/", name="staking:unstake")
 def unstake(req: UnstakeRequest, project: str = "ergopad"):
     try:
+        logging.debug(f'*****************{req}*****************')
         sc = stakingConfigsV1[project]
         logging.debug('unstake::appKit')
         appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
@@ -138,24 +140,32 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
         if stakeStateBox is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to find stake state box')
         
-        # logging.debug('unstake::find stakeBox')
         stakeBox = getBoxById(req.stakeBox, isStateBox=True)
+        stakeBox['address'] = requests.get(f'http://quicknode:9053/utils/ergoTreeToAddress/{stakeBox["ergoTree"]}').json()['address']
+        # remaining = int(req.stakeBox["assets"][1]["amount"]) - amountToUnstake
+        remaining = 0
+        for ass in stakeBox["assets"]:
+            # ergopad only
+            if ass['tokenId'] == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413':
+                try: remaining = int(ass['amount'])
+                except: remaining = 0
+        
+        # logging.debug('unstake::find stakeBox')        
         currentTime = int(time()*1000)
-        amountToUnstake = min(round(req.amount*10**stakedTokenInfo["decimals"]),stakeBox["assets"][1]["amount"])
-        remaining = stakeBox["assets"][1]["amount"]-amountToUnstake
+        amountToUnstake = min(int(req.amount*10**stakedTokenInfo["decimals"]), remaining)
+        
         logging.debug(f'unstake::find remaining=={remaining}')
         if remaining > 0 and remaining < 1000:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Remaining amount needs to be at least 10 ErgoPad')
         stakeBoxR4 = eval(stakeBox["additionalRegisters"]["R4"]["renderedValue"])
-        stakeTime = stakeBoxR4[1] 
+        stakeTime = stakeBoxR4[1]
         
         logging.debug('unstake::get NFG userBox')
-        # userBox = getNFTBox(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
-        userBox = getBoxById(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
+        userBox = getNFTBox(stakeBox["additionalRegisters"]["R5"]["renderedValue"])
         timeStaked = currentTime - stakeTime
         weeksStaked = int(timeStaked/week)
         penalty = int(0 if (weeksStaked >= 8) else amountToUnstake*5/100  if (weeksStaked >= 6) else amountToUnstake*125/1000 if (weeksStaked >= 4) else amountToUnstake*20/100 if (weeksStaked >= 2) else amountToUnstake*25/100)
-        partial = amountToUnstake < stakeBox["assets"][1]["amount"]
+        partial = amountToUnstake < remaining # int(stakeBox["assets"][1]["amount"])
 
         logging.debug('unstake::stake state R4')
         stakeStateR4 = eval(stakeStateBox["additionalRegisters"]["R4"]["renderedValue"])
@@ -163,12 +173,20 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'This stake box has a pending compound transaction. Compounding needs to happen before unstaking.')
         
         logging.debug('unstake::build outBox 1')
+        # int(stakeStateBox["assets"][1]["amount"])
+        stakeStateAmountToUnstake = 0
+        for ass in stakeStateBox["assets"]:
+            if ass['tokenId'] == '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee':
+                try: stakeStateAmountToUnstake = int(ass['amount'])
+                except: stakeStateAmountToUnstake = 0
+
+        if not partial: stakeStateAmountToUnstake += 1
         outputs = []
         outputs.append(appKit.buildOutBox(
             value = stakeStateBox["value"],
             tokens={
                 sc["stakeStateNFT"]: 1,
-                sc["stakeTokenID"]: (stakeStateBox["assets"][1]["amount"] if (partial) else stakeStateBox["assets"][1]["amount"]+1)
+                sc["stakeTokenID"]: stakeStateAmountToUnstake
             },
             registers=[
                 ErgoAppKit.ergoValue([
@@ -197,7 +215,7 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
                 value = stakeBox["value"],
                 tokens = {
                     sc["stakeTokenID"]: 1,
-                    sc["stakedTokenID"]: stakeBox["assets"][1]["amount"]-amountToUnstake
+                    sc["stakedTokenID"]: remaining - amountToUnstake # stakeBox["assets"][1]["amount"]-amountToUnstake
                 },
                 registers=[
                     ErgoValue.fromHex(stakeBox["additionalRegisters"]["R4"]["serializedValue"]),
@@ -243,18 +261,17 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
             for token in box.getTokens():
                 if token.getId().toString() == stakeBox["additionalRegisters"]["R5"]["renderedValue"]:
                     keyBox = box
-                    keyFound=True
+                    keyFound = True
             if not keyFound:
                 otherBoxes.append(box)
 
         logging.debug('unstake::other boxes')
         userInputs = [keyBox] + list(otherBoxes)
-
-        userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs,ergsNeeded,{stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})
-        
+        userInputs = ErgoAppKit.cutOffExcessUTXOs(userInputs, ergsNeeded, {stakeBox["additionalRegisters"]["R5"]["renderedValue"]:1})        
         inputs = appKit.getBoxesById([stakeStateBox["boxId"],req.stakeBox])
+        unsignedTx = appKit.buildUnsignedTransaction(inputs+userInputs, outputs, int(1e6), Address.create(changeAddress).getErgoAddress(), tokensToBurn=assetsToBurn)
 
-        unsignedTx = appKit.buildUnsignedTransaction(inputs+userInputs,outputs,int(1e6),Address.create(changeAddress).getErgoAddress(),tokensToBurn=assetsToBurn)
+        logging.warning(unsignedTx)
         
         logging.debug('unstake::txFormat')
         if req.txFormat == TXFormat.EIP_12:
@@ -263,7 +280,6 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
                 'penalty': (penalty/10**stakedTokenInfo["decimals"]),
                 'unsignedTX': ErgoAppKit.unsignedTxToJson(unsignedTx)
             }
-
             return result
 
         if req.txFormat == TXFormat.ERGO_PAY:
@@ -275,8 +291,6 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
             )
             cache.set(f'ergopay_signing_request_{unsignedTx.getId()}',ergoPaySigningRequest)
             return {'url': f'ergopay://api.ergopad.io/blockchain/signingRequest/{unsignedTx.getId()}'}
-        # else:
-        #     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to fetch stake box')
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
