@@ -630,26 +630,34 @@ def bootstrapRound(
     current_user=Depends(get_current_active_superuser)
 ):
     try:
+        logging.debug('bootstrapRound:getTokenInfo')
         vestedToken = getTokenInfo(req.tokenId)
         vestedTokenAmount = int(req.roundAllocation*10**vestedToken["decimals"])
 
+        logging.debug('bootstrapRound:appKit')
         appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/",CFG.ergopadApiKey)
 
+        logging.debug('bootstrapRound:ergoPadContract')
         ergoPadContract = appKit.contractFromAddress(CFG.ergopadWallet)
         sellerContract = appKit.contractFromAddress(req.sellerAddress)
 
+        logging.debug('bootstrapRound:initialInputs')
         initialInputs = appKit.boxesToSpend(CFG.ergopadWallet, int(5e6), {req.tokenId: vestedTokenAmount})
 
+        logging.debug('bootstrapRound:nftId')
         nftId = initialInputs[0].getId().toString()
 
+        logging.debug('bootstrapRound:presaleRoundNFTBox')
         presaleRoundNFTBox = appKit.mintToken(
-                                value=int(1e6),
-                                tokenId=nftId,
-                                tokenName=f"{req.roundName}",
-                                tokenDesc="NFT identifying the presale round box",
-                                mintAmount=1,
-                                decimals=0,
-                                contract=ergoPadContract)
+            value=int(1e6),
+            tokenId=nftId,
+            tokenName=f"{req.roundName}",
+            tokenDesc="NFT identifying the presale round box",
+            mintAmount=1,
+            decimals=0,
+            contract=ergoPadContract
+        )
+        logging.debug('bootstrapRound:tokenBox')
         tokenBox = appKit.buildOutBox(
             value = int(3e6),
             tokens = {req.tokenId: vestedTokenAmount},
@@ -657,34 +665,43 @@ def bootstrapRound(
             contract=ergoPadContract
         )
 
+        logging.debug('bootstrapRound:nftMintUnsignedTx')
         nftMintUnsignedTx = appKit.buildUnsignedTransaction(
-                                inputs=initialInputs,
-                                outputs=[presaleRoundNFTBox,tokenBox],
-                                fee=int(1e6),
-                                sendChangeTo=ergoPadContract.toAddress().getErgoAddress())
+            inputs=initialInputs,
+            outputs=[presaleRoundNFTBox,tokenBox],
+            fee=int(1e6),
+            sendChangeTo=ergoPadContract.toAddress().getErgoAddress()
+        )
 
+        logging.debug('bootstrapRound:nftMintSignedTx')
         nftMintSignedTx = appKit.signTransactionWithNode(nftMintUnsignedTx)
 
+        logging.debug('bootstrapRound:sendTransaction')
         appKit.sendTransaction(nftMintSignedTx)
 
+        logging.debug('bootstrapRound:whitelistTokenId')
         whitelistTokenId = nftMintSignedTx.getOutputsToSpend()[0].getId().toString()
 
+        logging.debug('bootstrapRound:whiteListTokenBox')
         whiteListTokenBox = appKit.mintToken(
-                                value=int(1e6),
-                                tokenId=whitelistTokenId,
-                                tokenName=f"{req.roundName} whitelist token",
-                                tokenDesc=f"Token proving allocation for the {req.roundName} round",
-                                mintAmount=int(vestedTokenAmount*req.whitelistTokenMultiplier),
-                                decimals=vestedToken["decimals"],
-                                contract=ergoPadContract)
+            value=int(1e6),
+            tokenId=whitelistTokenId,
+            tokenName=f"{req.roundName} whitelist token",
+            tokenDesc=f"Token proving allocation for the {req.roundName} round",
+            mintAmount=int(vestedTokenAmount*req.whitelistTokenMultiplier),
+            decimals=vestedToken["decimals"],
+            contract=ergoPadContract
+        )
 
         sigusd = "03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04"
         ergusdoracle = "011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
 
+        logging.debug('bootstrapRound:NFTLockedVestingV2')
         with open(f'contracts/NFTLockedVestingV2.es') as f:
             script = f.read()
         nftLockedVestingContractTree = appKit.compileErgoScript(script)
 
+        logging.debug('bootstrapRound:proxyNFTLockedVestingV2')
         with open(f'contracts/proxyNFTLockedVestingV2.es') as f:
             script = f.read()
         proxyNftLockedVestingTree = appKit.compileErgoScript(
@@ -696,6 +713,7 @@ def bootstrapRound(
             }
         )
 
+        logging.debug('bootstrapRound:price')
         price = fractions.Fraction(req.tokenSigUSDPrice*10**Decimal(int(2-vestedToken["decimals"])))
         proxyContractBox = appKit.buildOutBox(
             value = int(1e6),
@@ -723,6 +741,7 @@ def bootstrapRound(
             contract=appKit.contractFromTree(proxyNftLockedVestingTree)
         )
 
+        logging.debug('bootstrapRound:buildUnsignedTransaction')
         bootstrapUnsigned = appKit.buildUnsignedTransaction(
             inputs=[nftMintSignedTx.getOutputsToSpend()[0],nftMintSignedTx.getOutputsToSpend()[1]],
             outputs=[whiteListTokenBox,proxyContractBox],
@@ -730,10 +749,13 @@ def bootstrapRound(
             sendChangeTo=ergoPadContract.toAddress().getErgoAddress()
         )
 
+        logging.debug('bootstrapRound:bootstrapSigned')
         bootstrapSigned = appKit.signTransactionWithNode(bootstrapUnsigned)
 
+        logging.debug('bootstrapRound:sendTransaction')
         appKit.sendTransaction(bootstrapSigned)
 
+        logging.debug('bootstrapRound:return')
         return {
             'Whitelist token id': whitelistTokenId,
             'Proxy NFT': nftId,
@@ -746,32 +768,69 @@ def bootstrapRound(
         logging.error(f'ERR:{myself()}: Unable to bootstrap round. ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to bootstrap round.')
 
-
 @r.get('/activeRounds', name='vesting:activeRounds')
 def activeRounds():
     try:
-        proxyAddresses = [
-            'Jf7SDZuaVDGiCwCxC7N2y8cuptH3cgNT1nteJK469effW2gNarYn1AxsYjNcP7zYtvzmVjNPMmE3PYJRMC2E7m3yTDBrHvv8voJM35a9ktLb3bNeQ4qEJSyFse3pQeqcTxvPATNAv7RHc3fnAkBf3PsNBGFoRq2nwnciNwUaNcunyfWz2JDbwrBzMT7gMfs8U9YKAKGU1V754PUa1WRccaUfWxDAj5zVVkzkvVNNeQPH2g9GAu539Kc5792XLRwfv5MqaBkQ6KqHw8tgck2e55G4sY6n9ZQ4vboeuVC9JzsuiYraAuc6Lbj1NbPdDRaHXBUAQioDuzRBFxDFwLdmsZXykdvDfJZDytxPoCkzdfMmr8Zchga8vELSydrJ8smXbjWnrySGTZWqcQbJLB1YwPDiGVQvDvvQhRSezJcGMXUXea9zX6cCaeAsrqCULonZKVoeVgCNGte6VFk7PTKJ5W5LrRW1cgkJNRHYrpqPujPN8SoMgLjt1zvCKww5eSuu2RXqyZNVPRxMU3uQd3F2hRjGAmJA6M8Mz5QdZmoXj1LRWnrz1C1E6z6mL1Unry2GYWbxfTsVFRbZVZEv78yn9TUN7cuA163BSoxLVeKwUbGC2uiWeWSm1FzTPNCHHpVtBRfTACKoNbxag9SGgxpsepyxaF7snbXhKtBnqFvyg2ZEiiHXUDjY1Qy8kjf9JrdLmifU6WaZ7VdhNEdHGpf72ivo5sVPNEeUKoKfHAY6WWokivYjeSpKCSLjougKwaNoR79tUWdfN8CEudwUSebWXD92cbnMZxS7QBvGqcUSGRQuuD1uXgeWF8m76xgVH4sQfTuMMvYVWeH8e8bHHqtQMzw2FUajFo2F1mxxwVqvkUQJgmRQXYBndDGiquVCvTqNdZ25eo32gf',
-            '4qyzRyJzKPEYP9XSTWsXH6hzhMCH1rMx5JvcYpVwWpD79bLDex79Bj6hbLR1NnVVYFFLCGCTSGQDQTkh5dm5d2BQY5bQRpf1AycoDjAEZyQwxiLRpbwB8Kiqyi7mUvb5UcJRdtUQ6sqcDZpgyf3hBUCCy2vg8e8P3wSopzkensJ4SoG86upev1TXacBRqsm54dshaMdToMAyFBLD2DMsZPP89gEZF4UAuLbRxZDiK871fT1NVCwa7pWK29ySAipERxWwno112zQoF5a9htj37VavXkYTzcZQ24iVjrkrfxU12huR9ZPkvLHkrdu8y8WgFdFr5oKFMsm2teFCrXMx8n9MUEEymFSWhMXBvg5UAkKW5ido9Zo2BYWDj81ew5fUoWhdJGGCu33SegnLzbNiB6VaRNusiZSPwLBA2NZ5yF5UJrUnMZAqPqWZb7zZ2zL2cBwSrFJ7kxSrQeaJ1RNGcQiDyXmzDE9vpyWTbG9W1mW5KzzMD4B9FZoUcRYbmFdp31H5Ho27rTNfx64tr7Crgjm7WfWVp8zPXjxfjW6su6u2GK6cx3feavARGNjyKKrYW3H8yPFi1Y9ruwmNwTyW96Z42FE1D28VuD5C2SJYmegbg9nPKc3ByUbS5CHJQQ4DLX9DdgZvbtq44VsiR2VmbpZNrjMwEHybRcoiDeLNhoPqxinXNvFNjg9gSca1C47EiYy4S94eFqbY1rrcF84siSEUq31e9A6snNTcDEiQ3efCcEyCb1JgA5iLDU7kqoi6xxCt7TKVfA96EKSczjaqBk5jvrmAhZrDpwrKm1sSf8py21tUgbdyDoJccUdRniahbibSRc5PVpukkkKtAUXEDG91qNbbuh47QA2NjSMiqNQjYGNJTaiBBDsGbxXjwgFkJA45E9FaFzvMvGuJyKJY9Yx9e6KBoSq1ktY38WHkFe7PBLwyZxUowb4fmgexLKiUWfLNzoZhHYu8DuAkgRtVoPRQxZYrqdgkg4PwAF6AE7XHVJEUr6iQHwTWVkp9LajbPXKtFQmVpnFNowcVVrVSabX5aqAmEu1PKVKJjvLwumUwoyRi6NwMqudVKAEqP3vdtmqr1KWzs9mNqgAybP8qaUM9pif9CxTGUKPR5FEsgnJv3WwvdJwbYv2J']
-        appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/")
         result = {'activeRounds': [], 'soldOutRounds': []}
-        for proxyAddress in proxyAddresses:
-            proxyBoxes = appKit.getUnspentBoxes(proxyAddress)
-            for proxyBox in proxyBoxes:
-                logging.info(proxyBox)
-                tokens = list(proxyBox.getTokens())
-                roundInfo = getTokenInfo(tokens[0].getId().toString())
-                if len(tokens) > 1:
-                    vestedInfo = getTokenInfo(tokens[1].getId().toString())
-                    whitelistTokenId = list(proxyBox.getRegisters())[3].toHex()[4:]
+        sql = f'''
+            with prx as (
+                select id, box_id, registers::json, transaction_id, height
+                    , (each(assets)).key as k
+                    , (each(assets)).value::bigint as qty
+                from utxos u
+                where ergo_tree in (
+                    -- Jf7SDZuaVDGiCwCxC7N2y8cuptH3cgNT1nteJK469effW2gNarYn1AxsYjNcP7zYtvzmVjNPMmE3PYJRMC2E7m3yTDBrHvv8voJM35a9ktLb3bNeQ4qEJSyFse3pQeqcTxvPATNAv7RHc3fnAkBf3PsNBGFoRq2nwnciNwUaNcunyfWz2JDbwrBzMT7gMfs8U9YKAKGU1V754PUa1WRccaUfWxDAj5zVVkzkvVNNeQPH2g9GAu539Kc5792XLRwfv5MqaBkQ6KqHw8tgck2e55G4sY6n9ZQ4vboeuVC9JzsuiYraAuc6Lbj1NbPdDRaHXBUAQioDuzRBFxDFwLdmsZXykdvDfJZDytxPoCkzdfMmr8Zchga8vELSydrJ8smXbjWnrySGTZWqcQbJLB1YwPDiGVQvDvvQhRSezJcGMXUXea9zX6cCaeAsrqCULonZKVoeVgCNGte6VFk7PTKJ5W5LrRW1cgkJNRHYrpqPujPN8SoMgLjt1zvCKww5eSuu2RXqyZNVPRxMU3uQd3F2hRjGAmJA6M8Mz5QdZmoXj1LRWnrz1C1E6z6mL1Unry2GYWbxfTsVFRbZVZEv78yn9TUN7cuA163BSoxLVeKwUbGC2uiWeWSm1FzTPNCHHpVtBRfTACKoNbxag9SGgxpsepyxaF7snbXhKtBnqFvyg2ZEiiHXUDjY1Qy8kjf9JrdLmifU6WaZ7VdhNEdHGpf72ivo5sVPNEeUKoKfHAY6WWokivYjeSpKCSLjougKwaNoR79tUWdfN8CEudwUSebWXD92cbnMZxS7QBvGqcUSGRQuuD1uXgeWF8m76xgVH4sQfTuMMvYVWeH8e8bHHqtQMzw2FUajFo2F1mxxwVqvkUQJgmRQXYBndDGiquVCvTqNdZ25eo32gf
+                    '1025040004060402040004020406040804020400040204040400040004000e20011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f040404020e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf040500050005c801050005020400040004000580897a0e20891ed18c9e35ca9e77deb89b0231290649f542c9e205fa61d62c644c68700459040004000402050004040404040604020502d816d601b2db6501fe730000d602b2a5730100d603db63087202d604db6308a7d605b27204730200d606b2a5730300d607db63087206d608b27207730400d609998c7205028c720802d60ae4c6a70411d60b9d9c7209b2720a730500b2720a730600d60cc5a7d60de4c6a7050ed60ee4c6a7060ed60fe4c6a7070ed610b2a5730700d611b2db63087210730800d612e4c672100411d613b27212730900d614b2a5730a00d615b2db63087214730b00d616b27203730c00d196830601938cb2db63087201730d0001730e929a9593b17203730fd801d617b2720373100095938c72170173118c721702731273139d9cc172027314e4c6720104059591720b7315720b73169683090193720cc5b2a473170093c1a7c1720693c2a7c2720693b27204731800b27207731900938c7205018c72080193720ae4c67206041193720de4c67206050e93720ee4c67206060e93720fe4c67206070e96830a0193c17210731a93cbc27210731b938c721101720d938c721102720993b27212731c00b2720a731d00937213b2720a731e00917213731f93b27212732000b2720a73210093b27212732200720993e4c67210050e720c9683030193c27214c2b2a4732300938c721501720c938c72150273249683030193c27202720e938c721601720f938c7216027209'
+                    -- 4qyzRyJzKPEYP9XSTWsXH6hzhMCH1rMx5JvcYpVwWpD79bLDex79Bj6hbLR1NnVVYFFLCGCTSGQDQTkh5dm5d2BQY5bQRpf1AycoDjAEZyQwxiLRpbwB8Kiqyi7mUvb5UcJRdtUQ6sqcDZpgyf3hBUCCy2vg8e8P3wSopzkensJ4SoG86upev1TXacBRqsm54dshaMdToMAyFBLD2DMsZPP89gEZF4UAuLbRxZDiK871fT1NVCwa7pWK29ySAipERxWwno112zQoF5a9htj37VavXkYTzcZQ24iVjrkrfxU12huR9ZPkvLHkrdu8y8WgFdFr5oKFMsm2teFCrXMx8n9MUEEymFSWhMXBvg5UAkKW5ido9Zo2BYWDj81ew5fUoWhdJGGCu33SegnLzbNiB6VaRNusiZSPwLBA2NZ5yF5UJrUnMZAqPqWZb7zZ2zL2cBwSrFJ7kxSrQeaJ1RNGcQiDyXmzDE9vpyWTbG9W1mW5KzzMD4B9FZoUcRYbmFdp31H5Ho27rTNfx64tr7Crgjm7WfWVp8zPXjxfjW6su6u2GK6cx3feavARGNjyKKrYW3H8yPFi1Y9ruwmNwTyW96Z42FE1D28VuD5C2SJYmegbg9nPKc3ByUbS5CHJQQ4DLX9DdgZvbtq44VsiR2VmbpZNrjMwEHybRcoiDeLNhoPqxinXNvFNjg9gSca1C47EiYy4S94eFqbY1rrcF84siSEUq31e9A6snNTcDEiQ3efCcEyCb1JgA5iLDU7kqoi6xxCt7TKVfA96EKSczjaqBk5jvrmAhZrDpwrKm1sSf8py21tUgbdyDoJccUdRniahbibSRc5PVpukkkKtAUXEDG91qNbbuh47QA2NjSMiqNQjYGNJTaiBBDsGbxXjwgFkJA45E9FaFzvMvGuJyKJY9Yx9e6KBoSq1ktY38WHkFe7PBLwyZxUowb4fmgexLKiUWfLNzoZhHYu8DuAkgRtVoPRQxZYrqdgkg4PwAF6AE7XHVJEUr6iQHwTWVkp9LajbPXKtFQmVpnFNowcVVrVSabX5aqAmEu1PKVKJjvLwumUwoyRi6NwMqudVKAEqP3vdtmqr1KWzs9mNqgAybP8qaUM9pif9CxTGUKPR5FEsgnJv3WwvdJwbYv2J
+                    , '103404020e205a50f4348840095fed4e84f94c6f1c0b540cc41d5c4dfc8b1f483e9c72315ecd040004060400040604080400040204040400040004000e20011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f040404020e2003faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf040500050005c8010500050204000400040004020402040204020580897a010104000400040205000404040404060408040c040a040e040c041004020502040004000402040a04000400d804d601b2a5730000d602c27201d60393cb72027301d604e4c6a7060e957203d812d605b2db6501fe730200d606b2a5730300d607db63087206d608b2db63087201730400d6098c720802d60ae4c6a70411d60b9d9c7209b2720a730500b2720a730600d60cc5a7d60db2a5730700d60edb6308a7d60fdb6308720dd610e4c6a7050ed611e4c6a7070ed612e4c672010411d613b27212730800d614b2a5730900d615b2db63087214730a00d616b27207730b00d196830601938cb2db63087205730c0001730d929a9593b17207730ed801d617b27207730f0095938c72170173108c721702731173129d9cc172067313e4c6720504059591720b7314720b73159683090193720cc5b2a473160093c1a7c1720d93c2a7c2720d93b2720e731700b2720f7318009593b1720f7319938cb2720e731a00027209938cb2720f731b0002998cb2720e731c0002720993720ae4c6720d0411937210e4c6720d050e937204e4c6720d060e937211e4c6720d070e96830d0193c17201731d7203938c7208017210731e93b27212731f00b2720a732000937213b2720a732100917213732293b27212732300b2720a73240093b27212732500720993b27212732600b2720a73270093b27212732800b2720a73290093b27212732a00b2720a732b0093e4c67201050e720c9683030193c27214e4c6b2a4732c00050e938c721501720c938c721502732d9683030193c272067204938c7216017211938c7216027209d802d605db6308a7d606b2a5732e00d196830601937202720493c17201c1a793b2db63087201732f00b2720573300092db6903db6503feb2e4c6a7041173310093c27206c2a793b2db63087206733200b27205733300'
+                )
+            )
+            -- remaining tokens and decimals
+            , ar1 as (
+                select prx.id, tok.token_name, tok.token_id, tok.decimals
+                from prx
+                join tokens tok on tok.token_id = k
+                where prx.qty != 1
+            )
+            -- round name
+            , ar2 as (
+                select prx.id, tok.token_name, tok.token_id, null
+                from prx
+                join tokens tok on tok.token_id = k
+                where prx.qty = 1
+            )
+            select prx.id, prx.box_id, prx.registers::json, prx.transaction_id, prx.k
+                , ar2.token_id as proxy_nft 
+                , prx.qty/power(10, ar1.decimals::int) as remaining
+                , ar1.token_name
+                , ar2.token_name as round_name
+            from prx
+                left join ar1 on ar1.id = prx.id
+                left join ar2 on ar2.id = prx.id
+            where prx.qty > 1
+        '''
+        with engDanaides.begin() as con:
+            proxyBoxes = con.execute(sql).fetchall()
+
+        for proxyBox in proxyBoxes:
+            try:
+                logging.info(f'''round: {proxyBox['round_name']}/{proxyBox["remaining"]}''')
+                if proxyBox["remaining"] > 10.0:
                     result['activeRounds'].append({
-                        'roundName': roundInfo["name"], 
-                        'proxyNFT': tokens[0].getId().toString(), 
-                        'remaining': tokens[1].getValue()*10**(-1*vestedInfo["decimals"]),
-                        'Whitelist tokenId': whitelistTokenId
-                        })
+                        'roundName': proxyBox["round_name"], 
+                        'proxyNFT': proxyBox['proxy_nft'], 
+                        'remaining': proxyBox["remaining"],
+                        'Whitelist tokenId': proxyBox["registers"]['R7'][4:]
+                    })
                 else:
-                    result['soldOutRounds'].append({'roundName': roundInfo["name"], 'proxyNFT': tokens[0].getId().toString()})
+                    result['soldOutRounds'].append({
+                        'roundName': proxyBox["round_name"], 
+                        'proxyNFT': proxyBox["registers"]['R4']
+                    })
+            except Exception as e:
+                logging.debug(e)
+                pass
+        
         return result
 
     except Exception as e:

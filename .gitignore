@@ -50,3 +50,4 @@ MANIFEST
 ### misc
 .DS_Store
 *.pem
+hs_err_*.log
