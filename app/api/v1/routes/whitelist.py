@@ -250,7 +250,7 @@ def adjustWhitelistEarlyBird(event: WhitelistEvent):
     # check if early bird config is present
     if not event:
         return None
-    if "early_bird" not in event.additionalDetails:
+    if "early_bird" not in event.additionalDetails or event.additionalDetails["early_bird"] == None:
         return event
 
     # check if early bird period
