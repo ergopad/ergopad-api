@@ -16,6 +16,7 @@ from db.schemas.whitelistEvents import CreateWhitelistEvent, WhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
+from db.session import engine
 
 CFG = Config[Network]
 
@@ -79,7 +80,7 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
     try:
         eventName = whitelist.event
         # logging.debug(DATABASE)
-        con = create_engine(DATABASE)
+        # eng = create_engine(DATABASE)
         logging.debug('sql')
         sql = text(f"""
             with wht as (
@@ -105,7 +106,8 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
             where evt.name = :eventName
                 and evt."isWhitelist" = 1
         """)
-        res = con.execute(sql, {'eventName': eventName}).fetchone()
+        with engine.begin() as con:
+            res = con.execute(sql, {'eventName': eventName}).fetchone()
         eventId = res['id']
 
         # event not found
@@ -142,7 +144,9 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
 
         # continue with signup
         sqlFindWallet = text(f"select id from wallets where address = :address")
-        resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
+        resFindWallet = None
+        with engine.begin() as con:
+            resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
         # logging.debug(f'find wallet: {resFindWallet["id"]}')
 
         # does wallet exist, or do we need to create it?
@@ -163,8 +167,9 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                 );
             ''')
             logging.debug(sql)
-            res = con.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
-            resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
+            with engine.begin() as con:
+                res = con.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
+                resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
 
         # found or created, get wallet address
         walletId = resFindWallet['id']
@@ -178,7 +183,9 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                 and "eventId" = :eventId
         ''')
         # logger.warning(f'check signup: {sqlCheckSignup}')
-        resCheckSignup = con.execute(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId}).fetchone()
+        resCheckSignup = None
+        with engine.begin() as con:
+            resCheckSignup = con.execute(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId}).fetchone()
         logging.debug(f'check signup: {resCheckSignup}')
 
         # already signed up?
@@ -196,7 +203,8 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , 1 -- isWhitelist
                 );
             ''')
-            con.execute(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
+            with engine.begin() as con:
+                con.execute(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
 
             # use obfuscated identifier to prevent bots
             ipHash = get_md5_hash(request.client.host)
@@ -209,7 +217,8 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                 )
             ''')
             # logger.warning(f'ip hash: {sqlIpHash}')
-            resIpHash = con.execute(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
+            with engine.begin() as con:
+                resIpHash = con.execute(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
             logging.debug(f'ip hash: {resIpHash}')
 
             # whitelist success
