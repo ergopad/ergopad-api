@@ -32,7 +32,7 @@ myself = lambda: inspect.stack()[1][3]
 #endregion LOGGING
 
 @r.get("/summary/{eventName}")
-async def summary(eventName):
+def summary(eventName):
     try:
         headers = {'Content-Type': 'application/json', 'api_key': CFG.ergopadApiKey}
 
@@ -61,7 +61,7 @@ async def summary(eventName):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: events info {e}')
 
 @r.get("/info/{eventName}")
-async def events(eventName):
+def events(eventName):
     # return {'hello': 'world'}
     try:
         if eventName != '_':

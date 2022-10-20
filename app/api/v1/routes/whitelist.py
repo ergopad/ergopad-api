@@ -16,6 +16,7 @@ from db.schemas.whitelistEvents import CreateWhitelistEvent, WhitelistEvent
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
+from db.session import engine
 
 CFG = Config[Network]
 
@@ -62,7 +63,7 @@ class Whitelist(BaseModel):
 
 # region ROUTES
 @r.get("/checkIp")
-async def go(request: Request):
+def go(request: Request):
     # return {}
     logging.debug(request.client.host)
     return {
@@ -74,12 +75,12 @@ async def go(request: Request):
 # 1. Switch from pd.Dataframe().to_sql
 # 2. rewrite logic for max sigusd allowance
 @r.post("/signup", name="whitelist:signup")
-async def whitelistSignUp(whitelist: Whitelist, request: Request):
+def whitelistSignUp(whitelist: Whitelist, request: Request):
     NOW = time.time()
     try:
         eventName = whitelist.event
         # logging.debug(DATABASE)
-        con = create_engine(DATABASE)
+        # eng = create_engine(DATABASE)
         logging.debug('sql')
         sql = text(f"""
             with wht as (
@@ -105,7 +106,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             where evt.name = :eventName
                 and evt."isWhitelist" = 1
         """)
-        res = con.execute(sql, {'eventName': eventName}).fetchone()
+        with engine.begin() as con:
+            res = con.execute(sql, {'eventName': eventName}).fetchone()
         eventId = res['id']
 
         # event not found
@@ -124,7 +126,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist funds complete.")
 
         # special checks
-        validation = await checkEventConstraints(eventId, whitelist)
+        validation = checkEventConstraints(eventId, whitelist)
         if not validation[0]:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup failed. {validation[1]}")
 
@@ -142,7 +144,9 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
 
         # continue with signup
         sqlFindWallet = text(f"select id from wallets where address = :address")
-        resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
+        resFindWallet = None
+        with engine.begin() as con:
+            resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
         # logging.debug(f'find wallet: {resFindWallet["id"]}')
 
         # does wallet exist, or do we need to create it?
@@ -163,8 +167,9 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 );
             ''')
             logging.debug(sql)
-            res = con.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
-            resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
+            with engine.begin() as con:
+                res = con.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
+                resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
 
         # found or created, get wallet address
         walletId = resFindWallet['id']
@@ -178,7 +183,9 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 and "eventId" = :eventId
         ''')
         # logger.warning(f'check signup: {sqlCheckSignup}')
-        resCheckSignup = con.execute(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId}).fetchone()
+        resCheckSignup = None
+        with engine.begin() as con:
+            resCheckSignup = con.execute(sqlCheckSignup, {'walletId': walletId, 'eventId': eventId}).fetchone()
         logging.debug(f'check signup: {resCheckSignup}')
 
         # already signed up?
@@ -196,7 +203,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , 1 -- isWhitelist
                 );
             ''')
-            con.execute(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
+            with engine.begin() as con:
+                con.execute(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
 
             # use obfuscated identifier to prevent bots
             ipHash = get_md5_hash(request.client.host)
@@ -209,7 +217,8 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
                 )
             ''')
             # logger.warning(f'ip hash: {sqlIpHash}')
-            resIpHash = con.execute(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
+            with engine.begin() as con:
+                resIpHash = con.execute(sqlIpHash, {'walletId': walletId, 'eventId': eventId, 'ipHash': ipHash})
             logging.debug(f'ip hash: {resIpHash}')
 
             # whitelist success
@@ -225,7 +234,7 @@ async def whitelistSignUp(whitelist: Whitelist, request: Request):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
 
 
-async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db())):
+def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db())):
     whitelistEvent = adjustWhitelistEarlyBird(
         get_whitelist_event_by_event_id(db, eventId)
     )
@@ -236,7 +245,7 @@ async def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_
     address = whitelist.ergoAddress
     if (constraints["min_stake"] > 0):
         try:
-            stakedRes = await staked(AddressList(addresses=[address]))
+            stakedRes = staked(AddressList(addresses=[address]))
             if stakedRes["totalStaked"] >= constraints['min_stake']:
                 return (True, "ok")
             else:
@@ -250,7 +259,7 @@ def adjustWhitelistEarlyBird(event: WhitelistEvent):
     # check if early bird config is present
     if not event:
         return None
-    if "early_bird" not in event.additionalDetails:
+    if "early_bird" not in event.additionalDetails or event.additionalDetails["early_bird"] == None:
         return event
 
     # check if early bird period
@@ -268,7 +277,7 @@ def adjustWhitelistEarlyBird(event: WhitelistEvent):
 
 
 @r.get("/summary/{eventName}", name="whitelist:summary")
-async def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
+def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
     try:
         logging.debug(DATABASE)
         con = create_engine(DATABASE)

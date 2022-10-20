@@ -1,13 +1,13 @@
-from configparser import SafeConfigParser
+# from configparser import SafeConfigParser
 from decimal import Decimal
 from enum import Enum
 from typing import Dict
-from xmlrpc.client import Boolean
 import requests, json
 from core.auth import get_current_active_superuser
 from db.session import engDanaides
+# from wallet import Wallet
 from ergo_python_appkit.appkit import ErgoAppKit
-from wallet import Wallet
+from org.ergoplatform.appkit import ErgoValue
 
 from sqlalchemy import create_engine, text
 from starlette.responses import JSONResponse
@@ -35,7 +35,7 @@ myself = lambda: inspect.stack()[1][3]
 
 #region INIT
 DATABASE = CFG.connectionString
-EXPLORER = CFG.csExplorer
+# EXPLORER = CFG.csExplorer
 STAKE_ADDRESS = '3eiC8caSy3jiCxCmdsiFNFJ1Ykppmsmff2TEpSsXY1Ha7xbpB923Uv2midKVVkxL3CzGbSS2QURhbHMzP9b9rQUKapP1wpUQYPpH8UebbqVFHJYrSwM3zaNEkBkM9RjjPxHCeHtTnmoun7wzjajrikVFZiWurGTPqNnd1prXnASYh7fd9E2Limc2Zeux4UxjPsLc1i3F9gSjMeSJGZv3SNxrtV14dgPGB9mY1YdziKaaqDVV2Lgq3BJC9eH8a3kqu7kmDygFomy3DiM2hYkippsoAW6bYXL73JMx1tgr462C4d2PE7t83QmNMPzQrD826NZWM2c1kehWB6Y1twd5F9JzEs4Lmd2qJhjQgGg4yyaEG9irTC79pBeGUj98frZv1Aaj6xDmZvM22RtGX5eDBBu2C8GgJw3pUYr3fQuGZj7HKPXFVuk3pSTQRqkWtJvnpc4rfiPYYNpM5wkx6CPenQ39vsdeEi36mDL8Eww6XvyN4cQxzJFcSymATDbQZ1z8yqYSQeeDKF6qCM7ddPr5g5fUzcApepqFrGNg7MqGAs1euvLGHhRk7UoeEpofFfwp3Km5FABdzAsdFR9'
 STAKE_KEY_ID = '1028de73d018f0c9a374b71555c5b8f1390994f2f41633e7b9d68f77735782ee'
 
@@ -50,7 +50,7 @@ class TXFormat(str, Enum):
 #region ROUTES
 # current node info (and more)
 @r.get("/info", name="blockchain:info")
-async def getInfo():
+def getInfo():
     try:
         st = time() # stopwatch
         nodeInfo = {}
@@ -81,7 +81,7 @@ async def getInfo():
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid blockchain info ({e})')
 
 @r.get("/tokenomics/{tokenId}", name="blockchain:tokenomics")
-async def tokenomics(tokenId):
+def tokenomics(tokenId):
     try:
         if tokenId == 'd71693c49a84fbbecd4908c94813b46514b18b67a99952dc1e6e4791556de413': 
             token = 'ergopad'
@@ -174,7 +174,7 @@ def getEmmissionAmount(token_id):
 
 
 @r.get("/ergusdoracle", name="blockchain:ergusdoracle")
-async def ergusdoracle():
+def ergusdoracle():
     res = requests.get("https://erg-oracle-ergusd.spirepools.com/frontendData")
     return json.loads(res.json())
 
@@ -199,7 +199,7 @@ def sqlTokenValue(address, token_id, con):
 
 # paideia tokenId: 1fd6e032e8476c4aa54c18c1a308dce83940e8f4a28f576440513ed7326ad489
 @r.get("/paideiaInCirculation", name="blockchain:paideiaInCirculation")
-async def paideiaInCirculation():
+def paideiaInCirculation():
     try:
         sql = text(f'''
             select token_name
@@ -225,7 +225,7 @@ async def paideiaInCirculation():
 
 # request by CMC/coingecko (3/7/2022)
 @r.get("/ergopadInCirculation", name="blockchain:ergopadInCirculation")
-async def ergopadInCirculation():
+def ergopadInCirculation():
     #
     # in circulation = total supply - vested - emitted - stake pool
     # 
@@ -254,7 +254,7 @@ async def ergopadInCirculation():
 
 # request by CMC/coingecko (3/7/2022)
 @r.get("/totalSupply/{tokenId}", name="blockchain:totalSupply")
-async def totalSupply(tokenId):
+def totalSupply(tokenId):
     #
     # total supply = emission amount - burned
     #
@@ -281,6 +281,91 @@ async def totalSupply(tokenId):
         logging.error(f'ERR:{myself()}: invalid totalSupply request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid totalSupply request ({e})')
 
+# get box by id
+@r.get("/getBoxById/{box_id}", name="blockchain:getBoxById")
+def getBoxById(box_id, isStateBox=False):
+    try:
+        sql = text(f'''
+            select box_id
+                , transaction_id
+                , creation_height
+                , height
+                , ergo_tree
+                , assets::json
+                , registers::json
+                , nergs
+            from utxos 
+            where box_id = :box_id
+        ''')
+        with engDanaides.begin() as con:
+            box = con.execute(sql, {'box_id': box_id}).fetchone()
+
+        # find decimals for the tokens in this box
+        tknList = "','".join([k for k in box['assets']])
+        sqlTokens = f'''
+            select token_id, decimals
+                -- , token_name, token_type
+            from tokens
+            where token_id in ('{tknList}')
+        '''
+        with engDanaides.begin() as con:
+            tkn = con.execute(sqlTokens).fetchall()
+        token_decimals = {}
+        for t in tkn:
+            token_decimals[t['token_id']] = t['decimals']
+        
+        # format assets
+        ass = []
+        i = 0
+        for k, v in reversed(box['assets'].items()):
+            ass.append({
+                'tokenId': k,
+                'index': i,
+                'amount': v,
+                'name': None, # dont need
+                'decimals': token_decimals[k],
+                'type': None, # dont need
+            })
+            i += 1
+
+        # format registers
+        reg = {}
+        for k, v in box['registers'].items():
+            r = None
+            if isStateBox:
+                if k == 'R5': r = v[4:]
+                if k == 'R4': r = str([ErgoValue.fromHex(v).getValue().apply(0), ErgoValue.fromHex(v).getValue().apply(1)])
+            else:
+                r = ErgoValue.fromHex(v).getValue()                
+            reg[k] = {
+                'serializedValue': v,
+                'sigmaType': None, # dont need
+                'renderedValue': r,
+            }
+
+        # contents of the stake box
+        res = {
+            'boxId': box['box_id'],
+            'transactionId': box['transaction_id'],
+            'blockId': None, # dont need
+            'value': box['nergs'],
+            'index': -1, # dont need
+            'globalIndex': -1, # dont need
+            'creationHeight': box['creation_height'],
+            'settlementHeight': box['height'],
+            'ergoTree': box['ergo_tree'],
+            'assets': ass,
+            'additionalRegisters': reg,
+            'spentTransactionId': None, # dont need
+            'mainChain': True # dont need
+        }
+
+        # this result emulates {CFG.explorer}/boxes/{box_id}
+        return res
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: invalid box ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid box, {box_id}.')
 
 def getInputBoxes(boxes, txFormat: TXFormat):
     if txFormat==TXFormat.NODE:
@@ -313,7 +398,7 @@ def getInputBoxes(boxes, txFormat: TXFormat):
     return None
 
 
-def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
+def getNFTBox(tokenId: str, allowCached=False, includeMempool=False):
     try:
         if includeMempool:
             ok = False
@@ -368,170 +453,20 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=True):
                 return items[0]
             else:
                 logging.error(f'ERR:{myself()}: multiple nft box or tokenId doesn\'t exist')
+                return {}
 
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find nft box ({e})')
         return None
- 
 
 @r.get("/signingRequest/{txId}", name="blockchain:signingRequest")
 def signingRequest(txId):
     return cache.get(f'ergopay_signing_request_{txId}')
 
-
 # @r.get("/getUnspentBoxesByTokenId/{tokenId}", name='blockchain:getUnspentBoxesByTokenId')
 def getUnspentBoxesByTokenId(tokenId, useExplorerApi=False):
-    try:
-        # # is this a valid token/avoid sql injection attack
-        # try: 
-        #     if int(tokenId, 16) && (len(tokenId) == 64):
-        #         sql = f'''
-        #             select box_id, registers::json
-        #             from utxos
-        #             where assets->{tokenId!r} is not null
-        #         '''
-        #         with engDanaides.begin() as con:
-        #             res = con.execute(sql, {}).fetchall()
-        #         boxes = []
-        #         for data in res:
-        #             boxes.append({ 
-        #                 'boxId': data["box_id"],
-        #                 'additionalRegisters': data["additional_registers"],
-        #             })
-        #    
-        #         return boxes
-        #
-        #     else:
-        #         return {}
-        # 
-        # except ValueError as e: 
-        #     logging.error(f'ERR:{myself()}: invalid token id ({e})')
-        #     return {}
-        #
-        # except Exception as e:
-        #     logging.error(f'ERR:{myself()}: failed to get boxes by token id ({e})')
-        #     return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to get boxes by token id ({e})')
-
-        if not useExplorerApi:
-            con = create_engine(EXPLORER)
-            sql = f"""    
-                select
-                    o.box_id as box_id
-                    , o.additional_registers as additional_registers
-                from node_outputs o
-                    left join node_inputs i on i.box_id = o.box_id
-                    join node_assets a on a.box_id = o.box_id
-                        and a.header_id = o.header_id
-                where
-                    o.main_chain = true
-                    and i.box_id is null -- output with no input = unspent
-                    and a.token_id = {tokenId!r}
-            """
-            res = con.execute(sql).fetchall()
-            boxes = []
-            for data in res:
-                boxes.append({ 
-                    'boxId': data["box_id"],
-                    'additionalRegisters': data["additional_registers"],
-                })
-
-            return boxes
-        
-        # not implemented
-        else:
-            return {}
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: failed to get boxes by token id ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to get boxes by token id ({e})')
-
-
-# GET unspent stake boxes
-# Note: Run with useExplorerApi = True in case local explorer service failure
-def getUnspentStakeBoxes(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS, useExplorerApi=False):
-    if useExplorerApi:
-        # slow, makes 10+ api calls each taking 1 to 1.5 seconds on average
-        boxes = []
-        offset = 0
-        limit = 100
-        done = False
-        while not done:
-            res = getTokenBoxes(stakeTokenId, offset, limit)
-            boxes.extend(res)
-            offset += limit
-            if len(res) < limit:
-                done = True
-        return boxes
-    else:
-        # fast, average response time around 3 seconds
-        return getUnspentStakeBoxesFromExplorerDB(stakeTokenId, stakeAddress)
-
-
-# GET unspent boxes by token id direct from explorer db
-def getUnspentStakeBoxesFromExplorerDB(stakeTokenId: str = STAKE_KEY_ID, stakeAddress: str = STAKE_ADDRESS):
-    try:
-        con = create_engine(EXPLORER)
-        sql = f"""
-            -- /unspent/byTokenId (optimized for stakeTokenId)
-            select
-                o.box_id as box_id,
-                -- additional registers in JSON format
-                -- R4 penalty
-                -- R5 stake key
-                o.additional_registers as additional_registers,
-                -- erg value
-                o.value as value,
-                -- address
-                o.address as address,
-                a.token_id as token_id,
-                -- index of the token in assets list
-                -- 0 stake token
-                -- 1 ergopad staked
-                a.index as index,
-                -- amount of token in the box
-                a.value as token_value
-            from
-                node_outputs o
-                join node_assets a on a.box_id = o.box_id
-                and a.header_id = o.header_id
-            where
-                o.box_id in (
-                    -- sub query to get unspent box ids
-                    -- non correlated sub query => executed once
-                    select
-                        o.box_id as box_id
-                    from
-                        node_outputs o
-                        left join node_inputs i on i.box_id = o.box_id
-                        join node_assets a on a.box_id = o.box_id
-                        and a.header_id = o.header_id
-                    where
-                        o.main_chain = true
-                        and o.address = {stakeAddress!r} -- all stake boxes are for this address
-                        and i.box_id is null -- output with no input = unspent
-                        and a.token_id = {stakeTokenId!r} -- stake key token id
-                        and coalesce(a.value, 0) > 0
-                );
-        """
-        res = con.execute(sql).fetchall()
-        boxes = {}
-        for data in res:
-            if data["box_id"] in boxes:
-                boxes[data["box_id"]]["assets"].insert(data["index"], {"tokenId": data["token_id"], "index": data["index"], "amount": data["token_value"]})
-            else:
-                boxes[data["box_id"]] = {
-                    "boxId": data["box_id"],
-                    "additionalRegisters": data["additional_registers"],
-                    "address": data["address"],
-                    "value": data["value"],
-                    "assets": [{"tokenId": data["token_id"], "index": data["index"], "amount": data["token_value"]}]
-                }
-        return list(boxes.values())
-        
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: failed to read data from explorer db ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: failed to read data from explorer db ({e})')
-
+    content = f'this method is being replaced, please contact admin'
+    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=content)
 
 # GET token boxes legacy code using explorer API
 def getTokenBoxes(tokenId: str, offset: int = 0, limit: int = 100, retries: int = 10):
@@ -645,11 +580,11 @@ class AirdropRequest(BaseModel):
 
 
 @r.post("/airdrop", name="blockchain:airdrop")
-async def airdrop( 
+def airdrop( 
     req: AirdropRequest,
     current_user=Depends(get_current_active_superuser)
 ):
-    appKit = ErgoAppKit(CFG.node,Network,CFG.explorer + "/",CFG.ergopadApiKey)
+    appKit = ErgoAppKit(CFG.node, Network, CFG.explorer + "/",CFG.ergopadApiKey)
     airdropTokenInfo = getTokenInfo(req.tokenId)
     nErgRequired = 0
     tokensRequired = 0
@@ -684,7 +619,7 @@ async def airdrop(
 
 
 @r.get("/tvl/{tokenId}", name="blockchain:tvl")
-async def tvl(tokenId: str):
+def tvl(tokenId: str):
     try:
         cached = cache.get(f"get_tvl_{tokenId}")
         if cached:
