@@ -28,13 +28,14 @@ projects_router = r = APIRouter()
     name="projects:all-projects"
 )
 def projects_list(
+    include_drafts: bool=False,
     db=Depends(get_db),
 ):
     """
     Get all projects
     """
     try:
-        projects = get_projects(db)
+        projects = get_projects(db, include_drafts)
         return projects
     except Exception as e:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'{str(e)}')

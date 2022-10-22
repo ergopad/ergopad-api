@@ -19,3 +19,4 @@ class Project(Base):
     roadmap = Column(JSON)
     team = Column(JSON)
     tokenomics = Column(JSON)
+    isDraft = Column(Boolean)
