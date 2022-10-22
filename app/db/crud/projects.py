@@ -12,9 +12,13 @@ from db.schemas import projects as schemas
 
 
 def get_projects(
-    db: Session, skip: int = 0, limit: int = 100
+    db: Session, include_drafts: bool, skip: int = 0, limit: int = 100
 ) -> t.List[schemas.Project]:
-    return db.query(models.Project).offset(skip).limit(limit).all()
+    if include_drafts:
+        return db.query(models.Project).offset(skip).limit(limit).all()
+    return db.query(models.Project).filter(
+        models.Project.isDraft == False
+    ).offset(skip).limit(limit).all()
 
 
 def generate_project_slug(title: str) -> str:
@@ -54,7 +58,8 @@ def create_project(db: Session, project: schemas.CreateAndUpdateProject):
         socials=project.socials.dict(),
         roadmap=project.roadmap.dict(),
         team=project.team.dict(),
-        tokenomics=project.tokenomics.dict()
+        tokenomics=project.tokenomics.dict(),
+        isDraft=project.isDraft
     )
     db.add(db_project)
     db.commit()

@@ -63,6 +63,7 @@ class CreateAndUpdateProject(BaseModel):
     roadmap: RoadmapJSONList
     team: TeamMemberJSONList
     tokenomics: TokenomicsJSONList
+    isDraft: bool = False
 
 
 class Project(CreateAndUpdateProject):
