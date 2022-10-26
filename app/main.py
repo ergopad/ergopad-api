@@ -86,7 +86,6 @@ async def add_logging_and_process_time(req: Request, call_next):
     except Exception as e:
         logging.debug(e)
         return resNext
-        pass
 
 # catch all route (useful?)
 # @app.api_route("/{path_name:path}", methods=["GET"])

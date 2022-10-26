@@ -3,7 +3,7 @@ version: '3.9'
 services:
   api:
     container_name: api
-    env_file: ${ENV_FILE}
+    env_file: .env
     build:
       context: .
       dockerfile: Dockerfile
@@ -17,21 +17,16 @@ services:
             max-size: 10m
     volumes: 
      - ./app:/app
-    networks:
-      - ergopad-net
-    ### DEV
-    # command: tail /dev/null -f
-    command: uvicorn main:app --reload --workers ${UVICORN_WORKERS} --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '*'
-    # command: uvicorn main:app --reload --workers 1 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors
-    ### PROD
-    # command: unitd-debug --no-daemon --control unix:/var/run/control.unit.sock
-    # command: unitd --no-daemon --control unix:/var/run/control.unit.sock
-    ### TESTED
-    # command: gunicorn main:app --workers 9 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${API_PORT} --timeout 60
-    # NOTE: 5/2022 Leif, using gunicorn seems to lock up on certain calls; could not find a configuration that worked; uvicorn does not have same issue
-    # uvicorn.workers.UvicornH11Worker # use for pure python implementation
-    # command: python -m gunicorn --bind :8000 --workers 4 main:app --worker-class uvicorn.workers.UvicornWorker --preload --timeout 0 --graceful-timeout 0 --worker-tmp-dir /dev/shm --keep-alive 2 
+    # networks:
+    #   - ergopad-data_net
+    #   - ergopad-node_net
+    command: uvicorn main:app --reload --workers 4 --reload-dir /app --host 0.0.0.0 --port ${API_PORT} --proxy-headers --use-colors --forwarded-allow-ips '52.72.64.235'
+    # command: uvicorn main:app --workers 4 --host 0.0.0.0 --port ${API_PORT}
 
 networks:
-  ergopad-net:
-    external: true
+  # ergopad-data_net:
+  #   external: true
+  # ergopad-node_net:
+  #   external: true
+  net:
+    driver: bridge
