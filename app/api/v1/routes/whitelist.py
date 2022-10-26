@@ -121,7 +121,8 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist signup between {res['start_dtz']} and {res['end_dtz']}.")
 
         # is funding complete?
-        if res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd']):
+        # do not check for funding complete for staker snapshots
+        if (res['allowance_sigusd'] >= (res['total_sigusd'] + res['buffer_sigusd'])) and not isStakerSnapshotWhitelist(eventId):
             logging.warning(f"whitelist funds complete.")
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f"whitelist funds complete.")
 
@@ -253,6 +254,12 @@ def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db()))
         except:
             return (False, "API failed. Could not validate if enough ergopad is staked.")
     return (True, "ok")
+
+
+def isStakerSnapshotWhitelist(eventId: int, db=next(get_db())):
+    whitelistEvent = get_whitelist_event_by_event_id(db, eventId)
+    additionalDetails = whitelistEvent.additionalDetails
+    return "staker_snapshot_whitelist" in additionalDetails and additionalDetails["staker_snapshot_whitelist"]
 
 
 def adjustWhitelistEarlyBird(event: WhitelistEvent):
