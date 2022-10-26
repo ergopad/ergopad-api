@@ -1,5 +1,5 @@
 # FROM tiangolo/uvicorn-gunicorn-fastapi:python3.8
-FROM python:3
+FROM python:3.10
 
 COPY ./app /app
 WORKDIR /app
@@ -18,4 +18,3 @@ RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
 CMD tail /dev/null -f
- 
