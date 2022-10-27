@@ -11,9 +11,9 @@ assignees: ''
 AHT used as an example for template
 ```
 project wallet: _________ (is this ergopad-owned?)
-seller address: _________
+seller address: _________ (most likely create this new for the IDO)
 token name: _________ (i.e. AHT)
-token id: _________
+token id: _________ (create this on the node wallet)
 ```
 1. gather address/token_id
 2. fill out template json for rounds
@@ -26,6 +26,7 @@ token id: _________
 ### Notes
 - when minting, token name typically abbv+UPPER: AHT
 - unlock node wallet when calling bootstrap endpoint
+- for amounts -like roundAllocation- do not include the additional decimals (i.e. 12 tokens with 2 decimals would only be 12 and not 1200)
 - consider making the whitelist multiplier at least 1.1 (or 2 if can't do float) to have tokens to test with
 - roundName as [token name] [round] Round: EPOS Staker Round
 - tgeTime is when vesting starts
@@ -38,7 +39,7 @@ token id: _________
 {
     "roundName": "Auction House Seed Round",
     "tokenId": "18c938e1924fc3eadc266e75ec02d81fe73b56e4e9f4e268dffffcb30387c42d",
-    "roundAllocation": 90000000,
+    "roundAllocation": 90000000, 
     "vestingPeriods": 152,
     "vestingPeriodDuration_ms": 86400000,
     "cliff_ms": 2628000000,
