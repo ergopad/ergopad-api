@@ -141,7 +141,7 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to find stake state box')
         
         stakeBox = getBoxById(req.stakeBox, isStateBox=True)
-        stakeBox['address'] = requests.get(f'http://quicknode:9053/utils/ergoTreeToAddress/{stakeBox["ergoTree"]}').json()['address']
+        stakeBox['address'] = requests.get(f'{CFG.node}/utils/ergoTreeToAddress/{stakeBox["ergoTree"]}').json()['address']
         # remaining = int(req.stakeBox["assets"][1]["amount"]) - amountToUnstake
         remaining = 0
         for ass in stakeBox["assets"]:
