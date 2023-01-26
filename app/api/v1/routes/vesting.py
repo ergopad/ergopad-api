@@ -542,6 +542,73 @@ def vestingV2(req: AddressList):
         logging.error(f'ERR:{myself()}: unable to build vesting request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
+@r.get("/vestedWithKey/{key}", "vesting:vestedWithKey")
+def vestedWithKey(key: str):
+    try:
+        # find vesting tokens
+        vested = {}
+        sql = f'''
+            select 
+                  v.box_id
+                , v.ergo_tree
+                , v.remaining
+                , v.vesting_key_id
+                , v.parameters
+                , t.token_name
+                , t.decimals
+                , u.assets[v.token_id] as redeemed
+            from vesting v
+                join tokens t on t.token_id = v.token_id
+                join utxos u on u.box_id = v.box_id
+            where v.vesting_key_id = %s
+        '''
+        with engDanaides.begin() as con:
+            res = con.execute(sql, (key,)).fetchall()
+
+        # no vesting for key
+        if res is None:
+            return vested
+
+        # parse vesting row
+        for row in res:
+            if row['token_name'] not in vested:
+                vested[row['token_name']] = []
+
+            # parse params
+            parameters = ErgoAppKit.deserializeLongArray(row['parameters'])            
+            blockTime           = int(time()*1000)
+            redeemPeriod        = parameters[0]
+            numberOfPeriods     = parameters[1]
+            vestingStart        = parameters[2]
+            totalVested         = parameters[3]
+            timeVested          = blockTime - vestingStart
+            periods             = max(0, int(timeVested/redeemPeriod))
+            redeemed            = totalVested - int(row['redeemed'])
+            if row['ergo_tree'] == '1012040204000404040004020406040c0408040a050004000402040204000400040404000400d812d601b2a4730000d602e4c6a7050ed603b2db6308a7730100d6048c720302d605db6903db6503fed606e4c6a70411d6079d997205b27206730200b27206730300d608b27206730400d609b27206730500d60a9972097204d60b95917205b272067306009d9c7209b27206730700b272067308007309d60c959272077208997209720a999a9d9c7207997209720b7208720b720ad60d937204720cd60e95720db2a5730a00b2a5730b00d60fdb6308720ed610b2720f730c00d6118c720301d612b2a5730d00d1eded96830201aedb63087201d901134d0e938c721301720293c5b2a4730e00c5a79683050193c2720ec2720193b1720f730f938cb2720f731000017202938c7210017211938c721002720cec720dd801d613b2db630872127311009683060193c17212c1a793c27212c2a7938c7213017211938c721302997204720c93e4c67212050e720293e4c6721204117206':
+                tgeNum              = parameters[4]
+                tgeDenom            = parameters[5]
+                tgeTime             = parameters[6]
+                tgeAmount           = int(totalVested * tgeNum / tgeDenom) if (blockTime > tgeTime) else 0
+                totalRedeemable     = int(periods * (totalVested-tgeAmount) / numberOfPeriods) + tgeAmount
+            else:
+                totalRedeemable     = int(periods * totalVested / numberOfPeriods)
+
+            redeemableTokens = totalVested - redeemed if (periods >= numberOfPeriods) else totalRedeemable - redeemed
+            decimals = row['decimals']
+            vested[row['token_name']].append({
+                'boxId': row['box_id'],
+                'Remaining': round(row['remaining']/(10**decimals), decimals),
+                'Redeemable': round(redeemableTokens/(10**decimals), decimals),
+                'Vesting Key Id': row['vesting_key_id'],
+                'Next unlock': datetime.fromtimestamp((vestingStart+((periods+1)*redeemPeriod))/1000)
+            })
+
+        return vested
+
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Unable to vest with NFT.')
+
 @r.post("/vestedWithNFT/", name="vesting:vestedWithNFT")
 def vested(req: AddressList):
     try:
