@@ -542,7 +542,7 @@ def vestingV2(req: AddressList):
         logging.error(f'ERR:{myself()}: unable to build vesting request ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: Unable to build vesting request.')
 
-@r.get("/vestedWithKey/{key}", "vesting:vestedWithKey")
+@r.get("/vestedWithKey/{key}", name="vesting:vestedWithKey")
 def vestedWithKey(key: str):
     try:
         # find vesting tokens
