@@ -390,7 +390,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                 LIMIT %(limit)s
             """
 
-            res = con.execute(sql,{"token": token, "interval": interval, "from_date": from_date, "to_date": to_date, "limit": limit}).fetchall()
+            res = con.execute(sql,{"token": token, "interval": interval, "from_date": str(from_date), "to_date": str(to_date), "limit": limit}).fetchall()
             res.reverse()
             tokenData = {
                 "token": token,
@@ -429,7 +429,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                 LIMIT %(limit)s
             """
 
-            res = con.execute(sql,{"interval": interval, "from_date": from_date, "to_date": to_date, "limit": limit}).fetchall()
+            res = con.execute(sql,{"interval": interval, "from_date": str(from_date), "to_date": str(to_date), "limit": limit}).fetchall()
 
             tokenData = {
                 "token": "ergo",
