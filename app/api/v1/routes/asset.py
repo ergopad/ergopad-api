@@ -336,10 +336,10 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
     }
     interval = f"{stepSize} {stepUnit}"
     from_date = date.today() - timedelta(
-        weeks = (stepSize if stepSize=="w" else 0),
-        days = (stepSize if stepSize=="d" else 0), 
-        hours = (stepSize if stepSize=="h" else 0),
-        minutes = (stepSize if stepSize=="m" else 0))
+        weeks = (stepSize*limit if stepUnit=="w" else 0),
+        days = (stepSize*limit if stepUnit=="d" else 0), 
+        hours = (stepSize*limit if stepUnit=="h" else 0),
+        minutes = (stepSize*limit if stepUnit=="m" else 0))
     to_date = date.today() + timedelta(days = 1)
     logging.info(from_date)
     logging.info(to_date)
