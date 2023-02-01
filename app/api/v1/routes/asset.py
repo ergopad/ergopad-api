@@ -437,10 +437,11 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                 "history": [],
             }
             for row in res:
-                tokenData["history"].append({
-                    "timestamp": row[1],
-                    "price": row[0],
-                })
+                if res[0] is not None:
+                    tokenData["history"].append({
+                        "timestamp": row[1],
+                        "price": row[0],
+                    })
             result.append(tokenData)
 
         return result
