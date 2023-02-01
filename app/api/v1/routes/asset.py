@@ -12,7 +12,7 @@ from fastapi import Request
 from pydantic import BaseModel
 from sqlalchemy.sql.schema import BLANK_SCHEMA
 from time import time
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from ergodex.price import getErgodexTokenPrice, getErgodexTokenPriceByTokenId
 from config import Config, Network  # api specific config
 from cache.cache import cache
@@ -334,50 +334,100 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
         "d": 288,
         "w": 2016,
     }
+    interval = f"{stepSize} {stepUnit}"
+    from_date = date.today() - timedelta(
+        weeks = (stepSize if stepSize=="w" else 0),
+        days = (stepSize if stepSize=="d" else 0), 
+        hours = (stepSize if stepSize=="h" else 0),
+        minutes = (stepSize if stepSize=="m" else 0))
+    to_date = date.today() + timedelta(days = 1)
     try:
         # return every nth row
         resolution = int(stepSize * timeMap[stepUnit])
-        logging.info(f'Fecthing history for resolution: {resolution}')
-        table = "ergodex_ERG/ergodexToken_continuous_5m"
-        # sql
-        sql = f"""
-            SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta 
-            FROM (
-                SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
-                FROM "{table}"
-            ) as t
-            WHERE ((t.rownum - 1) %% {resolution}) = 0
-            ORDER BY t.timestamp_utc DESC
-            LIMIT {limit}
-        """
-        logging.debug(f'exec sql: {sql}')
-        res = con.execute(sql).fetchall()
+        # logging.info(f'Fecthing history for resolution: {resolution}')
+        # table = "ergodex_ERG/ergodexToken_continuous_5m"
+        # # sql
+        # sql = f"""
+        #     SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta 
+        #     FROM (
+        #         SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
+        #         FROM "{table}"
+        #     ) as t
+        #     WHERE ((t.rownum - 1) %% {resolution}) = 0
+        #     ORDER BY t.timestamp_utc DESC
+        #     LIMIT {limit}
+        # """
+        # logging.debug(f'exec sql: {sql}')
+        # res = con.execute(sql).fetchall()
         result = []
         # filter tokens
-        tokens = ("sigusd", "sigrsv", "erdoge", "lunadog", "ergopad", "neta")
-        for index, token in enumerate(tokens):
+        tokens = ("sigrsv", "ergopad", "neta", "paideia")
+        for token in tokens:
             if (token != coin and coin != "all"):
                 continue
 
+            sql = f"""
+                WITH token_pool_id as (
+                    SELECT "poolId" 
+                    FROM pool_tvl 
+                    WHERE lower("tokenName") = '{token}'
+                    ORDER BY "value" DESC
+                    LIMIT 1
+                ), sigusd_pool_id as (
+                    SELECT "poolId" 
+                    FROM pool_tvl 
+                    WHERE lower("tokenName") = 'sigusd'
+                    ORDER BY "value" DESC
+                    LIMIT 1
+                )
+                SELECT token_history."close" as token_price, ergo_history."close" as ergo_price, token_history."time"
+                FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), false) as token_history
+                INNER JOIN getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), false) as ergo_history
+                ON token_history."time" = ergo_history."time"
+                ORDER BY token_history."time" DESC
+                LIMIT {limit}
+            """
+
+            res = con.execute(sql).fetchall()
+            res.reverse()
             tokenData = {
                 "token": token,
                 "resolution": resolution,
                 "history": [],
             }
+            ergoPrice = 1
+            tokenPrice = 0
             for row in res:
-                ergoPrice = row[1]
-                tokenPrice = row[index + 1]
+                ergoPrice = row[1] if row[1] is not None else ergoPrice
+                tokenPrice = row[0] if row[0] is not None else tokenPrice
                 tokenUSD = 0
                 if (tokenPrice != 0):
                     tokenUSD = ergoPrice / tokenPrice
                 tokenData["history"].append({
-                    "timestamp": row[0],
+                    "timestamp": row[2],
                     "price": tokenUSD,
                 })
+            tokenData["history"].reverse()
             result.append(tokenData)
 
         # ergo
         if coin in ("ergo", "all"):
+            sql = f"""
+                WITH sigusd_pool_id as (
+                    SELECT "poolId" 
+                    FROM pool_tvl 
+                    WHERE lower("tokenName") = 'sigusd'
+                    ORDER BY "value" DESC
+                    LIMIT 1
+                )
+                SELECT ergo_history."close" as ergo_price, ergo_history."time"
+                FROM getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), true) as ergo_history
+                ORDER BY ergo_history."time" DESC
+                LIMIT {limit}
+            """
+
+            res = con.execute(sql).fetchall()
+
             tokenData = {
                 "token": "ergo",
                 "resolution": resolution,
@@ -385,8 +435,8 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
             }
             for row in res:
                 tokenData["history"].append({
-                    "timestamp": row[0],
-                    "price": row[1],
+                    "timestamp": row[1],
+                    "price": row[0],
                 })
             result.append(tokenData)
 
