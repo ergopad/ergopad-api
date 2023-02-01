@@ -424,7 +424,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                     LIMIT 1
                 )
                 SELECT ergo_history."close" as ergo_price, ergo_history."time"
-                FROM getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), true) as ergo_history
+                FROM getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), false) as ergo_history
                 ORDER BY ergo_history."time" DESC
                 LIMIT {limit}
             """
