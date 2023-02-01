@@ -372,7 +372,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                 WITH token_pool_id as (
                     SELECT "poolId" 
                     FROM pool_tvl_mat 
-                    WHERE lower("tokenName") = '{token}'
+                    WHERE lower("tokenName") = %(token)s
                     ORDER BY "value" DESC
                     LIMIT 1
                 ), sigusd_pool_id as (
@@ -383,14 +383,14 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                     LIMIT 1
                 )
                 SELECT token_history."close" as token_price, ergo_history."close" as ergo_price, token_history."time"
-                FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), false) as token_history
-                INNER JOIN getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), false) as ergo_history
+                FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as token_history
+                INNER JOIN getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as ergo_history
                 ON token_history."time" = ergo_history."time"
                 ORDER BY token_history."time" DESC
-                LIMIT {limit}
+                LIMIT %(limit)s
             """
 
-            res = con.execute(sql).fetchall()
+            res = con.execute(sql,{"token": token, "interval": interval, "from_date": from_date, "to_date": to_date, "limit": limit}).fetchall()
             res.reverse()
             tokenData = {
                 "token": token,
@@ -424,12 +424,12 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                     LIMIT 1
                 )
                 SELECT ergo_history."close" as ergo_price, ergo_history."time"
-                FROM getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval '{interval}', to_timestamp('{from_date}','YYYY-MM-DD'),to_timestamp('{to_date}','YYYY-MM-DD'), false) as ergo_history
+                FROM getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as ergo_history
                 ORDER BY ergo_history."time" DESC
-                LIMIT {limit}
+                LIMIT %(limit)s
             """
 
-            res = con.execute(sql).fetchall()
+            res = con.execute(sql,{"interval": interval, "from_date": from_date, "to_date": to_date, "limit": limit}).fetchall()
 
             tokenData = {
                 "token": "ergo",
