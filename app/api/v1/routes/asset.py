@@ -369,13 +369,13 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
             sql = f"""
                 WITH token_pool_id as (
                     SELECT "poolId" 
-                    FROM pool_tvl 
+                    FROM pool_tvl_mat 
                     WHERE lower("tokenName") = '{token}'
                     ORDER BY "value" DESC
                     LIMIT 1
                 ), sigusd_pool_id as (
                     SELECT "poolId" 
-                    FROM pool_tvl 
+                    FROM pool_tvl_mat 
                     WHERE lower("tokenName") = 'sigusd'
                     ORDER BY "value" DESC
                     LIMIT 1
@@ -415,7 +415,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
             sql = f"""
                 WITH sigusd_pool_id as (
                     SELECT "poolId" 
-                    FROM pool_tvl 
+                    FROM pool_tvl_mat 
                     WHERE lower("tokenName") = 'sigusd'
                     ORDER BY "value" DESC
                     LIMIT 1
