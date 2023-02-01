@@ -341,6 +341,8 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
         hours = (stepSize if stepSize=="h" else 0),
         minutes = (stepSize if stepSize=="m" else 0))
     to_date = date.today() + timedelta(days = 1)
+    logging.info(from_date)
+    logging.info(to_date)
     try:
         # return every nth row
         resolution = int(stepSize * timeMap[stepUnit])
@@ -398,6 +400,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
             ergoPrice = 1
             tokenPrice = 0
             for row in res:
+                logging.info(row)
                 ergoPrice = row[1] if row[1] is not None else ergoPrice
                 tokenPrice = row[0] if row[0] is not None else tokenPrice
                 tokenUSD = 0
