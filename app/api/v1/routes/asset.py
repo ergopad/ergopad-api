@@ -488,6 +488,9 @@ class OHLCVData(BaseModel):
 @r.get("/ohlcv/{token}/{base}/{barSize}/{barSizeUnit}/{fromDate}/{toDate}", response_model=t.List[OHLCVData], name="token:base-ohlcv")
 def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, fromDate: date, toDate: date):
     try:
+        if barSizeUnit not in ("h","d","w"):
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: barSizeUnit needs to be h, d or w')
+
         result = []
 
         interval = f"{barSize} {barSizeUnit}"
