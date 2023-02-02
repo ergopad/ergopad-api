@@ -382,7 +382,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
                         ORDER BY "value" DESC
                         LIMIT 1
                     )
-                    SELECT token_history."time", token_history."close" as token_price, 
+                    SELECT token_history."time", token_history."close" as token_price
                     FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), true) as token_history
                     ORDER BY token_history."time" DESC
                     LIMIT %(limit)s
