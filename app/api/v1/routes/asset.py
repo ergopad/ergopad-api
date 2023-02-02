@@ -470,8 +470,12 @@ def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepU
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: trading pair not supported')
         
     pairSplit = pair.split('_')
+    result = get_asset_historical_price(pairSplit[0],stepSize,stepUnit,limit,pairSplit[1])
 
-    return get_asset_historical_price(pairSplit[0],stepSize,stepUnit,limit,pairSplit[1])[0]
+    if len(result > 0):
+        return result[0]
+    else:
+        return "No chart data found"
 
 # endregion ROUTES
 
