@@ -314,7 +314,7 @@ class CoinHistoryDataPoint(BaseModel):
 
 class CoinHistory(BaseModel):
     token: str
-    resolution: int
+    resolution: str
     history: t.List[CoinHistoryDataPoint]
 
 # Find price by coin (historical)
