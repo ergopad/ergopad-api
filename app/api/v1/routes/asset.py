@@ -510,7 +510,8 @@ def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, 
         res = con.execute(sql,{"token": (base if token == "erg" else token), "interval": interval, "from_date": str(fromDate), "to_date": str(toDate), "flipped": (token == "erg")}).fetchall()
 
         for row in res:
-            result.append(OHLCVData(open=row[0],high=row[1],low=row[2],close=row[3],volume=row[4],time=row[5]))
+            if row[0] is not None:
+                result.append(OHLCVData(open=row[0],high=row[1],low=row[2],close=row[3],volume=row[4],time=row[5]))
 
         return result
     except Exception as e:
