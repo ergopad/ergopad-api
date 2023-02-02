@@ -345,7 +345,7 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
         
         result = []
         # filter tokens
-        tokens = ("sigrsv", "ergopad", "neta", "paideia")
+        tokens = ("sigrsv", "ergopad", "neta", "paideia", "egio", "exle", "terahertz", "epos", "aht", "cypx")
         for token in tokens:
             if (token != coin and coin != "all"):
                 continue
