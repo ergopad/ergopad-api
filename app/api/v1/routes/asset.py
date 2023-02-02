@@ -331,15 +331,16 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
     if base not in ("erg","sigusd"):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: base {base} not supported')
 
-    interval = f"{stepSize} {stepUnit}"
-    from_date = date.today() - timedelta(
-        weeks = (stepSize*limit if stepUnit=="w" else 0),
-        days = (stepSize*limit if stepUnit=="d" else 0), 
-        hours = (stepSize*limit if stepUnit=="h" else 0),
-        minutes = (stepSize*limit if stepUnit=="m" else 0))
-    to_date = date.today() + timedelta(days = 1)
-
     try:
+
+        interval = f"{stepSize} {stepUnit}"
+        from_date = date.today() - timedelta(
+            weeks = (stepSize*limit if stepUnit=="w" else 0),
+            days = (stepSize*limit if stepUnit=="d" else 0), 
+            hours = (stepSize*limit if stepUnit=="h" else 0),
+            minutes = (stepSize*limit if stepUnit=="m" else 0))
+        to_date = date.today() + timedelta(days = 1)
+
         # return every nth row
         
         result = []
