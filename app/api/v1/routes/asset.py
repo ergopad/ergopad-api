@@ -325,15 +325,12 @@ class CoinHistory(BaseModel):
 # - all, Ergo, sigUSD, sigRSV, ergopad, Erdoge, Lunadog
 # - minimum resolution is 5 mins
 @r.get("/price/history/{coin}", response_model=t.List[CoinHistory], name="coin:coin-price-historical")
-def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
+def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: str = "w", limit: int = 100, base: str = "sigusd"):
     coin = coin.lower()
-    # aggregator stores at 5 min resolution
-    timeMap = {
-        "m": 1,
-        "h": 10,
-        "d": 288,
-        "w": 2016,
-    }
+
+    if base not in ("erg","sigusd"):
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: base {base} not supported')
+
     interval = f"{stepSize} {stepUnit}"
     from_date = date.today() - timedelta(
         weeks = (stepSize*limit if stepUnit=="w" else 0),
@@ -341,26 +338,10 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
         hours = (stepSize*limit if stepUnit=="h" else 0),
         minutes = (stepSize*limit if stepUnit=="m" else 0))
     to_date = date.today() + timedelta(days = 1)
-    logging.info(from_date)
-    logging.info(to_date)
+
     try:
         # return every nth row
-        resolution = int(stepSize * timeMap[stepUnit])
-        # logging.info(f'Fecthing history for resolution: {resolution}')
-        # table = "ergodex_ERG/ergodexToken_continuous_5m"
-        # # sql
-        # sql = f"""
-        #     SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta 
-        #     FROM (
-        #         SELECT timestamp_utc, sigusd, sigrsv, erdoge, lunadog, ergopad, neta, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
-        #         FROM "{table}"
-        #     ) as t
-        #     WHERE ((t.rownum - 1) %% {resolution}) = 0
-        #     ORDER BY t.timestamp_utc DESC
-        #     LIMIT {limit}
-        # """
-        # logging.debug(f'exec sql: {sql}')
-        # res = con.execute(sql).fetchall()
+        
         result = []
         # filter tokens
         tokens = ("sigrsv", "ergopad", "neta", "paideia")
@@ -368,81 +349,105 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
             if (token != coin and coin != "all"):
                 continue
 
-            sql = f"""
-                WITH token_pool_id as (
-                    SELECT "poolId" 
-                    FROM pool_tvl_mat 
-                    WHERE lower("tokenName") = %(token)s
-                    ORDER BY "value" DESC
-                    LIMIT 1
-                ), sigusd_pool_id as (
-                    SELECT "poolId" 
-                    FROM pool_tvl_mat 
-                    WHERE lower("tokenName") = 'sigusd'
-                    ORDER BY "value" DESC
-                    LIMIT 1
-                )
-                SELECT token_history."close" as token_price, ergo_history."close" as ergo_price, token_history."time"
-                FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as token_history
-                INNER JOIN getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as ergo_history
-                ON token_history."time" = ergo_history."time"
-                ORDER BY token_history."time" DESC
-                LIMIT %(limit)s
-            """
+            cached = cache.get(f"get_api_asset_price_history_{token}_{base}_{stepSize}_{stepUnit}_{limit}")
+            if cached:
+                result.append(cached)
+            else:
+                sql = f"""
+                    WITH token_pool_id as (
+                        SELECT "poolId" 
+                        FROM pool_tvl_mat 
+                        WHERE lower("tokenName") = %(token)s
+                        ORDER BY "value" DESC
+                        LIMIT 1
+                    ), sigusd_pool_id as (
+                        SELECT "poolId" 
+                        FROM pool_tvl_mat 
+                        WHERE lower("tokenName") = 'sigusd'
+                        ORDER BY "value" DESC
+                        LIMIT 1
+                    )
+                    SELECT token_history."time", token_history."close" as token_price, ergo_history."close" as ergo_price
+                    FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as token_history
+                    INNER JOIN getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as ergo_history
+                    ON token_history."time" = ergo_history."time"
+                    ORDER BY token_history."time" DESC
+                    LIMIT %(limit)s
+                """ if base == "sigusd" else f"""
+                    WITH token_pool_id as (
+                        SELECT "poolId" 
+                        FROM pool_tvl_mat 
+                        WHERE lower("tokenName") = %(token)s
+                        ORDER BY "value" DESC
+                        LIMIT 1
+                    )
+                    SELECT token_history."time", token_history."close" as token_price, 
+                    FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), true) as token_history
+                    ORDER BY token_history."time" DESC
+                    LIMIT %(limit)s
+                """
 
-            res = con.execute(sql,{"token": token, "interval": interval, "from_date": str(from_date), "to_date": str(to_date), "limit": limit}).fetchall()
-            res.reverse()
-            tokenData = {
-                "token": token,
-                "resolution": resolution,
-                "history": [],
-            }
-            ergoPrice = 1
-            tokenPrice = 0
-            for row in res:
-                logging.info(row)
-                ergoPrice = row[1] if row[1] is not None else ergoPrice
-                tokenPrice = row[0] if row[0] is not None else tokenPrice
-                tokenUSD = 0
-                if (tokenPrice != 0):
-                    tokenUSD = ergoPrice / tokenPrice
-                tokenData["history"].append({
-                    "timestamp": row[2],
-                    "price": tokenUSD,
-                })
-            tokenData["history"].reverse()
-            result.append(tokenData)
+                res = con.execute(sql,{"token": token, "interval": interval, "from_date": str(from_date), "to_date": str(to_date), "limit": limit}).fetchall()
+                res.reverse()
+                tokenData = {
+                    "token": token,
+                    "resolution": interval,
+                    "history": [],
+                }
+                ergoPrice = 1
+                tokenPrice = 0
+                for row in res:
+                    if base == "sigusd":
+                        ergoPrice = row[2] if row[2] is not None else ergoPrice
+                        tokenPrice = row[1] if row[1] is not None else tokenPrice
+                        tokenUSD = 0
+                        if (tokenPrice != 0):
+                            tokenUSD = ergoPrice / tokenPrice
+                    else:
+                        tokenUSD = row[1] if row[1] is not None else 0
+                    tokenData["history"].append({
+                        "timestamp": row[0],
+                        "price": tokenUSD,
+                    })
+                tokenData["history"].reverse()
+                result.append(tokenData)
+                cache.set(f"get_api_asset_price_history_{token}_{base}_{stepSize}_{stepUnit}_{limit}", tokenData)
 
         # ergo
-        if coin in ("ergo", "all"):
-            sql = f"""
-                WITH sigusd_pool_id as (
-                    SELECT "poolId" 
-                    FROM pool_tvl_mat 
-                    WHERE lower("tokenName") = 'sigusd'
-                    ORDER BY "value" DESC
-                    LIMIT 1
-                )
-                SELECT ergo_history."close" as ergo_price, ergo_history."time"
-                FROM getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as ergo_history
-                ORDER BY ergo_history."time" DESC
-                LIMIT %(limit)s
-            """
+        if coin in ("ergo", "all") and base != "erg":
+            cached = cache.get(f"get_api_asset_price_history_ergo_{base}_{stepSize}_{stepUnit}_{limit}")
+            if cached:
+                result.append(cached)
+            else:
+                sql = f"""
+                    WITH sigusd_pool_id as (
+                        SELECT "poolId" 
+                        FROM pool_tvl_mat 
+                        WHERE lower("tokenName") = 'sigusd'
+                        ORDER BY "value" DESC
+                        LIMIT 1
+                    )
+                    SELECT ergo_history."close" as ergo_price, ergo_history."time"
+                    FROM getohlcv((SELECT "poolId" FROM sigusd_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), false) as ergo_history
+                    ORDER BY ergo_history."time" DESC
+                    LIMIT %(limit)s
+                """
 
-            res = con.execute(sql,{"interval": interval, "from_date": str(from_date), "to_date": str(to_date), "limit": limit}).fetchall()
+                res = con.execute(sql,{"interval": interval, "from_date": str(from_date), "to_date": str(to_date), "limit": limit}).fetchall()
 
-            tokenData = {
-                "token": "ergo",
-                "resolution": resolution,
-                "history": [],
-            }
-            for row in res:
-                if row[0] is not None:
-                    tokenData["history"].append({
-                        "timestamp": row[1],
-                        "price": row[0],
-                    })
-            result.append(tokenData)
+                tokenData = {
+                    "token": "ergo",
+                    "resolution": interval,
+                    "history": [],
+                }
+                for row in res:
+                    if row[0] is not None:
+                        tokenData["history"].append({
+                            "timestamp": row[1],
+                            "price": row[0],
+                        })
+                result.append(tokenData)
+                cache.set(f"get_api_asset_price_history_ergo_{base}_{stepSize}_{stepUnit}_{limit}", tokenData)
 
         return result
 
@@ -459,65 +464,13 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
 @r.get("/price/chart/{pair}", response_model=CoinHistory, name="coin:trading-pair-historical")
 def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     pair = pair.lower()
-    # check cache
-    cached = cache.get(f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}")
-    if cached:
-        return cached
 
     if pair not in ("ergopad_erg", "ergopad_sigusd"):
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: trading pair not supported')
         
-    # aggregator stores at 5 min resolution
-    timeMap = {
-        "h": 12,
-        "d": 288,
-        "w": 2016,
-        "m": 8064,
-    }
-    try:
-        # return every nth row
-        resolution = int(stepSize * timeMap[stepUnit])
-        logging.info(f'Fecthing history for resolution: {resolution}')
-        table = "ergodex_ERG/ergodexToken_continuous_5m"
-        # sql
-        sql = f"""
-            SELECT timestamp_utc, sigusd, ergopad
-            FROM (
-                SELECT timestamp_utc, sigusd, ergopad, ROW_NUMBER() OVER (ORDER BY timestamp_utc DESC) AS rownum 
-                FROM "{table}"
-            ) as t
-            WHERE ((t.rownum - 1) %% {resolution}) = 0
-            ORDER BY t.timestamp_utc DESC
-            LIMIT {limit}
-        """
-        logging.debug(f'exec sql: {sql}')
-        res = con.execute(sql).fetchall()
+    pairSplit = pair.split('_')
 
-        tokenData = {
-            "token": pair,
-            "resolution": resolution,
-            "history": [],
-        }
-        for row in res:
-            num = 1
-            if pair == "ergopad_sigusd":
-                num = row[1]
-            tokenPrice = row[2]
-            tokenBase = 0
-            if (tokenPrice != 0):
-                tokenBase = num / tokenPrice
-            tokenData["history"].append({
-                "timestamp": str(row[0]),
-                "price": tokenBase,
-            })
-
-        cache.set(
-            f"get_api_asset_price_chart_{pair}_{stepSize}_{stepUnit}_{limit}", tokenData)
-        return tokenData
-
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find price chart ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find price chart ({e})')
+    return get_asset_historical_price(pairSplit[0],stepSize,stepUnit,limit,pairSplit[1])[0]
 
 # endregion ROUTES
 
