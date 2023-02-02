@@ -465,19 +465,12 @@ def get_asset_historical_price(coin: str = "all", stepSize: int = 1, stepUnit: s
 def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepUnit: str = "w", limit: int = 100):
     pair = pair.lower()
 
-    logging.info("chart request")
+    if pair not in ("ergopad_erg", "ergopad_sigusd"):
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: trading pair not supported')
+        
+    pairSplit = pair.split('_')
 
-    try:
-
-        if pair not in ("ergopad_erg", "ergopad_sigusd"):
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'Error: trading pair not supported')
-            
-        pairSplit = pair.split('_')
-
-        return get_asset_historical_price(pairSplit[0],stepSize,stepUnit,limit,pairSplit[1])[0]
-    except Exception as e:
-        logging.error(f'ERR:{myself()}: unable to find historical price ({e})')
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find historical price ({e})')
+    return get_asset_historical_price(pairSplit[0],stepSize,stepUnit,limit,pairSplit[1])[0]
 
 # endregion ROUTES
 
