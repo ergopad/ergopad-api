@@ -477,6 +477,46 @@ def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepU
     else:
         return "No chart data found"
 
+class OHLCVData(BaseModel):
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    time: datetime
+
+@r.get("/ohlcv/{token}/{base}/{barSize}/{barSizeUnit}/{fromDate}/{toDate}", response_model=t.List[OHLCVData], name="token:base-ohlcv")
+def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, fromDate: date, toDate: date):
+    try:
+        result = []
+
+        interval = f"{barSize} {barSizeUnit}"
+        if base not in ("erg") and token not in ("erg"):
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: base or token needs to be erg')
+
+        sql = f"""
+        WITH token_pool_id as (
+            SELECT "poolId" 
+            FROM pool_tvl_mat 
+            WHERE lower("tokenName") = %(token)s
+            ORDER BY "value" DESC
+            LIMIT 1
+        )
+        SELECT "open", "high", "low", "close", "volume", "time"
+        FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), %(flipped)s) as token_history
+        ORDER BY token_history."time"
+        """
+
+        res = con.execute(sql,{"token": (base if token == "erg" else token), "interval": interval, "from_date": str(fromDate), "to_date": str(toDate), "flipped": (token == "erg")}).fetchall()
+
+        for row in res:
+            result.append(OHLCVData(row[0],row[1],row[2],row[3],row[4],row[5]))
+
+        return result
+    except Exception as e:
+        logging.error(f'ERR:{myself()}: unable to find ohlcv data ({e})')
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to find ohlcv data ({e})')
+
 # endregion ROUTES
 
 #
