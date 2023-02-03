@@ -520,7 +520,7 @@ def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, 
             ORDER BY token_history."time"
             """
 
-            res = con.execute(sql,{"token": (base if token == "erg" else token), "interval": interval, "from_date": str(refreshCacheDate), "to_date": str(date.today()), "flipped": (token == "erg")}).fetchall()
+            res = con.execute(sql,{"token": (base if token == "erg" else token), "interval": interval, "from_date": str(refreshCacheDate), "to_date": str(date.today()+timedelta(days=1)), "flipped": (token == "erg")}).fetchall()
 
             for row in res:
                 if row[0] is not None:
