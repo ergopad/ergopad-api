@@ -548,11 +548,11 @@ def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, 
                             if ergSigUsd[index]["time"] == data_row["time"]:
                                 avgErgPrice = (ergSigUsd[index]["open"] + ergSigUsd[index]["close"])/2
                                 result.append({
-                                    "open": data_row["open"]*ergSigUsd[index]["open"], 
-                                    "high": data_row["high"]*avgErgPrice,
-                                    "low": data_row["low"]*avgErgPrice,
-                                    "close": data_row["close"]*ergSigUsd[index]["close"],
-                                    "volume": data_row["volume"]*avgErgPrice,
+                                    "open": data_row["open"]/ergSigUsd[index]["open"], 
+                                    "high": data_row["high"]/avgErgPrice,
+                                    "low": data_row["low"]/avgErgPrice,
+                                    "close": data_row["close"]/ergSigUsd[index]["close"],
+                                    "volume": data_row["volume"]/avgErgPrice,
                                     "time": data_row["time"]})
                             index += 1
                         else:
