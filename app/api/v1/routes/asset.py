@@ -488,6 +488,10 @@ class OHLCVData(BaseModel):
 @r.get("/ohlcv/{token}/{base}/{barSize}/{barSizeUnit}/{fromDate}/{toDate}", response_model=t.List[OHLCVData], name="token:base-ohlcv")
 def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, fromDate: date, toDate: date, offset: int = 0, limit: int = 500):
     try:
+        ergSigUsd = None
+        if token == "sigusd" and base != "erg":
+            ergSigUsd = get_asset_ohlcv_data("erg", "sigusd", barSize, barSizeUnit, fromDate, toDate, offset, limit)
+            token = "erg"
         if limit > 500 or limit < 1:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: limit should be a value between 1 and 500')
         if barSizeUnit not in ("h","d","w"):
@@ -532,14 +536,30 @@ def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, 
             cache.set(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}",cached)
             cache.set(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}_long",cached,3600)
 
+        index = 0
         for ohlcvdate_str in cached.keys():
             ohlcvdate = date.fromisoformat(ohlcvdate_str)
             if ohlcvdate >= fromDate and ohlcvdate <= toDate:
                 for data_row in cached[str(ohlcvdate)]:
                     if offset + limit > 0 and offset + limit <= limit and data_row["time"] < datetime.now().timestamp():
-                        result.append(data_row)
+                        if ergSigUsd is not None:
+                            while ergSigUsd[index]["time"] < data_row["time"]:
+                                index += 1
+                            if ergSigUsd[index]["time"] == data_row["time"]:
+                                avgErgPrice = (ergSigUsd[index]["open"] + ergSigUsd[index]["close"])/2
+                                result.append({
+                                    "open": data_row["open"]*avgErgPrice, 
+                                    "high": data_row["high"]*avgErgPrice,
+                                    "low": data_row["low"]*avgErgPrice,
+                                    "close": data_row["close"]*avgErgPrice,
+                                    "volume": data_row["volume"]*avgErgPrice,
+                                    "time": data_row["time"]})
+                            index += 1
+                        else:
+                            result.append(data_row)
                     offset -= 1
 
+        logging.info(result[0])
         return result
     except Exception as e:
         logging.error(f'ERR:{myself()}: unable to find ohlcv data ({e})')
