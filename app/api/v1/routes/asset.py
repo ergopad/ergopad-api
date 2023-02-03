@@ -534,9 +534,9 @@ def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, 
 
         for ohlcvdate_str in cached.keys():
             ohlcvdate = date.fromisoformat(ohlcvdate_str)
-            if ohlcvdate >= fromDate and ohlcvdate <= toDate and ohlcvdate < datetime.now():
+            if ohlcvdate >= fromDate and ohlcvdate <= toDate:
                 for data_row in cached[str(ohlcvdate)]:
-                    if offset + limit > 0 and offset + limit <= limit:
+                    if offset + limit > 0 and offset + limit <= limit and data_row["time"] < datetime.now():
                         result.append(data_row)
                     offset -= 1
 
