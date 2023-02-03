@@ -486,35 +486,59 @@ class OHLCVData(BaseModel):
     time: datetime
 
 @r.get("/ohlcv/{token}/{base}/{barSize}/{barSizeUnit}/{fromDate}/{toDate}", response_model=t.List[OHLCVData], name="token:base-ohlcv")
-def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, fromDate: date, toDate: date):
+def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, fromDate: date, toDate: date, offset: int = 0, limit: int = 500):
     try:
+        if limit > 500 or limit < 1:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: limit should be a value between 1 and 500')
         if barSizeUnit not in ("h","d","w"):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: barSizeUnit needs to be h, d or w')
-
-        result = []
-
-        interval = f"{barSize} {barSizeUnit}"
         if base not in ("erg") and token not in ("erg"):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: base or token needs to be erg')
+        result = []
+        cached = cache.get(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}")
+        if not cached:
+            cached = cache.get(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}_long")
+            if not cached:
+                cached = {}
+                refreshCacheDate = str(date(2021,8,1))
+            else:
+                refreshCacheDate = list(cached.keys())[-1]
+                cached[refreshCacheDate] = []
 
-        sql = f"""
-        WITH token_pool_id as (
-            SELECT "poolId" 
-            FROM pool_tvl_mat 
-            WHERE lower("tokenName") = %(token)s
-            ORDER BY "value" DESC
-            LIMIT 1
-        )
-        SELECT "open", "high", "low", "close", "volume", "time"
-        FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), %(flipped)s) as token_history
-        ORDER BY token_history."time"
-        """
+            interval = f"{barSize} {barSizeUnit}"
 
-        res = con.execute(sql,{"token": (base if token == "erg" else token), "interval": interval, "from_date": str(fromDate), "to_date": str(toDate), "flipped": (token == "erg")}).fetchall()
+            sql = f"""
+            WITH token_pool_id as (
+                SELECT "poolId" 
+                FROM pool_tvl_mat 
+                WHERE lower("tokenName") = %(token)s
+                ORDER BY "value" DESC
+                LIMIT 1
+            )
+            SELECT "open", "high", "low", "close", "volume", "time"
+            FROM getohlcv((SELECT "poolId" FROM token_pool_id),interval %(interval)s, to_timestamp(%(from_date)s,'YYYY-MM-DD'),to_timestamp(%(to_date)s,'YYYY-MM-DD'), %(flipped)s) as token_history
+            ORDER BY token_history."time"
+            """
 
-        for row in res:
-            if row[0] is not None:
-                result.append(OHLCVData(open=row[0],high=row[1],low=row[2],close=row[3],volume=row[4],time=row[5]))
+            res = con.execute(sql,{"token": (base if token == "erg" else token), "interval": interval, "from_date": str(refreshCacheDate), "to_date": str(date.today()), "flipped": (token == "erg")}).fetchall()
+
+            for row in res:
+                if row[0] is not None:
+                    elementDate = str(date.fromtimestamp(row[5]))
+                    if elementDate not in cached.keys():
+                        cached[elementDate] = []
+                    cached[elementDate].append({"open":row[0],"high":row[1],"low":row[2],"close":row[3],"volume":row[4],"time":row[5]})
+
+            cache.set(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}",cached)
+            cache.set(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}_long",cached,3600)
+
+        for ohlcvdate_str in cached.keys():
+            ohlcvdate = date.fromisoformat(ohlcvdate_str)
+            if ohlcvdate >= fromDate and ohlcvdate <= toDate:
+                for data_row in cached[str(ohlcvdate)]:
+                    if offset + limit > 0 and offset + limit <= limit:
+                        result.append(data_row)
+                    offset -= 1
 
         return result
     except Exception as e:

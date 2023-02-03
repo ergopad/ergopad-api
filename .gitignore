@@ -4,6 +4,8 @@
 ### BUILD
 **/target
 
+data
+
 ### IDE
 **/.idea
 .vscode/*
@@ -51,3 +53,5 @@ MANIFEST
 .DS_Store
 *.pem
 hs_err_*.log
+
+docker-compose-dev.yml
