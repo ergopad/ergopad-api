@@ -290,24 +290,25 @@ def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
         con = create_engine(DATABASE)
         sql = text(f"""
             select
-                evt.name,
+                max(evt.name) as "name",
                 wal.address,
-                wal.email,
-                wal."socialHandle" as social_handle,
-                wal."socialPlatform" as social_platform,
-                allowance_sigusd,
-                eip."ipHash" as ip_hash,
-                wht.created_dtz
+                max(wal.email) as email,
+                max(wal."socialHandle") as social_handle,
+                max(wal."socialPlatform") as social_platform,
+                max(allowance_sigusd) as allowance_sigusd,
+                ''::text as ip_hash,--eip."ipHash" as ip_hash,
+                min(wht.created_dtz) as created_dtz
             from
                 whitelist wht
                 join wallets wal on wal.id = wht."walletId"
                 join "eventsIp" eip on eip."eventId" = wht."eventId"
-                join events evt on evt.id = eip."eventId"
+                join events evt on evt.id = wht."eventId"
                 and eip."walletId" = wal.id
             where
                 evt.name = :eventName
+			group by wal.address
             order by
-                wht.created_dtz;
+                created_dtz;
         """)
         res = con.execute(sql, {'eventName': eventName}).fetchall()
         logging.debug(res)

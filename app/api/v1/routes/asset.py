@@ -477,6 +477,31 @@ def get_asset_chart_price(pair: str = "ergopad_sigusd", stepSize: int = 1, stepU
     else:
         return "No chart data found"
 
+@r.get("/price/{token}/{timestamp}", name="coin:price-point-in-time")
+def get_asset_price_at_time(token: str, timestamp: int):
+    token = token.lower()
+    sql = f"""
+            WITH token_pool_id as (
+                SELECT "poolId" 
+                FROM pool_tvl_mat 
+                WHERE lower("tokenName") = %(token)s
+                ORDER BY "value" DESC
+                LIMIT 1
+            )
+            SELECT ("value"/10^9)/("tokenAmount"/10^"tokenDecimals")
+            FROM spectrum_boxes
+			where "poolId" = (select "poolId" from token_pool_id)
+			and global_index = (select max(global_index) from spectrum_boxes where "poolId" = (select "poolId" from token_pool_id) and "timestamp" < to_timestamp(%(timestamp)s))
+            """
+
+    res = con.execute(sql,{"token": token, "timestamp": timestamp}).fetchone()
+    if res:
+        return {"price":res[0]}
+    else:
+        return {"price": 0}
+
+            
+
 class OHLCVData(BaseModel):
     open: float
     high: float
