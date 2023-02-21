@@ -559,7 +559,7 @@ def get_asset_ohlcv_data(token: str, base: str, barSize: int, barSizeUnit: str, 
                     cached[elementDate].append({"open":row[0],"high":row[1],"low":row[2],"close":row[3],"volume":row[4],"time":row[5]})
 
             cache.set(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}",cached)
-            cache.set(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}_long",cached,3600)
+            #cache.set(f"get_asset_ohlcv_data_{token}_{base}_{barSize}_{barSizeUnit}_long",cached,3600)
 
         index = 0
         for ohlcvdate_str in cached.keys():
