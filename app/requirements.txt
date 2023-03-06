@@ -196,6 +196,6 @@ websockets==8.1
     # via uvicorn
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
-ergo-python-appkit==0.2.1
+ergo-python-appkit==0.3.1
 paideia-contracts==1.1.2
 gunicorn
