@@ -195,7 +195,7 @@ def getErgodexPoolBox():
         return cached
     res = {"items": []}
     try:
-        res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}/").json()
+        res = requests.get(f"{API}/boxes/unspent/byErgoTree/{POOL_SAMPLE}?limit=500").json()
         cache.set(f"ergodex_pool_{POOL_SAMPLE}", res)
     except:
         logging.error(f"ERR:getErgodexPoolBox: unable to find box")
