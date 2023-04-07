@@ -659,8 +659,8 @@ def tvl(tokenId: str):
 
             logging.debug(f'''staking: {resStaking['tvl']}; vesting: {resVesting['tvl']}''')
 
-            stakingTVL = float(resStaking['tvl']) or 0.0
-            vestingTVL = float(resVesting['tvl']) or 0.0
+            stakingTVL = float(resStaking['tvl']) if (resStaking) else 0.0
+            vestingTVL = float(resVesting['tvl']) if (resVesting) else 0.0
 
             result = {
                 'tvl': {
