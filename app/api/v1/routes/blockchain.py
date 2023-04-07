@@ -657,8 +657,6 @@ def tvl(tokenId: str):
                 resStaking = con.execute(sqlStaking, {'token_id': tokenId}).fetchone()
                 resVesting = con.execute(sqlVesting, {'token_id': tokenId}).fetchone()
 
-            logging.debug(f'''staking: {resStaking['tvl']}; vesting: {resVesting['tvl']}''')
-
             stakingTVL = float(resStaking['tvl']) if (resStaking) else 0.0
             vestingTVL = float(resVesting['tvl']) if (resVesting) else 0.0
 
