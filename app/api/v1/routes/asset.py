@@ -1,3 +1,4 @@
+from enum import Enum
 import inspect
 import logging
 import requests
@@ -17,6 +18,10 @@ from ergodex.price import getErgodexTokenPrice, getErgodexTokenPriceByTokenId
 from config import Config, Network  # api specific config
 from cache.cache import cache
 from db.session import engDanaides
+from ergo_python_appkit.appkit import ErgoAppKit
+from org.ergoplatform.appkit import ErgoValue, NetworkType
+from org.ergoplatform import ErgoAddressEncoder
+from sigmastate.serialization import ErgoTreeSerializer
 
 CFG = Config[Network]
 
@@ -304,6 +309,159 @@ def get_asset_current_prices(tokens: TokenListRequest):
             "price": (get_asset_current_price(token))["price"]
         })
     return prices
+
+class TokenType(Enum):
+    PICTURE = "0e020101"
+    AUDIO = "0e020102"
+    VIDEO = "0e020103"
+    COLLECTION = "0e020104"
+    OTHER = ""
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.OTHER
+
+@r.get("/info/{tokenId}", name="token:info")
+def get_token_info(tokenId: str):
+    try:
+        res = requests.get(CFG.node+"/blockchain/box/byId/"+tokenId)
+        if res.ok:
+            issuerBox = res.json()
+            res = requests.get(CFG.node+"/blockchain/transaction/byId/"+issuerBox['spentTransactionId'])
+            if res.ok:
+                mintTransaction = res.json()
+                issuanceBox = None
+                for output in mintTransaction['outputs']:
+                    if output['assets'][0]['tokenId'] == tokenId:
+                        issuanceBox = output
+                        break
+                tokenName = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R4"]).getValue().toArray()).decode("utf-8")
+                tokenDescription = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R5"]).getValue().toArray()).decode("utf-8")
+                tokenDecimals = int(bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R6"]).getValue().toArray()).decode("utf-8"))
+                totalMinted = issuanceBox['assets'][0]['amount']
+
+                nftType = TokenType(issuanceBox["additionalRegisters"]["R7"])
+
+                extraMetaData = {}
+
+                minterAddress = ""
+                findMinterTransaction = mintTransaction
+                while minterAddress == "":
+                    if len(findMinterTransaction["inputs"][0]["address"]) == 51 and findMinterTransaction["inputs"][0]["address"][0] == "9":
+                        minterAddress = findMinterTransaction["inputs"][0]["address"]
+                    if minterAddress == "":
+                        res = requests.get(CFG.node+"/blockchain/transaction/byId/"+findMinterTransaction["inputs"][0]['transactionId'])
+                        if res.ok:
+                            findMinterTransaction = res.json()
+
+                if nftType == TokenType.COLLECTION:
+                    collectionStandard = int(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R4"]).getValue())
+                    collectionInfo = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R5"]).getValue().toArray()
+                    collectionLogo = bytes(collectionInfo[0].toArray()).decode("utf-8")
+                    collectionFeaturedImage = bytes(collectionInfo[1].toArray()).decode("utf-8")
+                    collectionBannerImage = bytes(collectionInfo[2].toArray()).decode("utf-8")
+                    collectionCategory = bytes(collectionInfo[3].toArray()).decode("utf-8")
+
+                    collectionSocials = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R6"]).getValue().toArray()
+                    socials = []
+                    for soc in collectionSocials:
+                        socials.append({
+                            bytes(soc._1().toArray()).decode("utf-8"): bytes(soc._2().toArray()).decode("utf-8")
+                        })
+                    try:
+                        mintingExpiry = int(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R7"]).getValue())
+                    except:
+                        mintingExpiry = -1
+
+                    additionalInfo = []
+                    try:
+                        collectionAdditionalInfo = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R8"]).getValue().toArray()
+                        for inf in collectionAdditionalInfo:
+                            additionalInfo.append({
+                                bytes(inf._1().toArray()).decode("utf-8"): bytes(inf._2().toArray()).decode("utf-8")
+                            })
+                    except:
+                        additionalInfo = []
+
+                    extraMetaData = {
+                        "standard": collectionStandard,
+                        "logo": collectionLogo,
+                        "featuredImage": collectionFeaturedImage,
+                        "bannerImage": collectionBannerImage,
+                        "category": collectionCategory,
+                        "socials": socials,
+                        "mintingExpiry": mintingExpiry,
+                        "additionalInfo": additionalInfo
+                    }
+
+                if nftType == TokenType.PICTURE:
+                    pictureHash = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R8"]).getValue().toArray()).hex()
+                    pictureLink = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R9"]).getValue().toArray()).decode("utf-8")
+                    artworkStandard = 0
+                    royalty = {}
+                    if "additionalRegisters" in issuerBox:
+                        if "R4" in issuerBox["additionalRegisters"]:
+                            artworkStandard = int(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R4"]).getValue())
+                            if artworkStandard > 10:
+                                royalty[minterAddress] = artworkStandard/10
+                                artworkStandard = 1
+                    standard2Data = {}
+                    if artworkStandard == 2:
+                        royalties = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R5"]).getValue().toArray()
+                        for roy in royalties:
+                            royalty[ErgoAddressEncoder(NetworkType.MAINNET.networkPrefix).fromProposition(ErgoTreeSerializer().deserializeErgoTree(roy._1().toArray())).get().toString()] = int(roy._2())/10
+                            
+                        traits = {}
+                        artworkTraits = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R6"]).getValue()
+                        properties = {}
+                        for prop in artworkTraits._1().toArray():
+                            properties[bytes(prop._1().toArray()).decode("utf-8")] = bytes(prop._2().toArray()).decode("utf-8")
+                        traits["properties"] = properties
+                        levels = {}
+                        for lev in artworkTraits._2()._1().toArray():
+                            levels[bytes(lev._1().toArray()).decode("utf-8")] = {"value": int(lev._2()._1()), "max": int(lev._2()._2())}
+                        traits["levels"] = levels
+                        stats = {}
+                        for stat in artworkTraits._2()._2().toArray():
+                            stats[bytes(stat._1().toArray()).decode("utf-8")] = {"value": int(stat._2()._1()), "max": int(stat._2()._2())}
+                        traits["stats"] = stats
+                        standard2Data["traits"] = traits
+
+                        collection = {}
+                        collectionId = bytes(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R7"]).getValue().toArray()).hex()
+                        if len(collectionId) > 0:
+                            foundCollectionToken = False
+                            for ass in issuerBox["assets"]:
+                                if ass["tokenId"] == collectionId:
+                                    foundCollectionToken = True
+                            if foundCollectionToken:
+                                collection = get_token_info(collectionId)
+                                if collection["nftType"] != "COLLECTION":
+                                    collection = {}
+                        standard2Data["collection"] = collection
+                        
+
+                    extraMetaData = {
+                        "hash": pictureHash,
+                        "link": pictureLink,
+                        "standard": artworkStandard,
+                        "royalty": royalty,
+                        "standard2Data": standard2Data
+                    }
+
+                return {
+                    "name": tokenName,
+                    "description": tokenDescription,
+                    "decimals": tokenDecimals,
+                    "totalMinted": totalMinted,
+                    "nftType": nftType.name,
+                    "minterAddress": minterAddress,
+                    "extraMetaData": extraMetaData
+                }
+    except Exception as e:
+        logging.error(e)
+        return e
+
 
 
 # Coin history response schema
