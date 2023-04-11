@@ -401,32 +401,33 @@ def get_token_info(tokenId: str):
                     pictureHash = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R8"]).getValue().toArray()).hex()
                     pictureLink = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R9"]).getValue().toArray()).decode("utf-8")
                     artworkStandard = 0
-                    royalty = {}
+                    royalty = []
                     if "additionalRegisters" in issuerBox:
                         if "R4" in issuerBox["additionalRegisters"]:
                             artworkStandard = int(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R4"]).getValue())
                             if artworkStandard > 10:
-                                royalty[minterAddress] = artworkStandard/10
+                                royalty.append({"address": minterAddress, "royaltyPct": artworkStandard/10})
                                 artworkStandard = 1
                     standard2Data = {}
                     if artworkStandard == 2:
                         royalties = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R5"]).getValue().toArray()
                         for roy in royalties:
-                            royalty[ErgoAddressEncoder(NetworkType.MAINNET.networkPrefix).fromProposition(ErgoTreeSerializer().deserializeErgoTree(roy._1().toArray())).get().toString()] = int(roy._2())/10
+                            royalty.append({"address": ErgoAddressEncoder(NetworkType.MAINNET.networkPrefix).fromProposition(ErgoTreeSerializer().deserializeErgoTree(roy._1().toArray())).get().toString(),
+                                            "royaltyPct": int(roy._2())/10})
                             
                         traits = {}
                         artworkTraits = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R6"]).getValue()
-                        properties = {}
+                        properties = []
                         for prop in artworkTraits._1().toArray():
-                            properties[bytes(prop._1().toArray()).decode("utf-8")] = bytes(prop._2().toArray()).decode("utf-8")
+                            properties.append({"name": bytes(prop._1().toArray()).decode("utf-8"), "value": bytes(prop._2().toArray()).decode("utf-8")})
                         traits["properties"] = properties
-                        levels = {}
+                        levels = []
                         for lev in artworkTraits._2()._1().toArray():
-                            levels[bytes(lev._1().toArray()).decode("utf-8")] = {"value": int(lev._2()._1()), "max": int(lev._2()._2())}
+                            levels.append({"name": bytes(lev._1().toArray()).decode("utf-8"), "value": int(lev._2()._1()), "max": int(lev._2()._2())})
                         traits["levels"] = levels
-                        stats = {}
+                        stats = []
                         for stat in artworkTraits._2()._2().toArray():
-                            stats[bytes(stat._1().toArray()).decode("utf-8")] = {"value": int(stat._2()._1()), "max": int(stat._2()._2())}
+                            stats.append({"name": bytes(stat._1().toArray()).decode("utf-8"), "value": int(stat._2()._1()), "max": int(stat._2()._2())})
                         traits["stats"] = stats
                         standard2Data["traits"] = traits
 
