@@ -340,7 +340,10 @@ def get_token_info(tokenId: str):
                 tokenDecimals = int(bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R6"]).getValue().toArray()).decode("utf-8"))
                 totalMinted = issuanceBox['assets'][0]['amount']
 
-                nftType = TokenType(issuanceBox["additionalRegisters"]["R7"])
+                if "R7" in issuanceBox["additionalRegisters"]:
+                    nftType = TokenType(issuanceBox["additionalRegisters"]["R7"])
+                else:
+                    nftType = TokenType.OTHER
 
                 extraMetaData = {}
 
