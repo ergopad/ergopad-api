@@ -369,7 +369,7 @@ def get_token_info(tokenId: str):
                     socials = []
                     for soc in collectionSocials:
                         socials.append({
-                            bytes(soc._1().toArray()).decode("utf-8"): bytes(soc._2().toArray()).decode("utf-8")
+                            "platform": bytes(soc._1().toArray()).decode("utf-8"), "link": bytes(soc._2().toArray()).decode("utf-8")
                         })
                     try:
                         mintingExpiry = int(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R7"]).getValue())
