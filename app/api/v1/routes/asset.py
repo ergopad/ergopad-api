@@ -315,7 +315,7 @@ class TokenType(Enum):
     AUDIO = "0e020102"
     VIDEO = "0e020103"
     COLLECTION = "0e020104"
-    PACK = "0e020404"
+    PACK = "0e020105"
     OTHER = ""
 
     @classmethod
