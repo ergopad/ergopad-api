@@ -315,6 +315,7 @@ class TokenType(Enum):
     AUDIO = "0e020102"
     VIDEO = "0e020103"
     COLLECTION = "0e020104"
+    PACK = "0e020404"
     OTHER = ""
 
     @classmethod
@@ -397,7 +398,7 @@ def get_token_info(tokenId: str):
                         "additionalInfo": additionalInfo
                     }
 
-                if nftType == TokenType.PICTURE:
+                if nftType == TokenType.PICTURE or nftType == TokenType.PACK:
                     pictureHash = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R8"]).getValue().toArray()).hex()
                     pictureLink = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R9"]).getValue().toArray()).decode("utf-8")
                     artworkStandard = 0
