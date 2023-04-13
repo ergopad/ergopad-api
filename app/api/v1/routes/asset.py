@@ -478,6 +478,12 @@ def get_token_info(tokenId: str):
                                 if collection["nftType"] != "COLLECTION":
                                     collection = {}
                         standard2Data["collection"] = collection
+                        additionalInfo = []
+                        if "R8" in issuerBox["additionalRegisters"]:
+                            additionalInfos = ErgoValue.fromHex(issuerBox["additionalRegisters"]["R8"]).getValue().toArray()
+                            for ai in additionalInfos:
+                                additionalInfo.append({"key": bytes(ai._1().toArray()).decode("utf-8"), "value": bytes(ai._2().toArray()).decode("utf-8")})
+                        standard2Data["additionalInfo"] = additionalInfo
                         
 
                     extraMetaData = {
