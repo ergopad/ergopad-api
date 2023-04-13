@@ -321,10 +321,54 @@ class TokenType(Enum):
     @classmethod
     def _missing_(cls, value):
         return cls.OTHER
+    
+def isP2PK(addr: str):
+    return len(addr) == 51 and addr[0] == "9"
+    
+@r.get("/info/{tokenId}/minter", name="token:minter")
+def get_token_minter(tokenId: str):
+    try:
+        cached = cache.get(f"get_token_minter_{tokenId}")
+        if cached:
+            return cached
+        res = requests.get(CFG.node+"/blockchain/box/byId/"+tokenId)
+        tokenIds = [tokenId]
+        if res.ok:
+            issuerBox = res.json()
+            if isP2PK(issuerBox["address"]):
+                result = {"minterAddress": issuerBox["address"]}
+            else:
+                res = requests.get(CFG.node+"/blockchain/transaction/byId/"+issuerBox['transactionId'])
+                if res.ok:
+                    minterAddress = ""
+                    findMinterTransaction = res.json()
+                    cached = cache.get(f"get_token_minter_{findMinterTransaction['inputs'][0]['boxId']}")
+                    if cached:
+                        minterAddress = cached["minterAddress"]
+                    while minterAddress == "":
+                        if isP2PK(findMinterTransaction["inputs"][0]["address"]):
+                            minterAddress = findMinterTransaction["inputs"][0]["address"]
+                        else:
+                            tokenIds.append(findMinterTransaction["inputs"][0]["boxId"])
+                            res = requests.get(CFG.node+"/blockchain/transaction/byId/"+findMinterTransaction["inputs"][0]['transactionId'])
+                            if res.ok:
+                                findMinterTransaction = res.json()
+                    result = {
+                        "minterAddress": minterAddress
+                    }
+        for tok in tokenIds:    
+            cache.set(f"get_token_minter_{tok}", result, 3600)
+        return result
+    except Exception as e:
+        logging.error(e)
+        return e
 
 @r.get("/info/{tokenId}", name="token:info")
 def get_token_info(tokenId: str):
     try:
+        cached = cache.get(f"get_token_info_{tokenId}")
+        if cached:
+            return cached
         res = requests.get(CFG.node+"/blockchain/box/byId/"+tokenId)
         if res.ok:
             issuerBox = res.json()
@@ -347,16 +391,6 @@ def get_token_info(tokenId: str):
                     nftType = TokenType.OTHER
 
                 extraMetaData = {}
-
-                minterAddress = ""
-                findMinterTransaction = mintTransaction
-                while minterAddress == "":
-                    if len(findMinterTransaction["inputs"][0]["address"]) == 51 and findMinterTransaction["inputs"][0]["address"][0] == "9":
-                        minterAddress = findMinterTransaction["inputs"][0]["address"]
-                    if minterAddress == "":
-                        res = requests.get(CFG.node+"/blockchain/transaction/byId/"+findMinterTransaction["inputs"][0]['transactionId'])
-                        if res.ok:
-                            findMinterTransaction = res.json()
 
                 if nftType == TokenType.COLLECTION:
                     collectionStandard = int(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R4"]).getValue())
@@ -407,7 +441,7 @@ def get_token_info(tokenId: str):
                         if "R4" in issuerBox["additionalRegisters"]:
                             artworkStandard = int(ErgoValue.fromHex(issuerBox["additionalRegisters"]["R4"]).getValue())
                             if artworkStandard > 10:
-                                royalty.append({"address": minterAddress, "royaltyPct": artworkStandard/10})
+                                royalty.append({"address": get_token_minter(tokenId)["minterAddress"], "royaltyPct": artworkStandard/10})
                                 artworkStandard = 1
                     standard2Data = {}
                     if artworkStandard == 2:
@@ -454,13 +488,23 @@ def get_token_info(tokenId: str):
                         "standard2Data": standard2Data
                     }
 
+                    result = {
+                        "name": tokenName,
+                        "description": tokenDescription,
+                        "decimals": tokenDecimals,
+                        "totalMinted": totalMinted,
+                        "nftType": nftType.name,
+                        "extraMetaData": extraMetaData
+                    }
+
+                    cache.set(f"get_token_info_{tokenId}", result, 3600)
+
                 return {
                     "name": tokenName,
                     "description": tokenDescription,
                     "decimals": tokenDecimals,
                     "totalMinted": totalMinted,
                     "nftType": nftType.name,
-                    "minterAddress": minterAddress,
                     "extraMetaData": extraMetaData
                 }
     except Exception as e:
