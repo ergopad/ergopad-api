@@ -382,7 +382,10 @@ def get_token_info(tokenId: str):
                         break
                 tokenName = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R4"]).getValue().toArray()).decode("utf-8")
                 tokenDescription = bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R5"]).getValue().toArray()).decode("utf-8")
-                tokenDecimals = int(bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R6"]).getValue().toArray()).decode("utf-8"))
+                try:
+                    tokenDecimals = int(bytes(ErgoValue.fromHex(issuanceBox["additionalRegisters"]["R6"]).getValue().toArray()).decode("utf-8"))
+                except:
+                    tokenDecimals = 0
                 totalMinted = issuanceBox['assets'][0]['amount']
 
                 if "R7" in issuanceBox["additionalRegisters"]:
