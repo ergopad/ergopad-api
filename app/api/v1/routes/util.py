@@ -64,7 +64,7 @@ def email(email: Email, request: Request):
         logging.debug(request.headers)
         referer = request.headers.get('referer') or ''
         # handle refers from both www.ergopad.io and ergopad.io
-        if not (referer.startswith('https://') and ('ergopad.io/' in referer)):
+        if not (referer.startswith('https://') and ('ergopad.io/' in referer) or 'coinecta.fi' in referer):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'unable to send email from this location')
 
         usr = CFG.emailUsername
