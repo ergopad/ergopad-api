@@ -74,7 +74,6 @@ def go(request: Request):
 # 2. rewrite logic for max sigusd allowance
 @r.post("/signup", name="whitelist:signup")
 def whitelistSignUp(whitelist: Whitelist, request: Request):
-    print(whitelist)
     NOW = time.time()
     try:
         # validate stuff
