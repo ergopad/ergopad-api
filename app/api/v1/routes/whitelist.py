@@ -1,6 +1,7 @@
 import inspect
 import logging
 import time
+import typing as t
 
 from datetime import datetime as dt
 
@@ -11,8 +12,10 @@ from pydantic import BaseModel
 
 from api.v1.routes.staking import staked, AddressList
 from db.crud.whitelist_events import create_whitelist_event, delete_whitelist_event, edit_whitelist_event, get_whitelist_event_by_event_id, get_whitelist_event_by_name, get_whitelist_events
+from db.crud.cardano_metadata_whitelist_ext import create_metadata, get_metadata
 from db.session import get_db
 from db.schemas.whitelistEvents import CreateWhitelistEvent, WhitelistEvent
+from db.schemas.cardano_metadata_whitelist_ext import CreateOrUpdateCardanoMetadataWhitelistExt
 from core.security import get_md5_hash
 from core.auth import get_current_active_user
 from config import Config, Network  # api specific config
@@ -43,23 +46,18 @@ def myself(): return inspect.stack()[1][3]
 
 # Whitelist Request Model
 class Whitelist(BaseModel):
-    ergoAddress: str  # wallet
-    email: str
+    ergoAddress: t.Optional[str]
+    adaAddresses: t.List[str] = []
+    kycApproval: bool = False
+    email: str = "__unknown"
     event: str
-    name: str
-    sigValue: float
+    name: str = "__anon_ergonaut"
+    sigValue: t.Optional[float] # @Deprecated
+    usdValue: t.Optional[float]
+    tpe: str = "ergo"   # ergo or cardano
 
-    class Config:
-        schema_extra = {
-            "example": {
-                'ergoAddress': '3WzKuUxmG7HtfmZNxxHw3ArPzsZZR96yrNkTLq4i1qFwVqBXAU8X',
-                'email': 'hello@world.com',
-                'event': 'IDO',
-                'name': 'Jo Smith',
-                'sigValue': 2000.5,
-            }
-        }
 # endregion CLASSES
+
 
 # region ROUTES
 @r.get("/checkIp")
@@ -76,11 +74,23 @@ def go(request: Request):
 # 2. rewrite logic for max sigusd allowance
 @r.post("/signup", name="whitelist:signup")
 def whitelistSignUp(whitelist: Whitelist, request: Request):
+    print(whitelist)
     NOW = time.time()
     try:
+        # validate stuff
+        whitelist = backfill_usd_value(whitelist)
+        if whitelist.tpe == "ergo" and whitelist.ergoAddress == None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content="ergoAddress is null")
+        if whitelist.tpe == "cardano" and len(whitelist.adaAddresses) == 0:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content="adaAddresses is empty")
+        # replacing ergo address field with hash of ada addresses
+        # this is to make existing checks work with cardano
+        if whitelist.tpe == "cardano":
+            address_hash = get_ada_address_hash(whitelist.adaAddresses)
+            whitelist.ergoAddress = address_hash
+
+        # get eventId
         eventName = whitelist.event
-        # logging.debug(DATABASE)
-        # eng = create_engine(DATABASE)
         logging.debug('sql')
         sql = text(f"""
             with wht as (
@@ -108,12 +118,12 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
         """)
         with engine.begin() as con:
             res = con.execute(sql, {'eventName': eventName}).fetchone()
-        eventId = res['id']
 
         # event not found
         if res == None or len(res) == 0:
             logging.warning(f'whitelist event, {eventName} not found.')
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'whitelist event, {eventName} not found.')
+        eventId = res['id']
 
         # is valid signup window?
         if (int(NOW) < int(res['start_dtz'].timestamp())) or (int(NOW) > int(res['end_dtz'].timestamp())):
@@ -191,8 +201,15 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
 
         # already signed up?
         if resCheckSignup is None:
+            mt_id = None
+            if whitelist.tpe == "cardano":
+                mt = create_metadata(
+                    get_db_ref(),
+                    CreateOrUpdateCardanoMetadataWhitelistExt(kycApproval=whitelist.kycApproval, adaAddresses=whitelist.adaAddresses)
+                )
+                mt_id = mt.id
             sqlSignup = text(f'''
-                insert into whitelist("walletId", "eventId", created_dtz, allowance_sigusd, spent_sigusd, "isAvailable", "lastAssemblerId", "lastAssemblerStatus", "isWhitelist")
+                insert into whitelist("walletId", "eventId", created_dtz, allowance_sigusd, spent_sigusd, "isAvailable", "lastAssemblerId", "lastAssemblerStatus", "isWhitelist", cardano_metadata_whitelist_ext_id)
 	            values (
                       :walletId -- walletId
                     , :eventId -- eventId
@@ -202,10 +219,11 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                     , 1 -- isAvailable
                     , null, null -- lastAssemblerId, lastAssemblerStatus
                     , 1 -- isWhitelist
+                    , :mt_id -- cardano_metadata_whitelist_ext_id
                 );
             ''')
             with engine.begin() as con:
-                con.execute(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue})
+                con.execute(sqlSignup, {'walletId': walletId, 'eventId': eventId, 'allowance_sigusd': whitelist.sigValue, 'mt_id': mt_id})
 
             # use obfuscated identifier to prevent bots
             ipHash = get_md5_hash(request.client.host)
@@ -231,7 +249,7 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'wallet already signed up for this event')
 
     except Exception as e:
-        logging.error(f'ERR:{myself()}: whitelist err, {e}')
+        logging.error(f'ERR:{myself()}: whitelist err, {e}', e)
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: unable to save whitelist request ({e})')
 
 
@@ -254,6 +272,23 @@ def checkEventConstraints(eventId: int, whitelist: Whitelist, db=next(get_db()))
         except:
             return (False, "API failed. Could not validate if enough ergopad is staked.")
     return (True, "ok")
+
+
+def backfill_usd_value(whitelist: Whitelist):
+    if (whitelist.usdValue == None and whitelist.sigValue == None):
+        whitelist.sigValue = 0
+    if whitelist.usdValue != None:
+        whitelist.sigValue = whitelist.usdValue
+    return whitelist
+
+
+def get_ada_address_hash(ada_addresses: t.List[str]):
+    sorted_addresses = sorted(ada_addresses)
+    return get_md5_hash(sorted_addresses.__str__())
+
+
+def get_db_ref():
+    return next(get_db())
 
 
 def isStakerSnapshotWhitelist(eventId: int, db=next(get_db())):
@@ -292,6 +327,7 @@ def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
             select
                 max(evt.name) as "name",
                 wal.address,
+                wht.cardano_metadata_whitelist_ext_id,
                 max(wal.email) as email,
                 max(wal."socialHandle") as social_handle,
                 max(wal."socialPlatform") as social_platform,
@@ -306,7 +342,7 @@ def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
                 and eip."walletId" = wal.id
             where
                 evt.name = :eventName
-			group by wal.address
+			group by wal.address, wht.cardano_metadata_whitelist_ext_id
             order by
                 created_dtz;
         """)
@@ -314,11 +350,28 @@ def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
         logging.debug(res)
         return {
             'status': 'success',
-            'data': res,
+            'data': expand_cardano_metadata_whitelist_ext_id(res),
         }
     except Exception as e:
         logging.error(f'ERR:{myself()}: ({e})')
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=f'ERR:{myself()}: invalid whitelist request ({e})')
+
+
+def expand_cardano_metadata_whitelist_ext_id(data):
+    return list(map(lambda row: expand_cardano_metadata_whitelist_ext_id_helper(row), data))
+
+
+def expand_cardano_metadata_whitelist_ext_id_helper(row):
+    res = row._asdict()
+    if res["cardano_metadata_whitelist_ext_id"] == None:
+        return res
+    else:
+        metadata = get_metadata(get_db_ref(), res["cardano_metadata_whitelist_ext_id"])
+        if not metadata:
+            return res
+        res["ada_address_list"] = metadata.adaAddresses
+        res["kyc_approval"] = metadata.kycApproval
+    return res
 
 
 ##########################
