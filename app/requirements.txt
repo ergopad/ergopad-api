@@ -197,5 +197,5 @@ websockets==8.1
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
 ergo-python-appkit==0.2.1
-paideia-contracts==1.1.1
+paideia-contracts==1.1.3
 gunicorn
