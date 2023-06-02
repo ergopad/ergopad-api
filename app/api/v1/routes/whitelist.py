@@ -162,14 +162,29 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
         # does wallet exist, or do we need to create it?
         if resFindWallet is None:
             sql = text(f'''
-                insert into wallets(address, email, "blockChainId", network, "walletPass", mneumonic, "socialHandle", "socialPlatform", "chatHandle", "chatPlatform", created_dtz, "lastSeen_dtz", "twitterHandle", "discordHandle", "telegramHandle")
-	            values (
+                insert into wallets(
+                    address,
+                    email,
+                    "blockChainId",
+                    network,
+                    "walletPass",
+                    mneumonic,
+                    "socialHandle",
+                    "socialPlatform",
+                    "chatHandle",
+                    "chatPlatform",
+                    created_dtz,
+                    "lastSeen_dtz",
+                    "twitterHandle",
+                    "discordHandle",
+                    "telegramHandle"
+                ) values (
                     :address -- address
-                    , null -- email
+                    , :email -- email
                     , null -- blockChainId
                     , :network -- network
                     , null, null -- walletPass, mneumonic
-                    , null, null -- socials                    
+                    , :name, 'name' -- socials                    
                     , null, null -- chat                    
                     , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- created_dtz
                     , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- lastSeen_dtz
@@ -178,7 +193,10 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
             ''')
             logging.debug(sql)
             with engine.begin() as con:
-                res = con.execute(sql, {'address': whitelist.ergoAddress,'network': Network})
+                res = con.execute(
+                    sql,
+                    {'address': whitelist.ergoAddress, 'network': whitelist.tpe, 'name': whitelist.name, 'email': whitelist.email}
+                )
                 resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
 
         # found or created, get wallet address
@@ -324,12 +342,11 @@ def whitelistInfo(eventName,  current_user=Depends(get_current_active_user)):
         con = create_engine(DATABASE)
         sql = text(f"""
             select
-                max(evt.name) as "name",
+                max(evt.name) as "event_name",
+                max(wal."socialHandle") as name,
+                max(wal.email) as email,
                 wal.address,
                 wht.cardano_metadata_whitelist_ext_id,
-                max(wal.email) as email,
-                max(wal."socialHandle") as social_handle,
-                max(wal."socialPlatform") as social_platform,
                 max(allowance_sigusd) as allowance_sigusd,
                 ''::text as ip_hash,--eip."ipHash" as ip_hash,
                 min(wht.created_dtz) as created_dtz
