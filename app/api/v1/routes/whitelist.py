@@ -179,15 +179,15 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                     "discordHandle",
                     "telegramHandle"
                 ) values (
-                    :address -- address
-                    , :email -- email
-                    , null -- blockChainId
-                    , :network -- network
-                    , null, null -- walletPass, mneumonic
-                    , :name, 'name' -- socials                    
-                    , null, null -- chat                    
-                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- created_dtz
-                    , {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- lastSeen_dtz
+                    :address, -- address
+                    :email,   -- email
+                    null,     -- blockChainId
+                    :network, -- network
+                    null, null, -- walletPass, mneumonic
+                    :name, 'name', -- socials                    
+                    null, null, -- chat                    
+                    {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r}, -- created_dtz
+                    {dt.fromtimestamp(NOW).strftime(DATEFORMAT)!r} -- lastSeen_dtz
                     , null, null, null -- twitter, discord, telegram
                 );
             ''')
@@ -195,7 +195,12 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
             with engine.begin() as con:
                 res = con.execute(
                     sql,
-                    {'address': whitelist.ergoAddress, 'network': whitelist.tpe, 'name': whitelist.name, 'email': whitelist.email}
+                    {
+                        'address': whitelist.ergoAddress, 
+                        'network': whitelist.tpe, 
+                        'name': whitelist.name, 
+                        'email': whitelist.email
+                    }
                 )
                 resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
 
