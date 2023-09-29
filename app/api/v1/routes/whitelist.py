@@ -198,7 +198,31 @@ def whitelistSignUp(whitelist: Whitelist, request: Request):
                     {'address': whitelist.ergoAddress, 'network': whitelist.tpe, 'name': whitelist.name, 'email': whitelist.email}
                 )
                 resFindWallet = con.execute(sqlFindWallet, {'address': whitelist.ergoAddress}).fetchone()
-
+        else:
+            if len(whitelist.name) > 0:
+                sqlUpdateWalletName = text('''
+                    update wallets
+                    set socialHandle = :name
+                    where id = :id;
+                    ''')
+                logging.debug(sqlUpdateWalletName)
+                with engine.begin() as con:
+                    res = con.execute(
+                        sqlUpdateWalletName,
+                        {'name': whitelist.name, 'id': resFindWallet['id']}
+                    )
+            if len(whitelist.email) > 0:
+                sqlUpdateWalletEmail = text('''
+                    update wallets
+                    set email = :email
+                    where id = :id;
+                    ''')
+                logging.debug(sqlUpdateWalletEmail)
+                with engine.begin() as con:
+                    res = con.execute(
+                        sqlUpdateWalletEmail,
+                        {'email': whitelist.email, 'id': resFindWallet['id']}
+                    )
         # found or created, get wallet address
         walletId = resFindWallet['id']
         # logging.warning(f'wallet id: {walletId}')
