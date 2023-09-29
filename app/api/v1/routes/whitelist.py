@@ -49,9 +49,9 @@ class Whitelist(BaseModel):
     ergoAddress: t.Optional[str]
     adaAddresses: t.List[str] = []
     kycApproval: bool = False
-    email: str = "__unknown"
+    email: str = ""
     event: str
-    name: str = "__anon_ergonaut"
+    name: str = ""
     sigValue: t.Optional[float] # @Deprecated
     usdValue: t.Optional[float]
     tpe: str = "ergo"   # ergo or cardano
