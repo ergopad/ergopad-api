@@ -90,6 +90,7 @@ Config = {
     'emailUsername'     : os.getenv('EMAIL_ERGOPAD_USERNAME'),
     'emailPassword'     : os.getenv('EMAIL_ERGOPAD_PASSWORD'),
     'emailSMTP'         : os.getenv('EMAIL_ERGOPAD_SMTP'),
+    'emailPORT'         : os.getenv('EMAIL_ERGOPAD_PORT'),
     'emailFrom'         : os.getenv('EMAIL_ERGOPAD_FROM'),
     'minTx'             : 1e7, # required
     'txFee'             : 1e6, # tips welcome

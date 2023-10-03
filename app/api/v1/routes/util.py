@@ -70,12 +70,13 @@ def email(email: Email, request: Request):
         usr = CFG.emailUsername
         pwd = CFG.emailPassword
         svr = CFG.emailSMTP
+        prt = CFG.emailPORT
         frm = CFG.emailFrom
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
 
         # create connection
         logging.info(f'creating connection for: {svr} as {usr}')
-        con = SMTP(svr, 587)
+        con = SMTP(svr, prt)
         res = con.ehlo()
         res = con.starttls(context=ctx)
         if res[0] == 220: logging.info('starttls success')
