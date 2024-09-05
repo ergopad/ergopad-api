@@ -75,7 +75,7 @@ def email(email: Email, request: Request):
 
         # create connection
         logging.info(f'creating connection for: {svr} as {usr}')
-        con = SMTP(svr, 587)
+        con = SMTP(svr, 465)
         res = con.ehlo()
         res = con.starttls(context=ctx)
         if res[0] == 220: logging.info('starttls success')
