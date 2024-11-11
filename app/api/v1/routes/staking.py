@@ -205,7 +205,7 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
         # logging.debug('unstake::find stakeBox')
         currentTime = int(time() * 1000)
         amountToUnstake = min(
-            int(req.amount * 10 ** stakedTokenInfo["decimals"]), remaining
+            round(req.amount * 10 ** stakedTokenInfo["decimals"]), remaining
         )
 
         logging.debug(f"unstake::find remaining=={remaining}")
@@ -866,7 +866,7 @@ def unstakev2(project: str, req: UnstakeRequest):
             userInputs,
             stakeInput,
             config,
-            req.amount * 10**config.stakedTokenDecimals,
+            tokenAmount,
             req.address,
         )
 
