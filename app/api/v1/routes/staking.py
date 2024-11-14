@@ -178,7 +178,7 @@ def unstake(req: UnstakeRequest, project: str = "ergopad"):
         appKit = ErgoAppKit(CFG.node, Network, CFG.explorer)
         stakedTokenInfo = getTokenInfo(sc["stakedTokenID"])
         logging.debug("unstake::get NFT stakeStateBox")
-        stakeStateBox = getNFTBox(sc["stakeStateNFT"])
+        stakeStateBox = getNFTBox(sc["stakeStateNFT"], allowCached=True, includeMempool=True)
         if stakeStateBox is None:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,

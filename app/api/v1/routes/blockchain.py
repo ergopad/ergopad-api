@@ -420,7 +420,7 @@ def getNFTBox(tokenId: str, allowCached=False, includeMempool=False):
                         "ok": ok,
                         "memResContent": memResContent
                     }
-                    cache.set("get_explorer_mempool_boxes_unspent", content, 600) # 10 mins
+                    cache.set("get_explorer_mempool_boxes_unspent", content, 10) # 10 mins
             else:
                 # if cached is not allowed force api call
                 memRes = requests.get(f'{CFG.explorer}/mempool/boxes/unspent')
